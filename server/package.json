@@ -10,9 +10,8 @@
     "test": "npm run build:ts && tsc -p test/tsconfig.json && c8 node --test -r ts-node/register \"test/**/*.ts\"",
     "start": "npm run build:ts && fastify start -l info dist/app.js",
     "build:ts": "tsc",
-    "watch:ts": "tsc -w",
-    "dev": "npm run build:ts && concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"npm:watch:ts\" \"npm:dev:start\"",
-    "dev:start": "fastify start --ignore-watch=.ts$ -w -l info -P dist/app.js"
+    // -l info: để hiện thông tin log, nếu muốn tắt log thì dùng -l silent
+    "dev": "nodemon --watch \"./**/*.ts\" --ignore node_modules --ext ts --exec \"npm run build:ts && fastify start -l silent dist/app.js\""
   },
   "keywords": [],
   "author": "",
@@ -27,8 +26,8 @@
   "devDependencies": {
     "@types/node": "^24.0.8",
     "c8": "^10.1.2",
+    "nodemon": "^3.1.0",
     "ts-node": "^10.4.0",
-    "concurrently": "^9.0.0",
     "fastify-tsconfig": "^3.0.0",
     "typescript": "~5.9.2"
   }
