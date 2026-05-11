@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { registerUser, loginUser } from '../../controllers/auth/login'
+import { loginUser } from '../../controllers/auth/login'
 // import { verifyTokenHook } from '../../plugins/auth.middleware';
 
 /**
@@ -9,14 +9,11 @@ import { registerUser, loginUser } from '../../controllers/auth/login'
  */
 const authRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
-  // 1. Route Đăng ký: POST /auth/register
-  fastify.post('/register', registerUser);
-
   // 2. Route Đăng nhập: POST /auth/login
   fastify.post('/login', loginUser);
 
   // --------------------------------------------------------
-  // VÍ DỤ VỀ MIDDLEWARE (HOOK) TRONG FASTIFY
+  // MIDDLEWARE (HOOK) TRONG FASTIFY
   // --------------------------------------------------------
   
   // 3. Route lấy thông tin cá nhân: GET /auth/profile
