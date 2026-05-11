@@ -34,6 +34,6 @@ const app: FastifyPluginAsync<AppOptions> = async (
     options: opts
   })
 }
-
+console.log("server is running on PORT http://127.0.0.1:3000/")
 export default app
 export { app, options }
