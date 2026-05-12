@@ -3,29 +3,33 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 declare module 'fastify' {
   interface FastifyInstance {
-    supabase: SupabaseClient;
+    supabase: SupabaseClient;       // Dùng cho User thường (Login, Register)
+    supabaseAdmin: SupabaseClient;  // Dùng cho Admin (Bỏ qua mọi rule bảo mật)
   }
 }
 
-/**
- * Plugin khởi tạo kết nối Supabase
- */
 export default fp(async (fastify, opts) => {
-  // Lấy dữ liệu từ process.env (đã được load tự động bởi hệ thống trước khi chạy file này)
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Kiểm tra xem đã lấy được key chưa. Nếu chưa thì ném lỗi ra terminal luôn
-  if (!supabaseUrl || !supabaseKey) {
-    fastify.log.error('❌ KHÔNG TÌM THẤY SUPABASE_URL hoặc SUPABASE_ANON_KEY. Hãy kiểm tra lại file .env!');
+  if (!supabaseUrl || !supabaseKey || !supabaseServiceKey) {
+    fastify.log.error('❌ Thiếu biến môi trường Supabase!');
     throw new Error('Missing Supabase credentials');
   }
 
-  // Khởi tạo client
+  // 1. Client thường (Cho user)
   const supabase = createClient(supabaseUrl, supabaseKey);
-
-  // Gắn (decorate) biến supabase vào Fastify
   fastify.decorate('supabase', supabase);
+
+  // 2. Client Admin (Cho các tác vụ đặc quyền)
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+  fastify.decorate('supabaseAdmin', supabaseAdmin);
   
-  fastify.log.info('✅ Đã kết nối thành công tới Supabase!');
+  fastify.log.info('✅ Đã kết nối Supabase (Client & Admin)!');
 });

@@ -1,5 +1,28 @@
 import { FastifyReply, FastifyRequest} from 'fastify'
 
-export const userIndex = async (reply: FastifyReply, request: FastifyRequest): Promise<void> => {
-  
+export const userIndex = async ( request: FastifyRequest,reply: FastifyReply): Promise<void> => {
+  try {
+    // SỬ DỤNG supabaseAdmin THAY VÌ supabase THƯỜNG
+    // Hàm auth.admin.listUsers() chỉ hoạt động với Service Role Key
+    const { data, error } = await request.server.supabaseAdmin.auth.admin.listUsers();
+
+    if (error) {
+      request.log.error(error);
+      return reply.code(400).send({ 
+        error: 'Không thể lấy danh sách người dùng', 
+        details: error.message 
+      });
+    }
+
+    // Trả về danh sách user
+    return reply.code(200).send({
+      message: 'Lấy danh sách người dùng thành công!',
+      total: data.users.length,
+      users: data.users
+    });
+
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Lỗi máy chủ nội bộ' });
+  }
 }
