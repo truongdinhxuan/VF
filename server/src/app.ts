@@ -28,6 +28,10 @@ const app: FastifyPluginAsync<AppOptions> = async (
   // This loads all plugins defined in routes
   // define your routes in one of these
   // eslint-disable-next-line no-void
+  void fastify.register(AutoLoad, {
+    dir: join(__dirname, 'routes'),
+    options: opts
+  })
 }
 console.log("server is running on PORT http://127.0.0.1:3000/")
 export default app

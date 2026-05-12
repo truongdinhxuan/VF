@@ -1,6 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { UserInterface } from '../../interfaces/users';
-// Định nghĩa kiểu dữ liệu (Interface) cho dữ liệu gửi lên từ Client
 /**
  * Controller cho chức năng Đăng nhập (Login)
  */
