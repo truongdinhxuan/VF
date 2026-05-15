@@ -4,6 +4,9 @@ const example: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/', async function (request, reply) {
     return 'this is an example'
   })
+  fastify.get("/test", async function (request,reply) {
+    return "test"
+  })
 }
 
 export default example

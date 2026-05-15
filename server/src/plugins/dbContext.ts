@@ -12,24 +12,29 @@ export default fp(async (fastify, opts) => {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
   // Check điều kiện biến môi trường env
   if (!supabaseUrl || !supabaseKey || !supabaseServiceKey) {
     fastify.log.error('Missing enviroment Supabase!');
     throw new Error('Missing Supabase credentials');
   }
 
-  // 1. Client thường (Cho user)
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  fastify.decorate('supabase', supabase);
+  // 1. Kiểm tra xem đã có decorator 'supabase' chưa, chưa có thì mới tạo
+  if (!fastify.hasDecorator('supabase')) {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    fastify.decorate('supabase', supabase);
+  }
 
-  // 2. Client Admin (Cho các tác vụ đặc quyền)
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
-  fastify.decorate('supabaseAdmin', supabaseAdmin);
+  // 2. Kiểm tra xem đã có decorator 'supabaseAdmin' chưa, chưa có thì mới tạo
+  if (!fastify.hasDecorator('supabaseAdmin')) {
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+    fastify.decorate('supabaseAdmin', supabaseAdmin);
+  }
   
   fastify.log.info('Connected successfully to database!');
 });
