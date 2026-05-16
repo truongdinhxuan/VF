@@ -11,16 +11,23 @@ export const LoginPage = () => {
   // 2. Hàm xử lý khi nhấn nút Login
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Ngăn trang web load lại
-    
+
     try {
       console.log("Đang gửi dữ liệu:", { email, password });
       const response = await login({ email, password });
-      
+
       console.log("Đăng nhập thành công:", response);
       alert("Đăng nhập thành công!");
-      
+      if (response.token) {
+        localStorage.setItem("access_token", response.token);
+
+        // (Tùy chọn) Lưu thêm thông tin user. Nhớ dùng JSON.stringify vì Local Storage chỉ lưu được chuỗi (string)
+        // localStorage.setItem("user_info", JSON.stringify(response.user));
+
+        console.log("✅ Đã lưu token thành công!");
+      }
       // Chuyển hướng sau khi thành công (ví dụ về trang chủ)
-      navigate("/"); 
+      navigate("/auth/login");
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);
       alert("Đăng nhập thất bại, kiểm tra lại console!");
@@ -32,9 +39,9 @@ export const LoginPage = () => {
       <h2>Login Test</h2>
       <form onSubmit={handleSubmit}>
         <div>
-          <input 
-            type="email" 
-            placeholder="Email" 
+          <input
+            type="email"
+            placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -42,9 +49,9 @@ export const LoginPage = () => {
         </div>
         <br />
         <div>
-          <input 
-            type="password" 
-            placeholder="Password" 
+          <input
+            type="password"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

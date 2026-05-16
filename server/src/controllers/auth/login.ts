@@ -5,9 +5,9 @@ import { UserInterface } from '../../interfaces/users';
  */
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
   const { email, password } = request.body as UserInterface;
-
+  console.log({email, password})
   if (!email || !password) {
-    return reply.code(400).send({ error: 'Vui lòng nhập email và password' });
+    return reply.code(400).send({ error: 'Please enter field.' });
   }
 
   try {
@@ -19,7 +19,7 @@ export const loginUser = async (request: FastifyRequest, reply: FastifyReply) =>
 
     // Sai email hoặc mật khẩu
     if (error) {
-      return reply.code(401).send({ error: 'Email hoặc mật khẩu không đúng' });
+      return reply.code(401).send({ error: 'Wrong email or password' });
     }
 
     // Đăng nhập thành công, trả về Access Token cho Client lưu trữ (ở LocalStorage hoặc Cookie)
@@ -30,6 +30,6 @@ export const loginUser = async (request: FastifyRequest, reply: FastifyReply) =>
     });
   } catch (err) {
     request.log.error(err);
-    return reply.code(500).send({ error: 'Lỗi máy chủ nội bộ' });
+    return reply.code(500).send({ error: 'Server failed' });
   }
 };
