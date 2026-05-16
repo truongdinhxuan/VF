@@ -1,8 +1,12 @@
-import { FastifyPluginAsync } from 'fastify';
-import { loginUser } from '../../controllers/auth/login'
-import { registerUser } from '../../controllers/auth/register'
+import { FastifyPluginAsync } from "fastify";
+import { loginUser } from "../../controllers/auth/login";
+import { registerUser } from "../../controllers/auth/register";
 
-export const authRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
-  fastify.post('/login', loginUser)
-  fastify.post('/register', registerUser)
-}
+const authRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  fastify.post("/login", loginUser);
+  fastify.post("/register", registerUser);
+  fastify.get("/test", async function (request,reply) {
+    return "test"
+  })
+};
+export default authRoutes;
