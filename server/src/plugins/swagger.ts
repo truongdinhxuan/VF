@@ -8,7 +8,7 @@ export default fp(async (fastify, opts) => {
     openapi: {
       info: {
         title: 'Milkrun & Rack API',
-        description: 'Tài liệu API cho hệ thống quản lý Milkrun',
+        description: 'API document system for Milkrun app',
         version: '1.0.0'
       },
       servers: [
@@ -38,5 +38,5 @@ export default fp(async (fastify, opts) => {
     transformStaticCSP: (header) => header,
   });
   
-  fastify.log.info('✅ Swagger đã sẵn sàng tại http://localhost:3000/docs');
+  fastify.log.info('Swagger is ready on http://localhost:3000/docs');
 });
