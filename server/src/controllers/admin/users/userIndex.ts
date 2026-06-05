@@ -1,5 +1,8 @@
 import { FastifyReply, FastifyRequest} from 'fastify'
-
+/*
+  Lấy all danh sách người dùng
+  (Lần cập nhật tiếp theo sẽ limit 1 page get top 15 người dùng <phân trang>)
+*/
 export const userIndex = async ( request: FastifyRequest,reply: FastifyReply): Promise<void> => {
   try {
     // SỬ DỤNG supabaseAdmin THAY VÌ supabase THƯỜNG
