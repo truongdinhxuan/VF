@@ -16,18 +16,26 @@ export const LoginPage = () => {
       console.log("Đang gửi dữ liệu:", { email, password });
       const response = await login({ email, password });
 
-      console.log("Đăng nhập thành công:", response);
-      alert("Đăng nhập thành công!");
+      console.log(response);
+      // Lưu token ở local storage
       if (response.token) {
         localStorage.setItem("access_token", response.token);
-
         // (Tùy chọn) Lưu thêm thông tin user. Nhớ dùng JSON.stringify vì Local Storage chỉ lưu được chuỗi (string)
         // localStorage.setItem("user_info", JSON.stringify(response.user));
-
         console.log("✅ Đã lưu token thành công!");
       }
-      // Chuyển hướng sau khi thành công (ví dụ về trang chủ)
-      navigate("/auth/login");
+      // Chuyển hướng sau khi thành công (áp dụng phân quyền)
+      if (response.publicData?.role==="teamlead")
+      {
+        navigate("/milkrun")
+      } else if (response.publicData?.role==="admin") 
+      {
+        navigate("/admin")
+      } else {
+        navigate("/auth/login");
+      }
+      
+      
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);
       alert("Đăng nhập thất bại, kiểm tra lại console!");
