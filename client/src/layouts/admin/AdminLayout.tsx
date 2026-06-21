@@ -12,12 +12,10 @@ export const AdminLayout = () =>{
   // --- STATE QUẢN LÝ GIAO DIỆN CHUNG ---
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   
   // --- STATE QUẢN LÝ DROPDOWNS & MODALS ---
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
-  const [isChatSheetOpen, setIsChatSheetOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const profileRef = useRef<HTMLDivElement>(null);
@@ -40,25 +38,7 @@ export const AdminLayout = () =>{
       link.href = "https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap";
       document.head.appendChild(link);
     }
-
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      setIsDarkMode(true);
-      document.documentElement.classList.add("dark");
-    }
   }, []);
-
-  const toggleDarkMode = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -180,11 +160,10 @@ export const AdminLayout = () =>{
         isProfileDropdownOpen={isProfileDropdownOpen}
         setIsProfileDropdownOpen={setIsProfileDropdownOpen}
         profileRef={profileRef}
-        isDarkMode={isDarkMode}
       />
 
       {/* --- MAIN WORKSPACE --- */}
-      <main className="relative flex h-screen flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-[#0f172a]">
+      <main className="relative flex h-screen flex-1 flex-col overflow-hidden bg-slate-50">
         
         {/* Các hình nền chuyển động mờ */}
         <div className="pointer-events-none absolute right-0 top-0 -m-32 h-96 w-96 rounded-full bg-blue-100 opacity-40 mix-blend-multiply blur-3xl filter dark:bg-blue-900/10"></div>
@@ -195,17 +174,15 @@ export const AdminLayout = () =>{
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
           setIsMobileSidebarOpen={setIsMobileSidebarOpen}
-          isDarkMode={isDarkMode}
-          toggleDarkMode={toggleDarkMode}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           isNotificationsOpen={isNotificationsOpen}
           setIsNotificationsOpen={setIsNotificationsOpen}
           notificationRef={notificationRef}
-          setIsChatSheetOpen={setIsChatSheetOpen}
         />
         <div className="z-10 flex-1 overflow-y-auto p-4 sm:p-6 sm:px-10">
           <div className="mx-auto max-w-7xl space-y-6"> 
+            {/* Main Content */}
             <Outlet context={{
               searchQuery,
               setSearchQuery,

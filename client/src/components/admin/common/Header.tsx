@@ -5,28 +5,22 @@ interface HeaderProps {
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   setIsMobileSidebarOpen: (open: boolean) => void;
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   isNotificationsOpen: boolean;
   setIsNotificationsOpen: (open: boolean) => void;
   notificationRef: React.RefObject<HTMLDivElement | null>;
-  setIsChatSheetOpen: (open: boolean) => void;
 }
 
 const Header = ({
   isSidebarCollapsed,
   setIsSidebarCollapsed,
   setIsMobileSidebarOpen,
-  isDarkMode,
-  toggleDarkMode,
   searchQuery,
   setSearchQuery,
   isNotificationsOpen,
   setIsNotificationsOpen,
   notificationRef,
-  setIsChatSheetOpen,
 }: HeaderProps) => {
   return (
     <header className="z-20 mx-4 mt-4 flex min-h-14 shrink-0 items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 shadow-sm sm:mx-6 sm:mt-6 sm:min-h-16 sm:px-6 dark:border-slate-800 dark:bg-slate-800/80 dark:backdrop-blur">
@@ -74,18 +68,6 @@ const Header = ({
 
         <div className="hidden h-6 w-px bg-slate-200 sm:block dark:bg-stone-700"></div>
 
-        {/* Nút chuyển đổi Dark Mode */}
-        <button 
-          onClick={toggleDarkMode}
-          className="theme-toggle-btn cursor-pointer rounded-lg p-1.5 text-slate-500 transition-colors hover:text-slate-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-        >
-          {isDarkMode ? (
-            <i className="hgi-stroke hgi-sun-03 text-2xl"></i>
-          ) : (
-            <i className="hgi-stroke hgi-moon-02 text-2xl"></i>
-          )}
-        </button>
-
         {/* Chuông & Panel Thông báo */}
         <div className="relative" ref={notificationRef}>
           <button
@@ -120,13 +102,6 @@ const Header = ({
           )}
         </div>
 
-        {/* Nút mở hộp chat */}
-        <button
-          onClick={() => setIsChatSheetOpen(true)}
-          className="cursor-pointer rounded-lg p-1.5 text-slate-500 transition-colors hover:text-slate-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-        >
-          <i className="hgi-stroke hgi-message-01 text-2xl"></i>
-        </button>
       </div>
     </header>
   );

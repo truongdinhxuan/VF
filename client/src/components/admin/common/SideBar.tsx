@@ -10,7 +10,6 @@ interface SidebarProps {
   isProfileDropdownOpen: boolean;
   setIsProfileDropdownOpen: (open: boolean) => void;
   profileRef: React.RefObject<HTMLDivElement | null>;
-  isDarkMode: boolean;
 }
 
 const Sidebar = ({
