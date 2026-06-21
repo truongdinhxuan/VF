@@ -1,73 +1,146 @@
-import { useState } from "react";
 import { login } from "../../api/auth.service"; // Điều chỉnh đường dẫn cho đúng code của bạn
 import { useNavigate } from "react-router-dom";
+import {useForm} from "react-hook-form"
+
+interface ILoginFormInput {
+  email: string;
+  password: string;
+}
 
 export const LoginPage = () => {
-  // 1. Khai báo state để lưu trữ dữ liệu nhập vào
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+
   const navigate = useNavigate();
 
-  // 2. Hàm xử lý khi nhấn nút Login
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); // Ngăn trang web load lại
+  // Declare hook form
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ILoginFormInput>({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+  // Hàm xử lý sự kiện submit form khi đã qua kiểm tra hợp lệ
+  const onSubmit = async (data: ILoginFormInput) => {
+    const { email, password } = data;
+    
+    if (!email || !password) return;
 
     try {
-      console.log("Đang gửi dữ liệu:", { email, password });
+      console.log("Đang gửi dữ liệu đăng nhập qua React Hook Form:", { email, password });
       const response = await login({ email, password });
 
-      console.log(response);
-      // Lưu token ở local storage
+      console.log("Đăng nhập thành công:", response);
+      
       if (response.token) {
         localStorage.setItem("access_token", response.token);
-        // (Tùy chọn) Lưu thêm thông tin user. Nhớ dùng JSON.stringify vì Local Storage chỉ lưu được chuỗi (string)
-        // localStorage.setItem("user_info", JSON.stringify(response.user));
-        console.log("✅ Đã lưu token thành công!");
+        console.log("✅ Đã lưu token vào LocalStorage thành công!");
       }
-      // Chuyển hướng sau khi thành công (áp dụng phân quyền)
-      if (response.publicData?.role==="teamlead")
-      {
-        navigate("/milkrun")
-      } else if (response.publicData?.role==="admin") 
-      {
-        navigate("/admin")
+
+      // Phân luồng điều hướng dựa theo Role
+      const userRole = response.publicData?.role;
+      if (userRole === "teamlead") {
+        navigate("/milkrun");
+      } else if (userRole === "admin") {
+        navigate("/admin");
       } else {
-        navigate("/auth/login");
+        navigate("/");
       }
-      
       
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);
-      alert("Đăng nhập thất bại, kiểm tra lại console!");
+      alert("Đăng nhập thất bại, vui lòng kiểm tra lại thông tin!");
     }
   };
-
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Login Test</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-100 bg-white p-8 shadow-lg">
+        <div className="mb-8 text-center">
+          <h2 className="text-3xl font-extrabold text-slate-800">
+            <span className="text-blue-600">Login</span>
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Đăng nhập để tiếp tục truy cập hệ thống
+          </p>
         </div>
-        <br />
-        <div>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <br />
-        <button type="submit">Login</button>
-      </form>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Nhập Email */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              placeholder="Nhập email"
+              className={`w-full rounded-xl border px-4 py-3 text-sm focus:bg-white focus:outline-none focus:ring-2
+                ${errors.email 
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" 
+                  : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"}`}
+              {...register("email", {
+                required: "Email là trường bắt buộc nhập",
+                pattern: {
+                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                  message: "Email không đúng định dạng"
+                }
+              })}
+            />
+            {errors.email && (
+              <p className="mt-1.5 text-xs text-red-500 font-medium">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          {/* Nhập Password */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              className={`w-full rounded-xl border px-4 py-3 text-sm focus:bg-white focus:outline-none focus:ring-2
+                ${errors.password 
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" 
+                  : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"}`}
+              {...register("password", {
+                required: "Mật khẩu là trường bắt buộc nhập",
+                minLength: {
+                  value: 6,
+                  message: "Mật khẩu phải chứa ít nhất 6 ký tự"
+                }
+              })}
+            />
+            {errors.password && (
+              <p className="mt-1.5 text-xs text-red-500 font-medium">
+                {errors.password.message}
+              </p>
+            )}
+          </div>
+
+          {/* Nút Đăng nhập */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            {/* After ? = true After : false */}
+            {isSubmitting ? "Đang xử lý..." : "Đăng Nhập"}
+          </button>
+        </form>
+
+        {/* Footer */}
+        {/* <div className="mt-6 rounded-lg bg-blue-50/50 p-3 text-xs text-blue-700">
+          <p className="font-semibold">Mẹo chạy thử trên Preview:</p>
+          <ul className="list-disc pl-4 mt-1 space-y-1">
+            <li>Nhập email có chữ <span className="font-bold">"admin"</span> để tự động chuyển hướng về trang <span className="font-bold">/admin</span>.</li>
+            <li>Nhập email bất kỳ khác để chuyển hướng về trang <span className="font-bold">/milkrun</span>.</li>
+          </ul>
+        </div> */}
+      </div>
     </div>
   );
 };
