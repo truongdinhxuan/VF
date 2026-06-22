@@ -54,7 +54,7 @@ export const AdminLayout = () =>{
   }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-900 dark:bg-[#0f172a] dark:text-stone-50">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
       
       <style dangerouslySetInnerHTML={{ __html: `
         :root { --brand-primary: #3b82f6; }
@@ -166,8 +166,8 @@ export const AdminLayout = () =>{
       <main className="relative flex h-screen flex-1 flex-col overflow-hidden bg-slate-50">
         
         {/* Các hình nền chuyển động mờ */}
-        <div className="pointer-events-none absolute right-0 top-0 -m-32 h-96 w-96 rounded-full bg-blue-100 opacity-40 mix-blend-multiply blur-3xl filter dark:bg-blue-900/10"></div>
-        <div className="pointer-events-none absolute right-48 top-0 -m-32 h-96 w-96 rounded-full bg-purple-100 opacity-40 mix-blend-multiply blur-3xl filter dark:bg-purple-900/10"></div>
+        <div className="pointer-events-none absolute right-0 top-0 -m-32 h-96 w-96 rounded-full bg-blue-100 opacity-40 mix-blend-multiply blur-3xl filter"></div>
+        <div className="pointer-events-none absolute right-48 top-0 -m-32 h-96 w-96 rounded-full bg-purple-100 opacity-40 mix-blend-multiply blur-3xl filter"></div>
 
         {/* --- HEADER COMPONENT CON (Imported) --- */}
         <Header 
