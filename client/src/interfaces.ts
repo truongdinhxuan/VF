@@ -3,7 +3,9 @@ export interface IUser {
   publicData: {
     email?: string,
     password?: string,
-    full_name: string,
+    first_name: string,
+    middle_name: string,
+    last_name: string,
     vinfast_id: string,
     avatar_url: string,
     phone_number: string,

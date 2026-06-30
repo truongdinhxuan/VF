@@ -1,11 +1,15 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faHouse, faChartSimple, faUsers, faTruck, faRoute, faBars, 
+  faEllipsis, faChevronUp, faGear, faRightFromBracket, faXmark,
+  faDashboard
+} from "@fortawesome/free-solid-svg-icons";
 
-// ==========================================
-// --- ĐỊNH NGHĨA INTERFACES & TYPES ---
-// ==========================================
 interface SidebarProps {
   isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: (collapsed: boolean) => void;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
   pathname: string;
@@ -14,148 +18,115 @@ interface SidebarProps {
   profileRef: React.RefObject<HTMLDivElement | null>;
 }
 
-interface NavItem {
-  to: string;
-  label: string;
-  iconClass: string;
-  badge?: string;
-}
 
-// ==========================================
-// --- KHAI BÁO CÁC MẢNG LIÊN KẾT NGOÀI COMPONENT ---
-// ==========================================
-const overviewLinks: NavItem[] = [
-  { to: "/admin", label: "Dashboard", iconClass: "hgi-stroke hgi-home-01" },
-  { to: "/admin/analytics", label: "Analytics", iconClass: "hgi-stroke hgi-analytics-01" }
+
+const overviewLinks = [
+  { to: "/admin", label: "Home", icon: faHouse },
+  { to: "/admin/dashboard", label: "Dashboard", icon: faDashboard },
+  { to: "/admin/analytics", label: "Analytics", icon: faChartSimple },
 ];
 
-const pagesLinks: NavItem[] = [
-  { to: "/admin/ecommerce", label: "E-Commerce", iconClass: "hgi-stroke hgi-shopping-cart-01", badge: "NEW" },
-  { to: "/admin/users", label: "Customers", iconClass: "hgi-stroke hgi-user-multiple" },
-  { to: "/admin/projects", label: "Projects", iconClass: "hgi-stroke hgi-folder-02" },
-  { to: "/admin/invoices", label: "Invoices", iconClass: "hgi-stroke hgi-file-01" }
+const managementLinks = [
+  { to: "/admin/users", label: "Users", icon: faUsers },
+  { to: "/admin/supplies", label: "Supplies", icon: faTruck },
+  { to: "/admin/milkrun", label: "Milkrun", icon: faRoute },
 ];
 
-const sandboxLinks: NavItem[] = [
-  { to: "/admin/components", label: "UI Components", iconClass: "hgi-stroke hgi-grid-view" }
-];
-
-
-// ==========================================
-// --- COMPONENT SIDEBAR (ARROW FUNCTION) ---
-// ==========================================
 const Sidebar = ({
-  isSidebarCollapsed,
-  isMobileSidebarOpen,
-  setIsMobileSidebarOpen,
-  pathname,
-  isProfileDropdownOpen,
-  setIsProfileDropdownOpen,
-  profileRef,
+  isSidebarCollapsed, setIsSidebarCollapsed,
+  isMobileSidebarOpen, setIsMobileSidebarOpen,
+  pathname, isProfileDropdownOpen, setIsProfileDropdownOpen, profileRef,
 }: SidebarProps) => {
-  
-  // Hàm kiểm tra trạng thái active của link
-  const checkActive = (to: string) => {
-    return pathname === to || (to === "/admin" && pathname === "/admin/");
+
+  const checkActive = (to: string) => pathname === to || (to === "/admin/dashboard" && pathname === "/admin/");
+
+  const handleSidebarBackgroundClick = () => {
+    if (isSidebarCollapsed) setIsSidebarCollapsed(false);
   };
 
   return (
-    <aside 
-      id="sidebar" 
-      className={`z-40 flex shrink-0 flex-col justify-between border-r border-slate-100 bg-white transition-all duration-300 ease-in-out m-4 rounded-3xl shadow-2xl
-        ${isSidebarCollapsed ? "w-20 sidebar-collapsed" : "w-80"} 
-        ${isMobileSidebarOpen ? "mobile-open" : ""}`}
+    <aside
+      id="sidebar"
+      onClick={handleSidebarBackgroundClick}
+      className={`z-50 flex shrink-0 flex-col justify-between bg-white transition-all duration-300 ease-in-out border-r border-slate-100 shadow-2xl
+        /* Layout Mobile: Absolute & Trượt ra/vào */
+        fixed inset-y-0 left-0 h-full rounded-r-3xl
+        ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        
+        /* Layout Desktop: Tương đối & Bo góc */
+        md:relative md:translate-x-0 md:m-4 md:rounded-3xl md:h-[calc(100vh-32px)]
+        
+        /* Kích thước */
+        ${isSidebarCollapsed ? "md:w-20 sidebar-collapsed cursor-pointer" : "w-64"}
+      `}
     >
       <div className="p-6">
-        {/* Vùng Logo VinFast */}
-        <Link to="/admin" className="mb-10 flex cursor-pointer items-center gap-3 px-2">
-          <img 
-            className="w-9 m-auto" 
-            src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg"
-            alt="VinFast Logo"
-          />
-          {/* <span className="sidebar-text text-2xl font-extrabold tracking-tight text-black">
-            Admin<span className="text-blue-600 dark:text-blue-500 font-bold font-sans">Page</span>
-          </span> */}
-        </Link>
+        <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-between mb-8 px-2">
+          <Link to="/admin/dashboard" className="flex items-center">
+            <img className="w-9" src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg" alt="Logo" />
+          </Link>
 
-        {/* Các nhóm liên kết điều hướng */}
-        <div className="flex flex-col gap-6">
-          
-          {/* Nhóm 1: OVERVIEW */}
-          <div className="space-y-1.5">
-            <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Overview
-            </p>
-            <div className="sidebar-divider hidden text-slate-400">
-              <i className="hgi-stroke hgi-more-horizontal text-md"></i>
-            </div>
-            {overviewLinks.map((link) => (
-              <Link 
-                key={link.to}
-                to={link.to} 
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
+          <div className="flex gap-2">
+            {/* Nút đóng Sidebar chỉ hiện trên Mobile */}
+            <button 
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="md:hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+            >
+              <FontAwesomeIcon icon={faXmark} className="text-xl" />
+            </button>
+
+            {/* Nút thu gọn chỉ hiện trên Desktop */}
+            {!isSidebarCollapsed && (
+              <button
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="hidden md:block rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100"
               >
-                <i className={`${link.iconClass} text-lg`}></i>
-                <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm">
-                  {link.label}
-                </span>
+                <FontAwesomeIcon icon={faBars} className="text-xl" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Mảng Links */}
+        <div className="flex flex-col gap-6">
+          <div className="space-y-1.5">
+            {!isSidebarCollapsed ? (
+              <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Overview</p>
+            ) : (
+              <div className="flex justify-center text-slate-300 mb-2"><FontAwesomeIcon icon={faEllipsis} /></div>
+            )}
+            {overviewLinks.map((link) => (
+              <Link
+                key={link.to} to={link.to}
+                className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
+                title={isSidebarCollapsed ? link.label : undefined}
+              >
+                <FontAwesomeIcon icon={link.icon} className="text-lg w-5 shrink-0" />
+                <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm">{link.label}</span>
               </Link>
             ))}
           </div>
 
-          {/* Nhóm 2: PAGES */}
           <div className="space-y-1.5">
-            <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Pages
-            </p>
-            <div className="sidebar-divider hidden text-slate-400 ">
-              <i className="hgi-stroke hgi-more-horizontal text-md"></i>
-            </div>
-            {pagesLinks.map((link) => (
-              <Link 
-                key={link.to}
-                to={link.to} 
-                onClick={() => setIsMobileSidebarOpen(false)}
+            {!isSidebarCollapsed ? (
+              <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Management</p>
+            ) : (
+              <div className="flex justify-center text-slate-300 mb-2"><FontAwesomeIcon icon={faEllipsis} /></div>
+            )}
+            {managementLinks.map((link) => (
+              <Link
+                key={link.to} to={link.to}
                 className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
+                title={isSidebarCollapsed ? link.label : undefined}
               >
-                <i className={`${link.iconClass} text-lg`}></i>
+                <FontAwesomeIcon icon={link.icon} className="text-lg w-5 shrink-0" />
                 <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm flex items-center w-full">
                   {link.label}
-                  {link.badge && (
-                    <span className="new-badge ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold text-blue-700">
-                      {link.badge}
-                    </span>
-                  )}
+                  {link.badge && <span className="new-badge ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold text-blue-700">{link.badge}</span>}
                 </span>
               </Link>
             ))}
           </div>
-
-          {/* Nhóm 3: SANDBOX */}
-          <div className="space-y-1.5">
-            <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Sandbox
-            </p>
-            <div className="sidebar-divider hidden text-slate-400">
-              <i className="hgi-stroke hgi-more-horizontal text-md"></i>
-            </div>
-            {sandboxLinks.map((link) => (
-              <Link 
-                key={link.to}
-                to={link.to} 
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
-              >
-                <i className={`${link.iconClass} text-lg`}></i>
-                <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm">
-                  {link.label}
-                </span>
-              </Link>
-            ))}
-          </div>
-
         </div>
       </div>
 
@@ -163,43 +134,28 @@ const Sidebar = ({
       <div className="mt-auto p-4 border-t border-slate-50">
         <div className="relative" ref={profileRef}>
           <div
-            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+            onClick={(e) => { e.stopPropagation(); setIsProfileDropdownOpen(!isProfileDropdownOpen); }}
             className="flex cursor-pointer items-center gap-3 rounded-xl border border-transparent p-2 transition-all hover:border-slate-100 hover:bg-slate-50"
           >
-            {/* Next update chỗ này sẽ thay bằng dynamic image */}
-            <img
-              src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"
-              alt="User Profile"
-              className="h-10 w-10 shrink-0 rounded-full shadow border-slate-200"
-            />
-            <div className="flex flex-1 flex-col overflow-hidden">
-              {/* Tên */}
-              <span className="text-sm font-bold text-slate-700 truncate">Đinh Xuân Trường</span>
-              {/* Role */}
-              <span className="text-[11px] text-slate-400">Tổ trưởng dữ liệu</span>
-            </div>
-            <i className="hgi-stroke hgi-arrow-up-01 text-slate-400 shrink-0"></i>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png" alt="Profile" className="h-10 w-10 shrink-0 rounded-full shadow border-slate-200" />
+            {!isSidebarCollapsed && (
+              <>
+                <div className="flex flex-1 flex-col overflow-hidden">
+                  <span className="text-sm font-bold text-slate-700 truncate">Đinh Xuân Trường</span>
+                  <span className="text-[11px] text-slate-400">Tổ trưởng dữ liệu</span>
+                </div>
+                <FontAwesomeIcon icon={faChevronUp} className="text-slate-400 shrink-0" />
+              </>
+            )}
           </div>
 
-          {/* Profile Dropdown Menu */}
           {isProfileDropdownOpen && (
-            <div
-              id="profileDropdown"
-              className="absolute bottom-full left-0 z-50 mb-2 w-full overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-xl transition-all duration-200"
-            >
-              <button
-                onClick={() => { console.log("Settings Clicked"); setIsProfileDropdownOpen(false); }}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-blue-600"
-              >
-                <i className="hgi-stroke hgi-settings-01 text-lg"></i>
-                <span className="sidebar-text text-sm">Settings</span>
+            <div className="absolute bottom-full left-0 z-50 mb-2 w-full overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-xl">
+              <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600">
+                <FontAwesomeIcon icon={faGear} /> <span className="sidebar-text">Settings</span>
               </button>
-              <button
-                onClick={() => { console.log("Logout Clicked"); setIsProfileDropdownOpen(false); }}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-600"
-              >
-                <i className="hgi-stroke hgi-logout-01 text-lg"></i>
-                <span className="sidebar-text text-sm">Logout</span>
+              <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-600">
+                <FontAwesomeIcon icon={faRightFromBracket} /> <span className="sidebar-text">Logout</span>
               </button>
             </div>
           )}

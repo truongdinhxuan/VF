@@ -1,14 +1,14 @@
 import { login } from "../../api/auth.service"; // Điều chỉnh đường dẫn cho đúng code của bạn
 import { useNavigate } from "react-router-dom";
 import {useForm} from "react-hook-form"
-
+import { useAuth } from "../../context/AuthContext";
 interface ILoginFormInput {
   email: string;
   password: string;
 }
 
 export const LoginPage = () => {
-
+  const { loginContext } = useAuth();
   const navigate = useNavigate();
 
   // Declare hook form
@@ -35,14 +35,15 @@ export const LoginPage = () => {
       console.log("Đăng nhập thành công:", response);
       
       if (response.token) {
-        localStorage.setItem("access_token", response.token);
+        // loginContext lưu token vào local storage
+        await loginContext(response.token); 
         console.log("✅ Đã lưu token vào LocalStorage thành công!");
       }
 
       // Phân luồng điều hướng dựa theo Role
       const userRole = response.publicData?.role;
       if (userRole === "teamlead") {
-        navigate("/milkrun");
+        navigate("/teamlead");
       } else if (userRole === "admin") {
         navigate("/admin");
       } else {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { type IUser } from "../interfaces";
-import { getProfile } from "../api/user.service";
+import { getMyProfile } from "../api/user.service";
 
 interface AuthContextType {
   user: IUser | null;
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const token = localStorage.getItem("access_token");
     if (token) {
       try {
-        const userData = await getProfile();
+        const userData = await getMyProfile();
         setUser(userData);
       } catch (error) {
         console.error("Token không hợp lệ hoặc hết hạn:", error);
@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const loginContext = async (token: string) => {
     localStorage.setItem("access_token", token);
     setLoading(true);
-    await fetchUser(); // Gọi API lấy thông tin user ngay lập tức
+    await fetchUser();
   };
 
   const logoutContext = () => {
