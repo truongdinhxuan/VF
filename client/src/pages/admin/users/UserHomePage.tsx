@@ -74,7 +74,7 @@ const MOCK_USERS: IUser[] = [
       accessor: "name", // Cần truyền accessor dummy, data thật lấy qua render
       render: (user) => {
         const { first_name, middle_name, last_name, avatar_url, email } = user.publicData;
-        // Ghép tên (nếu có tên đệm)
+        // Ghép tên (nếu có tên đệm)cha
         const fullName = [last_name, middle_name, first_name].filter(Boolean).join(" ");
         
         return (

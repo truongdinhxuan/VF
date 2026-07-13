@@ -10,6 +10,8 @@ export interface UserInterface {
   position: number;
   managed_by: number;
   role: string;
+  isverified: boolean;
+  isdeleted: boolean;
   create_at: Date;
   updated_at: Date;
 }
