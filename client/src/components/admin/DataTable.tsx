@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronLeft,
   faChevronRight,
   faAnglesLeft,
   faAnglesRight,
-  faSearch,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Định nghĩa kiểu dữ liệu cho Cột
@@ -22,7 +21,7 @@ interface DataTableProps<T> {
   renderTopToolbar?: () => React.ReactNode; // Slot để chèn thêm filter (như Role dropdown) hoặc button (Add New)
 }
 
-export const DataTable = <T extends Record<string, any>>({
+export const DataTable = <T extends object>({
   columns,
   data,
   searchPlaceholder = "Search...",
@@ -42,11 +41,6 @@ export const DataTable = <T extends Record<string, any>>({
       )
     );
   }, [data, searchTerm]);
-
-  // Reset về trang 1 nếu kết quả tìm kiếm thay đổi
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
 
   // 2. Xử lý logic Phân trang
   const totalItems = filteredData.length;
@@ -69,7 +63,10 @@ export const DataTable = <T extends Record<string, any>>({
                 type="text"
                 placeholder={searchPlaceholder}
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(event) => {
+                  setSearchTerm(event.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full sm:w-64 rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -102,7 +99,9 @@ export const DataTable = <T extends Record<string, any>>({
                     {columns.map((col, colIndex) => (
                       <td key={colIndex} className="px-6 py-4 text-slate-700">
                         {/* Ưu tiên hàm render tuỳ chỉnh, nếu không thì in giá trị text bình thường */}
-                        {col.render ? col.render(item) : item[col.accessor as string]}
+                        {col.render
+                          ? col.render(item)
+                          : String(item[col.accessor as keyof T] ?? "")}
                       </td>
                     ))}
                   </tr>

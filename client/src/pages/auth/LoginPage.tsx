@@ -2,6 +2,7 @@ import { login } from "../../api/auth.service"; // Điều chỉnh đường d�
 import { useNavigate } from "react-router-dom";
 import {useForm} from "react-hook-form"
 import { useAuth } from "../../context/AuthContext";
+import { resolveRoleName } from "../../constants/roles";
 interface ILoginFormInput {
   email: string;
   password: string;
@@ -41,14 +42,8 @@ export const LoginPage = () => {
       }
 
       // Phân luồng điều hướng dựa theo Role
-      const userRole = response.publicData?.role;
-      if (userRole === "teamlead") {
-        navigate("/teamlead");
-      } else if (userRole === "admin") {
-        navigate("/admin");
-      } else {
-        navigate("/");
-      }
+      const userRole = resolveRoleName(response.publicData?.role);
+      navigate(userRole ? "/admin/dashboard" : "/403-unauthorized");
       
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);

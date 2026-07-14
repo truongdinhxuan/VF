@@ -1,0 +1,59 @@
+import type { OrderStatus } from '../domain/enums';
+
+export interface OrderListItemInput {
+  supply_id: string;
+  quantity_requested: number;
+  unit_id?: string;
+  note?: string;
+}
+
+export interface CreateOrderBody {
+  from_area_id: string;
+  to_area_id: string;
+  note?: string;
+  order_list: OrderListItemInput[];
+}
+
+export interface PatchOrderBody {
+  note?: string;
+  order_list?: OrderListItemInput[];
+}
+
+export interface ApproveOrderBody {
+  items: Array<{
+    order_item_id: string;
+    quantity_approved: number;
+  }>;
+  note?: string;
+}
+
+export interface RejectOrderBody {
+  rejected_reason: string;
+}
+
+export interface IssueOrderBody {
+  items: Array<{
+    order_item_id: string;
+    issues: Array<{
+      storage_location_id: string;
+      quantity: number;
+    }>;
+  }>;
+  forklift_by?: string;
+  taken_away_by?: string;
+}
+
+export interface ReceiveOrderBody {
+  taken_away_by?: string;
+}
+
+export interface CancelOrderBody {
+  cancel_reason?: string;
+}
+
+export interface OrderListQuery {
+  status?: OrderStatus;
+  from_area_id?: string;
+  to_area_id?: string;
+  date?: string;
+}

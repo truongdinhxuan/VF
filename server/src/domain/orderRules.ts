@@ -1,0 +1,95 @@
+import type { OrderStatus } from './enums';
+
+export type OrderAction =
+  | 'edit'
+  | 'submit'
+  | 'approve'
+  | 'reject'
+  | 'issue'
+  | 'receive'
+  | 'complete'
+  | 'cancel';
+
+const ACTION_STATUSES: Record<OrderAction, readonly OrderStatus[]> = {
+  edit: ['DRAFT', 'PENDING'],
+  submit: ['DRAFT'],
+  approve: ['PENDING'],
+  reject: ['PENDING'],
+  issue: ['APPROVED', 'PARTIAL_ISSUED'],
+  receive: ['ISSUED'],
+  complete: ['RECEIVED', 'ISSUED'],
+  cancel: ['DRAFT', 'PENDING'],
+};
+
+export class OrderRuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrderRuleError';
+  }
+}
+
+export const assertOrderActionAllowed = (
+  status: OrderStatus,
+  action: OrderAction,
+): void => {
+  if (!ACTION_STATUSES[action].includes(status)) {
+    throw new OrderRuleError(`Cannot ${action} order with status ${status}`);
+  }
+};
+
+export const orderActionAffectsStock = (action: OrderAction): boolean =>
+  action === 'issue';
+
+export const assertRejectedReason = (reason: unknown): string => {
+  if (typeof reason !== 'string' || !reason.trim()) {
+    throw new OrderRuleError('rejected_reason is required');
+  }
+  return reason.trim();
+};
+
+export const assertCancelReason = (
+  status: OrderStatus,
+  reason: unknown,
+): string | null => {
+  if (status === 'PENDING' && (typeof reason !== 'string' || !reason.trim())) {
+    throw new OrderRuleError('cancel_reason is required for a PENDING order');
+  }
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null;
+};
+
+export const assertPositiveQuantity = (quantity: unknown, field: string): number => {
+  const value = Number(quantity);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new OrderRuleError(`${field} must be greater than 0`);
+  }
+  return value;
+};
+
+export const assertApprovedQuantity = (
+  quantityApproved: unknown,
+  quantityRequested: number,
+): number => {
+  const value = Number(quantityApproved);
+  if (!Number.isFinite(value) || value < 0 || value > quantityRequested) {
+    throw new OrderRuleError(
+      'quantity_approved must be between 0 and quantity_requested',
+    );
+  }
+  return value;
+};
+
+export const assertIssueWithinApproved = (
+  alreadyIssued: number,
+  approved: number,
+  requestedIssue: number,
+): void => {
+  if (alreadyIssued + requestedIssue > approved) {
+    throw new OrderRuleError('Cannot issue more than quantity_approved');
+  }
+};
+
+export const assertStockAvailable = (available: number, requestedIssue: number): void => {
+  if (requestedIssue > available) {
+    throw new OrderRuleError('Cannot issue more than StockBalances.quantity');
+  }
+};

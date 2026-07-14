@@ -6,7 +6,11 @@ import { FastifyInstance } from 'fastify';
 export const getUserProfileById = async (fastify: FastifyInstance, userId: string) => {
   const { data, error } = await fastify.supabaseAdmin
     .from('users')
-    .select('*')
+    .select(`
+      *,
+      role:roles!users_role_id_fkey(id, role_name),
+      area:areas!users_area_id_fkey(id, code, name)
+    `)
     .eq('id', userId)
     .single();
 

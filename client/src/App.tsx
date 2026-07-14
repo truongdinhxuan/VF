@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import { Suspense } from "react";
 import { AppRoutes } from "./routes";
 
 // Component hiển thị trạng thái chờ tải nhẹ nhàng khi chuyển trang

@@ -1,9 +1,12 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { type IUser } from "../interfaces";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getMyProfile } from "../api/user.service";
+import { resolveRoleName, type RoleName } from "../constants/roles";
+import type { IUser } from "../interfaces";
 
 interface AuthContextType {
   user: IUser | null;
+  role: RoleName | null;
   loading: boolean;
   loginContext: (token: string) => Promise<void>;
   logoutContext: () => void;
@@ -13,29 +16,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<IUser | null>(null);
-  const [loading, setLoading] = useState<boolean>(true); // Trạng thái chờ load thông tin user ban đầu
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem("access_token")));
 
-  // Hàm đồng bộ thông tin User từ API khi có Token
   const fetchUser = async () => {
     const token = localStorage.getItem("access_token");
-    if (token) {
-      try {
-        const userData = await getMyProfile();
-        setUser(userData);
-      } catch (error) {
-        console.error("Token không hợp lệ hoặc hết hạn:", error);
-        // localStorage.removeItem("access_token");
-        setUser(null);
-      }
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    try {
+      setUser(await getMyProfile());
+    } catch (error) {
+      console.error("Token không hợp lệ hoặc đã hết hạn:", error);
+      localStorage.removeItem("access_token");
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   };
-  // Chạy 1 lần duy nhất khi ứng dụng khởi chạy (hoặc khi F5 trang)
+
   useEffect(() => {
-    fetchUser();
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    let isActive = true;
+    getMyProfile()
+      .then((profile) => {
+        if (isActive) setUser(profile);
+      })
+      .catch((error: unknown) => {
+        console.error("Token không hợp lệ hoặc đã hết hạn:", error);
+        localStorage.removeItem("access_token");
+        if (isActive) setUser(null);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
-  // Gọi hàm này ngay sau khi bấm nút Đăng nhập thành công ở LoginPage
   const loginContext = async (token: string) => {
     localStorage.setItem("access_token", token);
     setLoading(true);
@@ -44,17 +68,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logoutContext = () => {
     localStorage.removeItem("access_token");
-    setUser(null);  
+    setUser(null);
   };
 
+  const role = resolveRoleName(user?.publicData.role);
+
   return (
-    <AuthContext.Provider value={{ user, loading, loginContext, logoutContext }}>
+    <AuthContext.Provider value={{ user, role, loading, loginContext, logoutContext }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Hook ngắn gọn để sử dụng Context ở các Component khác
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth phải được đặt trong AuthProvider");

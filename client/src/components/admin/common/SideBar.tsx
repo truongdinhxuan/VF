@@ -1,11 +1,16 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faHouse, faChartSimple, faUsers, faTruck, faRoute, faBars, 
-  faEllipsis, faChevronUp, faGear, faRightFromBracket, faXmark,
-  faDashboard
+  faBars,
+  faChevronUp,
+  faEllipsis,
+  faGear,
+  faRightFromBracket,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
+import { Link, useNavigate } from "react-router-dom";
+import { navigationForRole } from "../../../constants/adminNavigation";
+import { useAuth } from "../../../context/AuthContext";
 
 interface SidebarProps {
   isSidebarCollapsed: boolean;
@@ -18,68 +23,74 @@ interface SidebarProps {
   profileRef: React.RefObject<HTMLDivElement | null>;
 }
 
-
-
-const overviewLinks = [
-  { to: "/admin", label: "Home", icon: faHouse },
-  { to: "/admin/dashboard", label: "Dashboard", icon: faDashboard },
-  { to: "/admin/analytics", label: "Analytics", icon: faChartSimple },
-];
-
-const managementLinks = [
-  { to: "/admin/users", label: "Users", icon: faUsers },
-  { to: "/admin/supplies", label: "Supplies", icon: faTruck },
-  { to: "/admin/milkrun", label: "Milkrun", icon: faRoute },
-];
-
 const Sidebar = ({
-  isSidebarCollapsed, setIsSidebarCollapsed,
-  isMobileSidebarOpen, setIsMobileSidebarOpen,
-  pathname, isProfileDropdownOpen, setIsProfileDropdownOpen, profileRef,
+  isSidebarCollapsed,
+  setIsSidebarCollapsed,
+  isMobileSidebarOpen,
+  setIsMobileSidebarOpen,
+  pathname,
+  isProfileDropdownOpen,
+  setIsProfileDropdownOpen,
+  profileRef,
 }: SidebarProps) => {
+  const navigate = useNavigate();
+  const { user, role, logoutContext } = useAuth();
+  const navigation = navigationForRole(role);
+  const profile = user?.publicData;
+  const legacyName = [profile?.last_name, profile?.middle_name, profile?.first_name]
+    .filter(Boolean)
+    .join(" ");
+  const displayName = profile?.full_name || legacyName || profile?.email || "Người dùng";
 
-  const checkActive = (to: string) => pathname === to || (to === "/admin/dashboard" && pathname === "/admin/");
+  const checkActive = (to: string) => {
+    if (to === "/admin/orders") {
+      return pathname === to || (pathname.startsWith(`${to}/`) && pathname !== "/admin/orders/create");
+    }
+    return pathname === to || pathname.startsWith(`${to}/`);
+  };
 
-  const handleSidebarBackgroundClick = () => {
-    if (isSidebarCollapsed) setIsSidebarCollapsed(false);
+  const handleLogout = () => {
+    logoutContext();
+    navigate("/auth/login", { replace: true });
   };
 
   return (
     <aside
       id="sidebar"
-      onClick={handleSidebarBackgroundClick}
-      className={`z-50 flex shrink-0 flex-col justify-between bg-white transition-all duration-300 ease-in-out border-r border-slate-100 shadow-2xl
-        /* Layout Mobile: Absolute & Trượt ra/vào */
+      onClick={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
+      className={`z-50 flex shrink-0 flex-col justify-between border-r border-slate-100 bg-white shadow-2xl transition-all duration-300 ease-in-out
         fixed inset-y-0 left-0 h-full rounded-r-3xl
         ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        
-        /* Layout Desktop: Tương đối & Bo góc */
-        md:relative md:translate-x-0 md:m-4 md:rounded-3xl md:h-[calc(100vh-32px)]
-        
-        /* Kích thước */
-        ${isSidebarCollapsed ? "md:w-20 sidebar-collapsed cursor-pointer" : "w-64"}
-      `}
+        md:relative md:m-4 md:h-[calc(100vh-32px)] md:translate-x-0 md:rounded-3xl
+        ${isSidebarCollapsed ? "sidebar-collapsed cursor-pointer md:w-20" : "w-64"}`}
     >
       <div className="p-6">
-        <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-between mb-8 px-2">
+        <div
+          onClick={(event) => event.stopPropagation()}
+          className="mb-8 flex items-center justify-between px-2"
+        >
           <Link to="/admin/dashboard" className="flex items-center">
-            <img className="w-9" src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg" alt="Logo" />
+            <img
+              className="w-9"
+              src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg"
+              alt="VinFast"
+            />
           </Link>
-
           <div className="flex gap-2">
-            {/* Nút đóng Sidebar chỉ hiện trên Mobile */}
-            <button 
+            <button
+              type="button"
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="md:hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden"
+              aria-label="Đóng menu"
             >
               <FontAwesomeIcon icon={faXmark} className="text-xl" />
             </button>
-
-            {/* Nút thu gọn chỉ hiện trên Desktop */}
             {!isSidebarCollapsed && (
               <button
+                type="button"
                 onClick={() => setIsSidebarCollapsed(true)}
-                className="hidden md:block rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100"
+                className="hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:block"
+                aria-label="Thu gọn menu"
               >
                 <FontAwesomeIcon icon={faBars} className="text-xl" />
               </button>
@@ -87,75 +98,81 @@ const Sidebar = ({
           </div>
         </div>
 
-        {/* Mảng Links */}
-        <div className="flex flex-col gap-6">
-          <div className="space-y-1.5">
-            {!isSidebarCollapsed ? (
-              <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Overview</p>
-            ) : (
-              <div className="flex justify-center text-slate-300 mb-2"><FontAwesomeIcon icon={faEllipsis} /></div>
-            )}
-            {overviewLinks.map((link) => (
-              <Link
-                key={link.to} to={link.to}
-                className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
-                title={isSidebarCollapsed ? link.label : undefined}
-              >
-                <FontAwesomeIcon icon={link.icon} className="text-lg w-5 shrink-0" />
-                <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm">{link.label}</span>
-              </Link>
-            ))}
-          </div>
-
-          <div className="space-y-1.5">
-            {!isSidebarCollapsed ? (
-              <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Management</p>
-            ) : (
-              <div className="flex justify-center text-slate-300 mb-2"><FontAwesomeIcon icon={faEllipsis} /></div>
-            )}
-            {managementLinks.map((link) => (
-              <Link
-                key={link.to} to={link.to}
-                className={`w-full sidebar-link ${checkActive(link.to) ? "active" : ""}`}
-                title={isSidebarCollapsed ? link.label : undefined}
-              >
-                <FontAwesomeIcon icon={link.icon} className="text-lg w-5 shrink-0" />
-                <span className="sidebar-text whitespace-nowrap overflow-hidden text-sm flex items-center w-full">
-                  {link.label}
-                  {link.badge && <span className="new-badge ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold text-blue-700">{link.badge}</span>}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <nav className="flex flex-col gap-6" aria-label="Admin navigation">
+          {navigation.map((group) => (
+            <div key={group.label} className="space-y-1.5">
+              {!isSidebarCollapsed ? (
+                <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  {group.label}
+                </p>
+              ) : (
+                <div className="mb-2 flex justify-center text-slate-300">
+                  <FontAwesomeIcon icon={faEllipsis} />
+                </div>
+              )}
+              {group.items.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className={`sidebar-link w-full ${checkActive(item.to) ? "active" : ""}`}
+                  title={isSidebarCollapsed ? item.label : undefined}
+                >
+                  <FontAwesomeIcon icon={item.icon} className="w-5 shrink-0 text-lg" />
+                  <span className="sidebar-text overflow-hidden whitespace-nowrap text-sm">
+                    {item.label}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </nav>
       </div>
 
-      {/* Footer Sidebar / Profile Dropdown */}
-      <div className="mt-auto p-4 border-t border-slate-50">
+      <div className="mt-auto border-t border-slate-50 p-4">
         <div className="relative" ref={profileRef}>
-          <div
-            onClick={(e) => { e.stopPropagation(); setIsProfileDropdownOpen(!isProfileDropdownOpen); }}
-            className="flex cursor-pointer items-center gap-3 rounded-xl border border-transparent p-2 transition-all hover:border-slate-100 hover:bg-slate-50"
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsProfileDropdownOpen(!isProfileDropdownOpen);
+            }}
+            className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left hover:border-slate-100 hover:bg-slate-50"
           >
-            <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png" alt="Profile" className="h-10 w-10 shrink-0 rounded-full shadow border-slate-200" />
+            <img
+              src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"}
+              alt={displayName}
+              className="h-10 w-10 shrink-0 rounded-full border-slate-200 object-cover shadow"
+            />
             {!isSidebarCollapsed && (
               <>
                 <div className="flex flex-1 flex-col overflow-hidden">
-                  <span className="text-sm font-bold text-slate-700 truncate">Đinh Xuân Trường</span>
-                  <span className="text-[11px] text-slate-400">Tổ trưởng dữ liệu</span>
+                  <span className="truncate text-sm font-bold text-slate-700">{displayName}</span>
+                  <span className="truncate text-[11px] text-slate-400">
+                    {role ?? "Chưa gán role"}
+                  </span>
                 </div>
-                <FontAwesomeIcon icon={faChevronUp} className="text-slate-400 shrink-0" />
+                <FontAwesomeIcon icon={faChevronUp} className="shrink-0 text-slate-400" />
               </>
             )}
-          </div>
+          </button>
 
           {isProfileDropdownOpen && (
             <div className="absolute bottom-full left-0 z-50 mb-2 w-full overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-xl">
-              <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600">
-                <FontAwesomeIcon icon={faGear} /> <span className="sidebar-text">Settings</span>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600"
+              >
+                <FontAwesomeIcon icon={faGear} />
+                <span className="sidebar-text">Settings</span>
               </button>
-              <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-600">
-                <FontAwesomeIcon icon={faRightFromBracket} /> <span className="sidebar-text">Logout</span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                <FontAwesomeIcon icon={faRightFromBracket} />
+                <span className="sidebar-text">Logout</span>
               </button>
             </div>
           )}

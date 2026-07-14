@@ -1,0 +1,137 @@
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type {
+  ApproveOrderBody,
+  CancelOrderBody,
+  CreateOrderBody,
+  IssueOrderBody,
+  OrderListQuery,
+  PatchOrderBody,
+  ReceiveOrderBody,
+  RejectOrderBody,
+} from '../../interfaces/orders';
+import {
+  OrderService,
+  OrderServiceError,
+  type OrderActor,
+} from '../../services/order.service';
+
+const actorFrom = (request: FastifyRequest): OrderActor => {
+  if (!request.user) throw new OrderServiceError(401, 'Unauthorized');
+  return {
+    id: request.user.id,
+    role: request.user.role,
+    areaId: request.user.areaId,
+  };
+};
+
+const respond = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+  handler: () => Promise<unknown>,
+  successCode = 200,
+) => {
+  try {
+    const data = await handler();
+    return reply.code(successCode).send({ data });
+  } catch (error) {
+    if (error instanceof OrderServiceError) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal server error' });
+  }
+};
+
+export const createOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(
+    request,
+    reply,
+    () => new OrderService(request.server).create(actorFrom(request), request.body as CreateOrderBody),
+    201,
+  );
+
+export const patchOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).patch(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      request.body as PatchOrderBody,
+    ),
+  );
+
+export const submitOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).submit(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+    ),
+  );
+
+export const listOrders = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).list(
+      actorFrom(request),
+      request.query as OrderListQuery,
+    ),
+  );
+
+export const getOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).get(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+    ),
+  );
+
+export const approveOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).approve(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      request.body as ApproveOrderBody,
+    ),
+  );
+
+export const rejectOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).reject(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      request.body as RejectOrderBody,
+    ),
+  );
+
+export const issueOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).issue(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      request.body as IssueOrderBody,
+    ),
+  );
+
+export const receiveOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).receive(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      (request.body ?? {}) as ReceiveOrderBody,
+    ),
+  );
+
+export const completeOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).complete(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+    ),
+  );
+
+export const cancelOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).cancel(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+      (request.body ?? {}) as CancelOrderBody,
+    ),
+  );
