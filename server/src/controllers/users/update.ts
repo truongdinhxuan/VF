@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import {type UserInterface} from '../../../interfaces/users'
+import {type UserInterface} from '../../interfaces/users'
 
 const PROFILE_FIELDS: (keyof UserInterface)[] = [
   'email',

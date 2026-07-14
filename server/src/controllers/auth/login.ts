@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { UserInterface } from '../../interfaces/users';
-import { getUserProfileById } from '../../services/user.service'; // Import hàm vừa tạo
+import { getUserProfileById } from '../../services/users.service'; // Import hàm vừa tạo
 
 /**
  * 1. Controller Đăng nhập

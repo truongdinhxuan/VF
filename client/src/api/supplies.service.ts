@@ -1,4 +1,4 @@
-import instance from "./api.service";
+import instance from "./http";
 import type { SupplyOption } from "../types/catalog";
 
 interface SuppliesResponse {

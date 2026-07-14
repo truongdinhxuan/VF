@@ -3,7 +3,3 @@ export interface SupplyListQuery {
   category_id?: string;
   is_active?: string | boolean;
 }
-
-export interface StorageLocationListQuery {
-  area_id?: string;
-}

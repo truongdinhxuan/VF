@@ -13,7 +13,7 @@ import {
   OrderService,
   OrderServiceError,
   type OrderActor,
-} from '../../services/order.service';
+} from '../../services/orders.service';
 
 const actorFrom = (request: FastifyRequest): OrderActor => {
   if (!request.user) throw new OrderServiceError(401, 'Unauthorized');

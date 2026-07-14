@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify"
-import {type UserInterface} from '../../../interfaces/users'
+import {type UserInterface} from '../../interfaces/users'
   
   export const createUser = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const body = request.body as UserInterface

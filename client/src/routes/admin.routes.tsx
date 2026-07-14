@@ -13,10 +13,10 @@ const AdminLayout = lazy(() =>
     default: module.AdminLayout,
   })),
 );
-const AdminHomePage = lazy(() => import("../pages/admin/AdminHomePage"));
-const UserHomePage = lazy(() => import("../pages/admin/users/UserHomePage"));
-const SuppliesHomePage = lazy(() => import("../pages/admin/supplies/SuppliesHomePage"));
-const MilkrunHomepage = lazy(() => import("../pages/admin/milkrun/MilkrunHomepage"));
+const DashboardPage = lazy(() => import("../pages/admin/dashboard/DashboardPage"));
+const UsersPage = lazy(() => import("../pages/admin/users/UsersPage"));
+const SuppliesPage = lazy(() => import("../pages/admin/supplies/SuppliesPage"));
+const MilkrunPage = lazy(() => import("../pages/admin/milkrun/MilkrunPage"));
 const AdminPlaceholderPage = lazy(() => import("../pages/admin/AdminPlaceholderPage"));
 const OrdersListPage = lazy(() => import("../pages/admin/orders/OrdersListPage"));
 const CreateOrderPage = lazy(() => import("../pages/admin/orders/CreateOrderPage"));
@@ -27,8 +27,8 @@ export const adminRoutes: RouteObject = {
   element: <AdminLayout />,
   children: [
     { index: true, element: <Navigate to="dashboard" replace /> },
-    { path: "dashboard", element: <AdminHomePage /> },
-    { path: "supplies", element: <SuppliesHomePage /> },
+    { path: "dashboard", element: <DashboardPage /> },
+    { path: "supplies", element: <SuppliesPage /> },
     { path: "orders", element: <OrdersListPage /> },
     { path: "orders/:id", element: <OrderDetailPage /> },
     {
@@ -79,13 +79,13 @@ export const adminRoutes: RouteObject = {
             />
           ),
         },
-        { path: "milkrun", element: <MilkrunHomepage /> },
+        { path: "milkrun", element: <MilkrunPage /> },
       ],
     },
     {
       element: <ProtectedRoute allowedRoles={USER_MANAGEMENT_ROLES} />,
       children: [
-        { path: "users", element: <UserHomePage /> },
+        { path: "users", element: <UsersPage /> },
         {
           path: "roles",
           element: (

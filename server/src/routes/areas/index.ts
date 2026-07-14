@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { listAreas } from '../../controllers/catalog';
+import { listAreas } from '../../controllers/areas';
 import { ROLE_NAMES } from '../../domain/enums';
 import { verifyTokenAndRole } from '../../middleware/auth';
 

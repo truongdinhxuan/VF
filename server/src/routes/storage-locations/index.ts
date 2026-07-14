@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { listStorageLocations } from '../../controllers/catalog';
+import { listStorageLocations } from '../../controllers/storage-locations';
 import { MATERIAL_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 

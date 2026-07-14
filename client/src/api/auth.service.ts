@@ -1,5 +1,5 @@
-import { type IUser } from "../interfaces"
-import instance from "./api.service"
+import type { IUser } from "../types/users";
+import instance from "./http";
 
 export const login = async ({ email, password }: { email: string, password: string }): Promise<IUser> => {
     return instance.post(`auth/login`, { email, password })

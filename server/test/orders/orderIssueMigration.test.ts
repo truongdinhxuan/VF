@@ -8,7 +8,7 @@ const migration = readFileSync(
   'utf8',
 );
 const orderService = readFileSync(
-  resolve(process.cwd(), 'src/services/order.service.ts'),
+  resolve(process.cwd(), 'src/services/orders.service.ts'),
   'utf8',
 );
 

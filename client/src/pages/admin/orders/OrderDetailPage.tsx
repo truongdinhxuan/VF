@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getApiErrorMessage } from "../../../api/errors";
-import { listStorageLocations } from "../../../api/storageLocations.service";
+import { listStorageLocations } from "../../../api/storage-locations.service";
 import {
   approveOrder,
   cancelOrder,

@@ -1,4 +1,4 @@
-import type { RoleName } from "./constants/roles";
+import type { RoleName } from "../constants/roles";
 
 export interface RoleSummary {
   id?: string;

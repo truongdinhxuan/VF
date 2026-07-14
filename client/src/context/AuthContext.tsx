@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMyProfile } from "../api/user.service";
+import { getMyProfile } from "../api/users.service";
 import { resolveRoleName, type RoleName } from "../constants/roles";
-import type { IUser } from "../interfaces";
+import type { IUser } from "../types/users";
 
 interface AuthContextType {
   user: IUser | null;

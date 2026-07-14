@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
+import { MasterDataServiceError } from '../../src/services/master-data.helpers';
 import {
-  CatalogServiceError,
   normalizeSearchQuery,
   parseActiveFilter,
-} from '../../src/services/catalog.service';
+} from '../../src/services/supplies.service';
 
 describe('catalog query validation', () => {
   it('defaults supplies to active and accepts an explicit boolean filter', () => {
@@ -20,7 +20,7 @@ describe('catalog query validation', () => {
     assert.throws(
       () => parseActiveFilter('yes'),
       (error: unknown) =>
-        error instanceof CatalogServiceError && error.statusCode === 400,
+        error instanceof MasterDataServiceError && error.statusCode === 400,
     );
   });
 
@@ -32,9 +32,17 @@ describe('catalog query validation', () => {
   });
 });
 
-describe('catalog read contracts', () => {
-  const serviceSource = readFileSync(
-    resolve(process.cwd(), 'src/services/catalog.service.ts'),
+describe('master data read contracts', () => {
+  const suppliesService = readFileSync(
+    resolve(process.cwd(), 'src/services/supplies.service.ts'),
+    'utf8',
+  );
+  const areasService = readFileSync(
+    resolve(process.cwd(), 'src/services/areas.service.ts'),
+    'utf8',
+  );
+  const storageLocationsService = readFileSync(
+    resolve(process.cwd(), 'src/services/storage-locations.service.ts'),
     'utf8',
   );
   const supplyRoute = readFileSync(
@@ -51,25 +59,25 @@ describe('catalog read contracts', () => {
   );
 
   it('excludes soft-deleted supplies and defaults active records', () => {
-    assert.match(serviceSource, /\.eq\('is_active', isActive\)/);
-    assert.match(serviceSource, /\.eq\('is_deleted', false\)/);
+    assert.match(suppliesService, /\.eq\('is_active', isActive\)/);
+    assert.match(suppliesService, /\.eq\('is_deleted', false\)/);
   });
 
   it('returns only workbook fields and limits packing supply fields', () => {
     assert.match(
-      serviceSource,
+      suppliesService,
       /id, code, short_text, unit_id, is_active, is_deleted/,
     );
-    assert.doesNotMatch(serviceSource, /stock_balances\(\*\)/);
+    assert.doesNotMatch(suppliesService, /stock_balances\(\*\)/);
   });
 
   it('scopes areas and storage locations to active records', () => {
-    assert.match(serviceSource, /from\('areas'\)[\s\S]*?\.eq\('is_active', true\)/);
+    assert.match(areasService, /from\('areas'\)[\s\S]*?\.eq\('is_active', true\)/);
     assert.match(
-      serviceSource,
+      storageLocationsService,
       /from\('storage_locations'\)[\s\S]*?\.eq\('is_active', true\)/,
     );
-    assert.match(serviceSource, /request = request\.eq\('area_id', areaId\)/);
+    assert.match(storageLocationsService, /request = request\.eq\('area_id', areaId\)/);
   });
 
   it('protects routes using the four workbook roles', () => {
