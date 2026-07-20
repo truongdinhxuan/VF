@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ROLE_NAMES, type RoleName } from '../domain/enums';
+import { normalizeRoleName, ROLE_NAMES, type RoleName } from '../domain/enums';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -19,6 +19,7 @@ interface RoleRelation {
 interface PublicUserAuthData {
   area_id: string | null;
   is_active: boolean;
+  is_verified: boolean;
   role: RoleRelation | RoleRelation[] | null;
 }
 
@@ -49,26 +50,37 @@ export const verifyTokenAndRole = (allowedRoles: readonly RoleName[] = []) => {
 
       const { data, error } = await request.server.supabaseAdmin
         .from('users')
-        .select('area_id, is_active, role:roles!users_role_id_fkey(role_name)')
+        .select('area_id, is_active, is_verified, role:roles!users_role_id_fkey(role_name)')
         .eq('id', authData.user.id)
         .single();
 
       const publicData = data as PublicUserAuthData | null;
-      const roleName = extractRoleName(publicData?.role ?? null);
+      const roleName = normalizeRoleName(extractRoleName(publicData?.role ?? null));
 
       if (error || !publicData || !publicData.is_active) {
-        return reply.code(403).send({ error: 'Hồ sơ người dùng không tồn tại hoặc đã bị khóa' });
+        return reply.code(403).send({
+          error: 'Hồ sơ người dùng không tồn tại hoặc đã bị khóa',
+        });
       }
 
-      if (!roleName || !ROLE_NAMES.includes(roleName as RoleName) || !publicData.area_id) {
+      if (!publicData.is_verified) {
+        return reply.code(403).send({
+          error: 'Tài khoản chưa được duyệt để truy cập dữ liệu nội bộ',
+          code: 'ACCOUNT_NOT_VERIFIED',
+        });
+      }
+
+      if (!roleName || !ROLE_NAMES.includes(roleName) || !publicData.area_id) {
         return reply.code(403).send({
           error: 'Người dùng chưa được gán role hoặc area hợp lệ',
         });
       }
 
-      const role = roleName as RoleName;
+      const role = roleName;
       if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-        return reply.code(403).send({ error: 'Bạn không có quyền truy cập chức năng này' });
+        return reply.code(403).send({
+          error: 'Bạn không có quyền truy cập chức năng này',
+        });
       }
 
       request.user = {

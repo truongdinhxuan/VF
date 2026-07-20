@@ -24,6 +24,11 @@ export const userUpdatePassword = async (
 ): Promise<void> => {
   try {
     const { id } = request.params as { id: string };
+
+    if (request.user?.id !== id) {
+      return reply.code(403).send({ error: 'Bạn chỉ có thể đổi mật khẩu của chính mình' });
+    }
+
     const { currentPassword, newPassword, confirmNewPassword } =
       request.body as UpdatePasswordBody;
 

@@ -25,7 +25,6 @@ export interface UserRecord {
   id: string;
   vinfast_id: number;
   email: string;
-  full_name: string;
   phone_number: string | null;
   avatar_url: string | null;
   role_id: string;
@@ -33,8 +32,11 @@ export interface UserRecord {
   area_id: string;
   managed_by_user_id: string | null;
   is_active: boolean;
+  is_verified: boolean;
   created_at: string;
   updated_at: string;
+  first_name: string;
+  last_name: string;
 }
 
 export interface SupplyCategoryRecord {
@@ -137,3 +139,18 @@ export interface StockTransactionRecord {
   created_by: string;
   created_at: string;
 }
+
+export interface DatabaseRecordMap {
+  users: UserRecord;
+  roles: RoleRecord;
+  positions: PositionRecord;
+  areas: AreaRecord;
+  supply_categories: SupplyCategoryRecord;
+  units: UnitRecord;
+  supplies: SupplyRecord;
+  storage_locations: StorageLocationRecord;
+  stock_balances: StockBalanceRecord;
+  stock_transactions: StockTransactionRecord;
+}
+
+export type FoundationTableName = keyof DatabaseRecordMap;

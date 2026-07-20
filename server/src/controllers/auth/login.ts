@@ -1,47 +1,47 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { UserInterface } from '../../interfaces/users';
-import { getUserProfileById } from '../../services/users.service'; // Import hàm vừa tạo
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { LoginBody } from '../../interfaces/users';
+import { getUserProfileById } from '../../services/users.service';
 
-/**
- * 1. Controller Đăng nhập
- */
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
-  const { email, password } = request.body as UserInterface;
+  const { email, password } = request.body as LoginBody;
 
   if (!email || !password) {
-    return reply.code(400).send({ error: 'Please enter field.' });
+    return reply.code(400).send({ error: 'Email và mật khẩu là bắt buộc' });
   }
 
   try {
-    const { data: authData, error: authError } = await request.server.supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
+    const { data: authData, error: authError } =
+      await request.server.supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !authData.user) {
-      return reply.code(401).send({ error: 'Wrong email or password' });
+      return reply.code(401).send({ error: 'Sai email hoặc mật khẩu' });
     }
 
-    // TÁI SỬ DỤNG HÀM: Lấy public data
     const publicData = await getUserProfileById(request.server, authData.user.id);
 
-    return reply.code(200).send({
-      message: 'Đăng nhập thành công!',
-      token: authData.session?.access_token,
-      publicData: publicData, 
-    });
+    if (!publicData || !publicData.is_active) {
+      return reply.code(403).send({ error: 'Tài khoản không tồn tại hoặc đã bị khóa' });
+    }
 
-  } catch (err) {
-    request.log.error(err);
-    return reply.code(500).send({ error: 'Server failed' });
+    if (!publicData.is_verified) {
+      return reply.code(403).send({
+        error: 'Tài khoản đang chờ duyệt và chưa được phép truy cập dữ liệu nội bộ',
+        code: 'ACCOUNT_NOT_VERIFIED',
+      });
+    }
+
+    return reply.code(200).send({
+      message: 'Đăng nhập thành công',
+      token: authData.session?.access_token,
+      publicData,
+    });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Lỗi máy chủ nội bộ' });
   }
 };
 
-/**
- * 2. Controller lấy thông tin hiện tại (GET /auth/me)
- */
 export const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
-  // Nhờ middleware verifyTokenAndRole, ta có ID của user từ token
   const userId = request.user?.id;
 
   if (!userId) {
@@ -49,7 +49,6 @@ export const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
   }
 
   try {
-    // TÁI SỬ DỤNG LẠI CHÍNH HÀM ĐÓ
     const publicData = await getUserProfileById(request.server, userId);
 
     if (!publicData) {
@@ -59,11 +58,10 @@ export const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(200).send({
       id: userId,
       email: request.user?.email,
-      publicData: publicData // Trả về y hệt cấu trúc lúc login
+      publicData,
     });
-
-  } catch (err) {
-    request.log.error(err);
-    return reply.code(500).send({ error: 'Server failed' });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Lỗi máy chủ nội bộ' });
   }
 };

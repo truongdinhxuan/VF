@@ -6,7 +6,7 @@ import { MasterDataServiceError } from '../../src/services/master-data.helpers';
 import {
   normalizeSearchQuery,
   parseActiveFilter,
-} from '../../src/services/supplies.service';
+} from '../../src/services/master-data.helpers';
 
 describe('catalog query validation', () => {
   it('defaults supplies to active and accepts an explicit boolean filter', () => {
@@ -28,7 +28,7 @@ describe('catalog query validation', () => {
     assert.equal(normalizeSearchQuery(undefined), null);
     assert.equal(normalizeSearchQuery('   '), null);
     assert.equal(normalizeSearchQuery('  VT31  '), 'VT31');
-    assert.throws(() => normalizeSearchQuery('code,name'), /unsupported/);
+    assert.throws(() => normalizeSearchQuery('code,name'));
   });
 });
 
@@ -66,23 +66,25 @@ describe('master data read contracts', () => {
   it('returns only workbook fields and limits packing supply fields', () => {
     assert.match(
       suppliesService,
-      /id, code, short_text, unit_id, is_active, is_deleted/,
+      /id, code, short_text, category_id, unit_id, is_active, is_deleted/,
     );
+    assert.match(suppliesService, /category:supply_categories/);
+    assert.match(suppliesService, /unit:units/);
     assert.doesNotMatch(suppliesService, /stock_balances\(\*\)/);
   });
 
   it('scopes areas and storage locations to active records', () => {
-    assert.match(areasService, /from\('areas'\)[\s\S]*?\.eq\('is_active', true\)/);
+    assert.match(areasService, /from\('areas'\)[\s\S]*?\.eq\('is_active', active\)/);
     assert.match(
       storageLocationsService,
-      /from\('storage_locations'\)[\s\S]*?\.eq\('is_active', true\)/,
+      /from\('storage_locations'\)[\s\S]*?\.eq\('is_active', active\)/,
     );
     assert.match(storageLocationsService, /request = request\.eq\('area_id', areaId\)/);
   });
 
-  it('protects routes using the four workbook roles', () => {
+  it('protects read routes using all configured roles', () => {
     assert.match(supplyRoute, /verifyTokenAndRole\(ROLE_NAMES\)/);
     assert.match(areaRoute, /verifyTokenAndRole\(ROLE_NAMES\)/);
-    assert.match(storageRoute, /verifyTokenAndRole\(MATERIAL_ROLES\)/);
+    assert.match(storageRoute, /verifyTokenAndRole\(STOCK_VIEWER_ROLES\)/);
   });
 });

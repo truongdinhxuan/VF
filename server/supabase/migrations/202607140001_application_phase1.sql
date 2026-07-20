@@ -191,10 +191,6 @@ from public.roles as r
 where u.role_id is null
   and r.role_name::text = to_jsonb(u) ->> 'role';
 
-update public.users as u
-set is_active = false
-where lower(coalesce(to_jsonb(u) ->> 'isdeleted', 'false')) = 'true';
-
 update public.users set is_active = true where is_active is null;
 alter table public.users alter column is_active set default true;
 alter table public.users alter column is_active set not null;

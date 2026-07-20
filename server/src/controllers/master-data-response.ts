@@ -5,9 +5,10 @@ export const respondWithData = async (
   request: FastifyRequest,
   reply: FastifyReply,
   handler: () => Promise<unknown>,
+  successCode = 200,
 ) => {
   try {
-    return reply.code(200).send({ data: await handler() });
+    return reply.code(successCode).send({ data: await handler() });
   } catch (error) {
     if (error instanceof MasterDataServiceError) {
       return reply.code(error.statusCode).send({ error: error.message });

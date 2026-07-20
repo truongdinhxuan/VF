@@ -3,9 +3,17 @@ export const ROLE_NAMES = [
   'data Vật tư',
   'Tổ trưởng vật tư',
   'Material Control',
+  'Admin',
 ] as const;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
+
+export const normalizeRoleName = (value: unknown): RoleName | null => {
+  if (typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  return ROLE_NAMES.includes(trimmed as RoleName) ? trimmed as RoleName : null;
+};
 
 export const ORDER_STATUSES = [
   'DRAFT',

@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, it } from 'node:test';
+import { canMutateStock, canViewStock } from '../../src/domain/permissions';
+
+const read = (path: string): string =>
+  readFileSync(resolve(process.cwd(), path), 'utf8');
+
+const balanceRoutes = read('src/routes/stock-balances/index.ts');
+const transactionRoutes = read('src/routes/stock-transactions/index.ts');
+const adjustmentRoutes = read('src/routes/stock-adjustments/index.ts');
+const adjustmentService = read('src/services/stock-adjustments.service.ts');
+const migration = read('supabase/migrations/202607200004_stock_adjustment_rpc.sql');
+
+describe('Phase 3 stock API contracts', () => {
+  it('keeps StockBalances read-only and routes mutations through adjustments', () => {
+    assert.equal((balanceRoutes.match(/fastify\.get\(/g) ?? []).length, 2);
+    assert.doesNotMatch(balanceRoutes, /fastify\.(?:post|patch|delete)\(/);
+    assert.equal((adjustmentRoutes.match(/fastify\.post\(/g) ?? []).length, 1);
+  });
+
+  it('keeps StockTransactions immutable at the HTTP layer', () => {
+    assert.equal((transactionRoutes.match(/fastify\.get\(/g) ?? []).length, 2);
+    assert.doesNotMatch(transactionRoutes, /fastify\.(?:post|patch|delete)\(/);
+  });
+
+  it('uses only the current stock permission override', () => {
+    assert.equal(canViewStock('Material Control'), true);
+    assert.equal(canMutateStock('Material Control'), false);
+    assert.equal(canMutateStock('data Vật tư'), true);
+    assert.equal(canMutateStock('Tổ trưởng vật tư'), true);
+    assert.equal(canMutateStock('Admin'), false);
+  });
+
+  it('calls one atomic RPC instead of writing balance and transaction separately', () => {
+    assert.equal(
+      (adjustmentService.match(/\.rpc\(['"]apply_stock_adjustment['"]/g) ?? []).length,
+      1,
+    );
+    assert.doesNotMatch(adjustmentService, /\.from\(['"]stock_balances['"]\)/);
+    assert.doesNotMatch(adjustmentService, /\.from\(['"]stock_transactions['"]\)/);
+  });
+
+  it('locks the balance and records exact before/after values atomically', () => {
+    assert.match(migration, /create or replace function public\.apply_stock_adjustment/i);
+    assert.match(migration, /for update/i);
+    assert.match(migration, /update public\.stock_balances[\s\S]*returning \* into v_balance/i);
+    assert.match(migration, /insert into public\.stock_transactions/i);
+    assert.match(migration, /v_before_quantity/);
+    assert.match(migration, /v_after_quantity/);
+    assert.match(migration, /Insufficient stock/i);
+    assert.match(migration, /reason is required/i);
+  });
+
+  it('restricts the RPC to the service role', () => {
+    assert.match(migration, /revoke all[\s\S]*from public, anon, authenticated/i);
+    assert.match(migration, /grant execute[\s\S]*to service_role/i);
+  });
+});

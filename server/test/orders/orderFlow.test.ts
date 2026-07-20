@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { OrderStatus } from '../../src/domain/enums';
+import { normalizeRoleName, ROLE_NAMES, type OrderStatus } from '../../src/domain/enums';
 import {
   assertApprovedQuantity,
   assertCancelReason,
@@ -14,6 +14,9 @@ import {
   canApproveOrder,
   canCreateOrder,
   canIssueOrder,
+  canMutateStock,
+  canViewStock,
+  USER_MANAGER_ROLES,
 } from '../../src/domain/permissions';
 
 describe('order state flow', () => {
@@ -81,14 +84,30 @@ describe('order reason and role rules', () => {
     assert.equal(assertCancelReason('PENDING', 'changed plan'), 'changed plan');
   });
 
-  it('uses exactly the four workbook roles for order operations', () => {
+  it('uses the five configured roles without granting Admin operational actions', () => {
+    assert.deepEqual(ROLE_NAMES, [
+      'data Đóng gói',
+      'data Vật tư',
+      'Tổ trưởng vật tư',
+      'Material Control',
+      'Admin',
+    ]);
+    assert.equal(normalizeRoleName('Admin'), 'Admin');
+    assert.equal(normalizeRoleName('admin'), null);
+    assert.deepEqual(USER_MANAGER_ROLES, ['Admin']);
     assert.equal(canCreateOrder('data Đóng gói'), true);
     assert.equal(canApproveOrder('data Vật tư'), true);
     assert.equal(canApproveOrder('Tổ trưởng vật tư'), true);
-    assert.equal(canApproveOrder('Material Control'), false);
+    assert.equal(canApproveOrder('Material Control'), true);
+    assert.equal(canApproveOrder('Admin'), false);
     assert.equal(canIssueOrder('data Vật tư'), true);
     assert.equal(canIssueOrder('Tổ trưởng vật tư'), true);
-    assert.equal(canIssueOrder('Material Control'), true);
+    assert.equal(canIssueOrder('Material Control'), false);
     assert.equal(canIssueOrder('data Đóng gói'), false);
+    assert.equal(canIssueOrder('Admin'), false);
+    assert.equal(canViewStock('Material Control'), true);
+    assert.equal(canViewStock('Admin'), true);
+    assert.equal(canMutateStock('Material Control'), false);
+    assert.equal(canMutateStock('Admin'), false);
   });
 });

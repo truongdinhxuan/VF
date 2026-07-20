@@ -10,7 +10,7 @@ export default fp(async (fastify, opts) => {
     origin: process.env.ORIGIN_URL,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   // console.log(process.env.ORIGIN_URL);
   fastify.log.info("Cors is actived on http://localhost:5173");
