@@ -1,10 +1,26 @@
 import type { FastifySchema } from 'fastify';
+import { createListQuerySchema } from './pagination';
 
 const uuid = { type: 'string', format: 'uuid' } as const;
 const nullableUuid = { anyOf: [uuid, { type: 'null' }] } as const;
 const nullableText = {
   anyOf: [{ type: 'string', maxLength: 2000 }, { type: 'null' }],
 } as const;
+const optionalBoolean = {
+  anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false'] }],
+} as const;
+
+export const USER_SORT_FIELDS = [
+  'id', 'email', 'vinfast_id', 'first_name', 'last_name', 'is_active',
+  'is_verified', 'created_at', 'updated_at',
+] as const;
+
+export const userListSchema = createListQuerySchema(USER_SORT_FIELDS, {
+  roleId: uuid,
+  positionId: uuid,
+  areaId: uuid,
+  isActive: optionalBoolean,
+});
 
 const userProfileProperties = {
   email: { type: 'string', format: 'email', maxLength: 320 },

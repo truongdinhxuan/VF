@@ -1,3 +1,5 @@
+import type { PaginationQuery } from './pagination';
+
 export const USER_COLUMNS = [
   'id',
   'vinfast_id',
@@ -19,6 +21,13 @@ export const USER_COLUMNS = [
 export interface LoginBody {
   email: string;
   password: string;
+}
+
+export interface UserListQuery extends PaginationQuery {
+  roleId?: string;
+  positionId?: string;
+  areaId?: string;
+  isActive?: string | boolean;
 }
 
 export interface CreateUserBody extends LoginBody {

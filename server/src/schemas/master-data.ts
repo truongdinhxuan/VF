@@ -1,11 +1,33 @@
 import type { FastifySchema } from 'fastify';
 import { ROLE_NAMES } from '../domain/enums';
+import { createListQuerySchema } from './pagination';
 
 const uuid = { type: 'string', format: 'uuid' } as const;
 const nullableText = {
   anyOf: [{ type: 'string', maxLength: 2000 }, { type: 'null' }],
 } as const;
 const active = { type: 'boolean' } as const;
+const optionalBoolean = {
+  anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false'] }],
+} as const;
+const legacySearch = { type: 'string', maxLength: 100 } as const;
+
+export const ROLE_SORT_FIELDS = ['id', 'role_name'] as const;
+export const POSITION_SORT_FIELDS = ['id', 'position_name'] as const;
+export const AREA_SORT_FIELDS = ['id', 'code', 'name', 'is_active'] as const;
+export const CATEGORY_SORT_FIELDS = [
+  'id', 'code', 'description', 'is_active', 'created_at', 'updated_at',
+] as const;
+export const UNIT_SORT_FIELDS = [
+  'id', 'code', 'symbol', 'is_active', 'created_at', 'updated_at',
+] as const;
+export const SUPPLY_SORT_FIELDS = [
+  'id', 'code', 'description', 'min_stock', 'max_stock', 'safety_stock',
+  'is_active', 'created_at', 'updated_at',
+] as const;
+export const STORAGE_LOCATION_SORT_FIELDS = [
+  'id', 'code', 'name', 'area_id', 'is_active',
+] as const;
 
 const objectBody = (
   properties: Record<string, unknown>,
@@ -27,26 +49,25 @@ export const idParamsSchema: FastifySchema = {
   },
 };
 
-export const activeListQuerySchema: FastifySchema = {
-  querystring: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      is_active: { anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false'] }] },
-      q: { type: 'string', maxLength: 100 },
-    },
-  },
-};
-
-export const searchListQuerySchema: FastifySchema = {
-  querystring: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      q: { type: 'string', maxLength: 100 },
-    },
-  },
-};
+export const roleListQuerySchema = createListQuerySchema(ROLE_SORT_FIELDS);
+export const searchListQuerySchema = createListQuerySchema(POSITION_SORT_FIELDS, {
+  q: legacySearch,
+});
+export const areaListQuerySchema = createListQuerySchema(AREA_SORT_FIELDS, {
+  q: legacySearch,
+  is_active: optionalBoolean,
+  isActive: optionalBoolean,
+});
+export const categoryListQuerySchema = createListQuerySchema(CATEGORY_SORT_FIELDS, {
+  q: legacySearch,
+  is_active: optionalBoolean,
+  isActive: optionalBoolean,
+});
+export const unitListQuerySchema = createListQuerySchema(UNIT_SORT_FIELDS, {
+  q: legacySearch,
+  is_active: optionalBoolean,
+  isActive: optionalBoolean,
+});
 
 export const roleCreateSchema: FastifySchema = {
   body: objectBody(
@@ -89,13 +110,12 @@ export const areaUpdateSchema: FastifySchema = {
 
 const categoryProperties = {
   code: { type: 'string', minLength: 1, maxLength: 100 },
-  name: { type: 'string', minLength: 1, maxLength: 255 },
   description: nullableText,
   is_active: active,
 } as const;
 
 export const categoryCreateSchema: FastifySchema = {
-  body: objectBody(categoryProperties, ['code', 'name']),
+  body: objectBody(categoryProperties, ['code']),
 };
 
 export const categoryUpdateSchema: FastifySchema = {
@@ -106,7 +126,6 @@ export const categoryUpdateSchema: FastifySchema = {
 const unitProperties = {
   code: { type: 'string', minLength: 1, maxLength: 100 },
   symbol: { type: 'string', minLength: 1, maxLength: 100 },
-  name: nullableText,
   is_active: active,
 } as const;
 
@@ -124,8 +143,6 @@ const nullableNumber = {
 } as const;
 const supplyProperties = {
   code: { type: 'string', minLength: 1, maxLength: 100 },
-  short_text: { type: 'string', minLength: 1, maxLength: 255 },
-  translator_text: nullableText,
   description: nullableText,
   category_id: uuid,
   unit_id: uuid,
@@ -139,7 +156,7 @@ const supplyProperties = {
 export const supplyCreateSchema: FastifySchema = {
   body: objectBody(
     supplyProperties,
-    ['code', 'short_text', 'category_id', 'unit_id'],
+    ['code', 'category_id', 'unit_id'],
   ),
 };
 
@@ -148,17 +165,15 @@ export const supplyUpdateSchema: FastifySchema = {
   body: objectBody(supplyProperties),
 };
 
-export const supplyListQuerySchema: FastifySchema = {
-  querystring: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      q: { type: 'string', maxLength: 100 },
-      category_id: uuid,
-      is_active: { anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false'] }] },
-    },
-  },
-};
+export const supplyListQuerySchema = createListQuerySchema(SUPPLY_SORT_FIELDS, {
+  q: legacySearch,
+  category_id: uuid,
+  categoryId: uuid,
+  unitId: uuid,
+  is_active: optionalBoolean,
+  isActive: optionalBoolean,
+  isDeleted: optionalBoolean,
+});
 
 const storageLocationProperties = {
   code: { type: 'string', minLength: 1, maxLength: 100 },
@@ -176,14 +191,13 @@ export const storageLocationUpdateSchema: FastifySchema = {
   body: objectBody(storageLocationProperties),
 };
 
-export const storageLocationListQuerySchema: FastifySchema = {
-  querystring: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      area_id: uuid,
-      q: { type: 'string', maxLength: 100 },
-      is_active: { anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false'] }] },
-    },
+export const storageLocationListQuerySchema = createListQuerySchema(
+  STORAGE_LOCATION_SORT_FIELDS,
+  {
+    area_id: uuid,
+    areaId: uuid,
+    q: legacySearch,
+    is_active: optionalBoolean,
+    isActive: optionalBoolean,
   },
-};
+);

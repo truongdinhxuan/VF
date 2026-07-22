@@ -6,13 +6,13 @@ import type {
 } from '../interfaces/master-data';
 import {
   databaseError,
-  normalizeOptionalText,
   normalizeRequiredText,
-  normalizeSearchQuery,
   parseActiveFilter,
 } from './master-data.helpers';
+import { UNIT_SORT_FIELDS } from '../schemas/master-data';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
-const SELECT = 'id, code, symbol, name, is_active';
+const SELECT = 'id, code, symbol, is_active, updated_at, created_at, is_deleted';
 
 export class UnitsService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -21,14 +21,33 @@ export class UnitsService {
     return this.fastify.supabaseAdmin;
   }
 
-  async list(query: ActiveListQuery) {
-    const active = parseActiveFilter(query.is_active);
-    const search = normalizeSearchQuery(query.q);
-    let request = this.db.from('units').select(SELECT).eq('is_active', active).order('code');
-    if (search) request = request.or(`code.ilike.*${search}*,symbol.ilike.*${search}*,name.ilike.*${search}*`);
-    const { data, error } = await request;
+  async list(query: ActiveListQuery = {}) {
+    const active = parseActiveFilter(query.isActive ?? query.is_active);
+    const pagination = parsePagination(query, {
+      allowedSortBy: UNIT_SORT_FIELDS,
+      defaultSortBy: 'code',
+      defaultSortOrder: 'asc',
+      legacySearch: query.q,
+    });
+    let request = this.db
+      .from('units')
+      .select(SELECT, { count: 'exact' })
+      .eq('is_active', active)
+      .or('is_deleted.eq.false,is_deleted.is.null');
+    if (pagination.search) {
+      request = request.or(
+        `code.ilike.*${pagination.search}*,symbol.ilike.*${pagination.search}*`,
+      );
+    }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Không thể lấy danh sách đơn vị tính');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string) {
@@ -41,8 +60,8 @@ export class UnitsService {
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
       symbol: normalizeRequiredText(body.symbol, 'symbol', 100),
-      name: normalizeOptionalText(body.name, 'name', 255) ?? null,
       is_active: body.is_active ?? true,
+      is_deleted: false,
     };
     const { data, error } = await this.db
       .from('units')
@@ -57,8 +76,10 @@ export class UnitsService {
     const payload: Record<string, unknown> = {};
     if (body.code !== undefined) payload.code = normalizeRequiredText(body.code, 'code', 100);
     if (body.symbol !== undefined) payload.symbol = normalizeRequiredText(body.symbol, 'symbol', 100);
-    if (body.name !== undefined) payload.name = normalizeOptionalText(body.name, 'name', 255);
-    if (body.is_active !== undefined) payload.is_active = body.is_active;
+    if (body.is_active !== undefined) {
+      payload.is_active = body.is_active;
+      if (body.is_active) payload.is_deleted = false;
+    }
     const { data, error } = await this.db
       .from('units')
       .update(payload)
@@ -72,7 +93,7 @@ export class UnitsService {
   async remove(id: string) {
     const { data, error } = await this.db
       .from('units')
-      .update({ is_active: false })
+      .update({ is_active: false, is_deleted: true })
       .eq('id', id)
       .select(SELECT)
       .single();

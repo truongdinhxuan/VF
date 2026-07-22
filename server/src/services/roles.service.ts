@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { normalizeRoleName } from '../domain/enums';
+import { normalizeRoleName, ROLE_NAMES } from '../domain/enums';
 import type { CreateRoleBody, UpdateRoleBody } from '../interfaces/master-data';
+import type { RoleListQuery } from '../interfaces/master-data';
+import { ROLE_SORT_FIELDS } from '../schemas/master-data';
+import { createPaginatedResult, parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 import { databaseError, fail } from './master-data.helpers';
 
 const SELECT = 'id, role_name';
@@ -12,13 +15,34 @@ export class RolesService {
     return this.fastify.supabaseAdmin;
   }
 
-  async list() {
-    const { data, error } = await this.db
+  async list(query: RoleListQuery = {}) {
+    const pagination = parsePagination(query, {
+      allowedSortBy: ROLE_SORT_FIELDS,
+      defaultSortBy: 'role_name',
+      defaultSortOrder: 'asc',
+    });
+    let request = this.db
       .from('roles')
-      .select(SELECT)
-      .order('role_name', { ascending: true });
+      .select(SELECT, { count: 'exact' });
+    if (pagination.search) {
+      const normalizedSearch = pagination.search.toLocaleLowerCase('vi');
+      const matchingRoles = ROLE_NAMES.filter((roleName) =>
+        roleName.toLocaleLowerCase('vi').includes(normalizedSearch),
+      );
+      if (matchingRoles.length === 0) {
+        return createPaginatedResult([], pagination, 0);
+      }
+      request = request.in('role_name', matchingRoles);
+    }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Không thể lấy danh sách role');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string) {

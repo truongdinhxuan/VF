@@ -1,10 +1,309 @@
-import AdminPlaceholderPage from "../AdminPlaceholderPage";
+import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { listAreas } from '../../../api/areas.service';
+import { listPositions } from '../../../api/positions.service';
+import { listRoles } from '../../../api/roles.service';
+import { createUser, deactivateUser, getUsers, updateUser } from '../../../api/users.service';
+import { DataTable, type Column } from '../../../components/admin/DataTable';
+import {
+  ConfirmDialog,
+  CrudFeedbackToast,
+  CrudModal,
+  CrudPageHeader,
+  ErrorState,
+  FieldError,
+  FormActions,
+  inputClassName,
+  labelClassName,
+  LoadingState,
+  RowActions,
+  StatusBadge,
+} from '../../../components/admin/crud/CrudPrimitives';
+import { useCrudResource } from '../../../hooks/useCrudResource';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import type { Area } from '../../../types/areas';
+import type { Position } from '../../../types/positions';
+import type { PaginationParams } from '../../../types/pagination.types';
+import type { Role } from '../../../types/roles';
+import type { CreateUserInput, UpdateUserInput, UserListParams, UserProfile } from '../../../types/users';
 
-const UsersPage = () => (
-  <AdminPlaceholderPage
-    title="Users"
-    description="Quản lý user, role, position và area. Mock role cũ đã được loại bỏ."
-  />
-);
+type UserQuery = UserListParams & PaginationParams;
+
+interface UserFormValues {
+  email: string;
+  password: string;
+  confirm_password: string;
+  first_name: string;
+  last_name: string;
+  vinfast_id: number;
+  phone_number: string;
+  avatar_url: string;
+  role_id: string;
+  position_id: string;
+  area_id: string;
+  managed_by_user_id: string;
+  is_active: boolean;
+  is_verified: boolean;
+}
+
+interface UserReferenceData {
+  roles: Role[];
+  positions: Position[];
+  areas: Area[];
+  users: UserProfile[];
+  loading: boolean;
+  errors: string[];
+}
+
+const loadManagers = async () => (await getUsers({ page: 1, pageSize: 100, isActive: true, sortBy: 'first_name', sortOrder: 'asc' })).data;
+const loadRoles = async () => (await listRoles({ page: 1, pageSize: 100, sortBy: 'role_name', sortOrder: 'asc' })).data;
+const loadPositions = async () => (await listPositions({ page: 1, pageSize: 100, sortBy: 'position_name', sortOrder: 'asc' })).data;
+const loadAreas = async () => (await listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
+
+const getRoleName = (user: UserProfile): string => {
+  if (typeof user.role === 'string') return user.role;
+  return user.role?.role_name ?? '—';
+};
+
+const UserForm = ({ user, references, busy, onCancel, onSave }: {
+  user: UserProfile | null;
+  references: UserReferenceData;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (values: UserFormValues) => Promise<void>;
+}) => {
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { errors },
+  } = useForm<UserFormValues>({
+    defaultValues: {
+      email: user?.email ?? '',
+      password: '',
+      confirm_password: '',
+      first_name: user?.first_name ?? '',
+      last_name: user?.last_name ?? '',
+      vinfast_id: user?.vinfast_id ?? 0,
+      phone_number: user?.phone_number ?? '',
+      avatar_url: user?.avatar_url ?? '',
+      role_id: user?.role_id ?? '',
+      position_id: user?.position_id ?? '',
+      area_id: user?.area_id ?? '',
+      managed_by_user_id: user?.managed_by_user_id ?? '',
+      is_active: user?.is_active ?? true,
+      is_verified: user?.is_verified ?? false,
+    },
+  });
+  const referencesUnavailable = references.loading || references.errors.length > 0
+    || references.roles.length === 0 || references.areas.length === 0;
+
+  return (
+    <form onSubmit={handleSubmit(onSave)} className="space-y-5">
+      {references.errors.length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {references.errors.map((message) => <p key={message}>{message}</p>)}
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className={labelClassName}>
+          <span>Họ</span>
+          <input {...register('first_name', { required: 'Vui lòng nhập họ.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />
+          <FieldError message={errors.first_name?.message} />
+        </label>
+        <label className={labelClassName}>
+          <span>Tên</span>
+          <input {...register('last_name', { required: 'Vui lòng nhập tên.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />
+          <FieldError message={errors.last_name?.message} />
+        </label>
+        <label className={labelClassName}>
+          <span>Email</span>
+          <input type="email" autoComplete="off" {...register('email', { required: 'Vui lòng nhập email.', setValueAs: (value: string) => value.trim().toLowerCase() })} className={inputClassName} />
+          <FieldError message={errors.email?.message} />
+        </label>
+        <label className={labelClassName}>
+          <span>VinFast ID</span>
+          <input type="number" {...register('vinfast_id', { required: 'Vui lòng nhập VinFast ID.', valueAsNumber: true, validate: (value) => Number.isInteger(value) || 'VinFast ID phải là số nguyên.' })} className={inputClassName} />
+          <FieldError message={errors.vinfast_id?.message} />
+        </label>
+        {!user && (
+          <>
+            <label className={labelClassName}>
+              <span>Mật khẩu ban đầu</span>
+              <input type="password" autoComplete="new-password" {...register('password', { required: 'Vui lòng nhập mật khẩu.', minLength: { value: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự.' } })} className={inputClassName} />
+              <FieldError message={errors.password?.message} />
+            </label>
+            <label className={labelClassName}>
+              <span>Xác nhận mật khẩu</span>
+              <input type="password" autoComplete="new-password" {...register('confirm_password', { required: 'Vui lòng xác nhận mật khẩu.', validate: (value) => value === getValues('password') || 'Mật khẩu xác nhận không khớp.' })} className={inputClassName} />
+              <FieldError message={errors.confirm_password?.message} />
+            </label>
+          </>
+        )}
+        <label className={labelClassName}>
+          <span>Role</span>
+          <select {...register('role_id', { required: 'Vui lòng chọn role.' })} disabled={references.loading} className={inputClassName}>
+            <option value="">{references.loading ? 'Đang tải role...' : 'Chọn role'}</option>
+            {references.roles.map((role) => <option key={role.id} value={role.id}>{role.role_name}</option>)}
+          </select>
+          {!references.loading && references.roles.length === 0 ? <FieldError message="Không có role để lựa chọn." /> : <FieldError message={errors.role_id?.message} />}
+        </label>
+        <label className={labelClassName}>
+          <span>Position</span>
+          <select {...register('position_id')} disabled={references.loading} className={inputClassName}>
+            <option value="">Không chọn</option>
+            {references.positions.map((position) => <option key={position.id} value={position.id}>{position.position_name}</option>)}
+          </select>
+          {!references.loading && references.positions.length === 0 && <p className="text-xs text-slate-500">Chưa có position; trường này có thể để trống.</p>}
+        </label>
+        <label className={labelClassName}>
+          <span>Area</span>
+          <select {...register('area_id', { required: 'Vui lòng chọn area.' })} disabled={references.loading} className={inputClassName}>
+            <option value="">{references.loading ? 'Đang tải area...' : 'Chọn area'}</option>
+            {references.areas.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
+          </select>
+          {!references.loading && references.areas.length === 0 ? <FieldError message="Không có area active để lựa chọn." /> : <FieldError message={errors.area_id?.message} />}
+        </label>
+        <label className={labelClassName}>
+          <span>Người quản lý</span>
+          <select {...register('managed_by_user_id')} disabled={references.loading} className={inputClassName}>
+            <option value="">Không chọn</option>
+            {references.users.filter((candidate) => candidate.id !== user?.id && candidate.is_active).map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>{candidate.first_name} {candidate.last_name} ({candidate.email})</option>
+            ))}
+          </select>
+        </label>
+        <label className={labelClassName}>
+          <span>Số điện thoại</span>
+          <input type="tel" {...register('phone_number')} className={inputClassName} />
+        </label>
+        <label className={labelClassName}>
+          <span>Avatar URL</span>
+          <input type="url" {...register('avatar_url')} className={inputClassName} />
+        </label>
+      </div>
+      {user && (
+        <div className="flex flex-wrap gap-5 rounded-xl bg-slate-50 p-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" {...register('is_active')} className="h-4 w-4 rounded border-slate-300" /> Đang hoạt động</label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" {...register('is_verified')} className="h-4 w-4 rounded border-slate-300" /> Đã duyệt tài khoản</label>
+        </div>
+      )}
+      <FormActions busy={busy || referencesUnavailable} onCancel={onCancel} submitLabel={user ? 'Lưu thay đổi' : 'Tạo người dùng'} />
+    </form>
+  );
+};
+
+const UsersPage = () => {
+  const loader = useCallback((query: UserQuery, signal: AbortSignal) => getUsers(query, signal), []);
+  const resource = usePaginatedResource<UserProfile, UserQuery>({
+    loader,
+    initialQuery: { page: 1, pageSize: 20, sortBy: 'created_at', sortOrder: 'desc' },
+    loadErrorMessage: 'Không thể tải danh sách người dùng.',
+  });
+  const roles = useCrudResource(loadRoles, 'Không thể tải danh sách role.');
+  const positions = useCrudResource(loadPositions, 'Không thể tải danh sách position.');
+  const areas = useCrudResource(loadAreas, 'Không thể tải danh sách area.');
+  const managers = useCrudResource(loadManagers, 'Không thể tải danh sách người quản lý.');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput);
+  const [editing, setEditing] = useState<UserProfile | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<UserProfile | null>(null);
+
+  const references: UserReferenceData = {
+    roles: roles.items,
+    positions: positions.items,
+    areas: areas.items,
+    users: managers.items,
+    loading: roles.loading || positions.loading || areas.loading || managers.loading,
+    errors: [roles.error, positions.error, areas.error, managers.error].filter((error): error is string => Boolean(error)),
+  };
+
+  useEffect(() => {
+    const search = debouncedSearch.trim() || undefined;
+    if (search !== resource.query.search) resource.updateQuery({ search });
+  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+
+  const save = async (values: UserFormValues) => {
+    const commonInput = {
+      email: values.email,
+      first_name: values.first_name,
+      last_name: values.last_name,
+      vinfast_id: values.vinfast_id,
+      phone_number: values.phone_number.trim() || null,
+      avatar_url: values.avatar_url.trim() || null,
+      role_id: values.role_id,
+      position_id: values.position_id || null,
+      area_id: values.area_id,
+      managed_by_user_id: values.managed_by_user_id || null,
+    };
+    const action = editing
+      ? () => updateUser(editing.id, { ...commonInput, is_active: values.is_active, is_verified: values.is_verified } satisfies UpdateUserInput)
+      : () => createUser({ ...commonInput, password: values.password } satisfies CreateUserInput);
+    const ok = await resource.runMutation(
+      action,
+      editing ? 'Đã cập nhật người dùng.' : 'Đã tạo Auth user và profile người dùng.',
+      editing ? 'Không thể cập nhật người dùng.' : 'Không thể tạo người dùng.',
+    );
+    if (ok) setFormOpen(false);
+  };
+
+  const columns: Column<UserProfile>[] = [
+    { header: 'Email', accessor: 'email', sortKey: 'email' },
+    { header: 'VinFast ID', accessor: 'vinfast_id', sortKey: 'vinfast_id' },
+    { header: 'Họ và tên', accessor: 'first_name', sortKey: 'first_name', render: (user) => `${user.first_name} ${user.last_name}`.trim() },
+    { header: 'Role', accessor: 'role_id', render: getRoleName },
+    { header: 'Position', accessor: 'position_id', render: (user) => user.position?.position_name ?? '—' },
+    { header: 'Area', accessor: 'area_id', render: (user) => user.area ? `${user.area.code} - ${user.area.name}` : '—' },
+    { header: 'Active', accessor: 'is_active', sortKey: 'is_active', render: (user) => <StatusBadge active={user.is_active} /> },
+    { header: 'Duyệt', accessor: 'is_verified', render: (user) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_verified ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{user.is_verified ? 'Đã duyệt' : 'Chờ duyệt'}</span> },
+    { header: 'Thao tác', accessor: 'actions', render: (user) => user.is_active ? (
+      <RowActions onEdit={() => { setEditing(user); setFormOpen(true); }} onDelete={() => setDeactivateTarget(user)} />
+    ) : (
+      <div className="flex justify-end"><button type="button" onClick={() => { setEditing(user); setFormOpen(true); }} className="font-semibold text-blue-600 hover:text-blue-800">Sửa / kích hoạt</button></div>
+    ) },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <CrudPageHeader title="Users" description="Quản lý hồ sơ, role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={() => { setEditing(null); setFormOpen(true); }} />
+      <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
+      {resource.loading ? <LoadingState /> : resource.error ? (
+        <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={resource.items}
+          keyExtractor={(user) => user.id}
+          searchPlaceholder="Tìm email, VinFast ID hoặc tên..."
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
+          pagination={resource.pagination}
+          onPageChange={resource.setPage}
+          onPageSizeChange={resource.setPageSize}
+          sortBy={resource.query.sortBy}
+          sortOrder={resource.query.sortOrder}
+          onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
+          renderTopToolbar={() => <>
+            <select value={resource.query.roleId ?? ''} onChange={(event) => resource.updateQuery({ roleId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả role</option>{roles.items.map((role) => <option key={role.id} value={role.id}>{role.role_name}</option>)}</select>
+            <select value={resource.query.positionId ?? ''} onChange={(event) => resource.updateQuery({ positionId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả position</option>{positions.items.map((position) => <option key={position.id} value={position.id}>{position.position_name}</option>)}</select>
+            <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả area</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select>
+            <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Active</option><option value="false">Inactive</option></select>
+          </>}
+          emptyText="Không có người dùng phù hợp."
+        />
+      )}
+      {formOpen && (
+        <CrudModal title={editing ? 'Chỉnh sửa người dùng' : 'Tạo người dùng'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
+          <UserForm key={editing?.id ?? 'create'} user={editing} references={references} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
+        </CrudModal>
+      )}
+      {deactivateTarget && (
+        <ConfirmDialog title="Deactivate người dùng?" message={`Tài khoản “${deactivateTarget.email}” sẽ không còn được phép truy cập dữ liệu nội bộ.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeactivateTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUser(deactivateTarget.id), 'Đã deactivate người dùng.', 'Không thể deactivate người dùng.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeactivateTarget(null); })} />
+      )}
+    </div>
+  );
+};
 
 export default UsersPage;

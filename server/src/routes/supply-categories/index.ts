@@ -10,7 +10,7 @@ import { ROLE_NAMES } from '../../domain/enums';
 import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
-  activeListQuerySchema,
+  categoryListQuerySchema,
   categoryCreateSchema,
   categoryUpdateSchema,
   idParamsSchema,
@@ -19,7 +19,7 @@ import {
 const supplyCategoryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: activeListQuerySchema },
+    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: categoryListQuerySchema },
     listSupplyCategories,
   );
   fastify.get(

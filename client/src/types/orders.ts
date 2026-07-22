@@ -1,3 +1,5 @@
+import type { PaginatedListParams } from './pagination.types';
+
 export const ORDER_STATUSES = [
   "DRAFT",
   "PENDING",
@@ -47,11 +49,12 @@ export interface Order {
   order_items?: OrderItem[];
 }
 
-export interface OrderListParams {
+export interface OrderListParams extends PaginatedListParams {
   status?: OrderStatus;
-  from_area_id?: string;
-  to_area_id?: string;
-  date?: string;
+  createdBy?: string;
+  areaId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface OrderItemInput {

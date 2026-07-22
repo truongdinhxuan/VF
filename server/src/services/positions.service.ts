@@ -8,8 +8,9 @@ import {
   databaseError,
   fail,
   normalizeRequiredText,
-  normalizeSearchQuery,
 } from './master-data.helpers';
+import { POSITION_SORT_FIELDS } from '../schemas/master-data';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 const SELECT = 'id, position_name';
 
@@ -20,13 +21,26 @@ export class PositionsService {
     return this.fastify.supabaseAdmin;
   }
 
-  async list(query: SearchListQuery) {
-    const search = normalizeSearchQuery(query.q);
-    let request = this.db.from('positions').select(SELECT).order('position_name');
-    if (search) request = request.ilike('position_name', `%${search}%`);
-    const { data, error } = await request;
+  async list(query: SearchListQuery = {}) {
+    const pagination = parsePagination(query, {
+      allowedSortBy: POSITION_SORT_FIELDS,
+      defaultSortBy: 'position_name',
+      defaultSortOrder: 'asc',
+      legacySearch: query.q,
+    });
+    let request = this.db.from('positions').select(SELECT, { count: 'exact' });
+    if (pagination.search) {
+      request = request.ilike('position_name', `%${pagination.search}%`);
+    }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Không thể lấy danh sách position');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string) {

@@ -2,7 +2,9 @@ import { useAuth } from "../../../context/AuthContext";
 
 const DashboardPage = () => {
   const { user, role } = useAuth();
-  const displayName = user?.publicData.full_name || user?.publicData.email || "Người dùng";
+  const displayName = [user?.publicData.last_name, user?.publicData.first_name]
+    .filter(Boolean)
+    .join(" ") || user?.publicData.email || "Người dùng";
 
   return (
     <section className="space-y-6">

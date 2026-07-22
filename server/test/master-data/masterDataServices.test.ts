@@ -60,17 +60,19 @@ describe('master data read contracts', () => {
 
   it('excludes soft-deleted supplies and defaults active records', () => {
     assert.match(suppliesService, /\.eq\('is_active', isActive\)/);
-    assert.match(suppliesService, /\.eq\('is_deleted', false\)/);
+    assert.match(suppliesService, /parseActiveFilter\(query\.isDeleted, false\)/);
+    assert.match(suppliesService, /\.eq\('is_deleted', isDeleted\)/);
   });
 
   it('returns only workbook fields and limits packing supply fields', () => {
     assert.match(
       suppliesService,
-      /id, code, short_text, category_id, unit_id, is_active, is_deleted/,
+      /id, code, description, category_id, unit_id, is_active, is_deleted/,
     );
     assert.match(suppliesService, /category:supply_categories/);
     assert.match(suppliesService, /unit:units/);
     assert.doesNotMatch(suppliesService, /stock_balances\(\*\)/);
+    assert.doesNotMatch(suppliesService, /short_text|translator_text/);
   });
 
   it('scopes areas and storage locations to active records', () => {

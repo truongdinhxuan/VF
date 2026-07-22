@@ -1,19 +1,29 @@
 import type { StockTransactionType } from '../domain/enums';
+import type { PaginationQuery } from './pagination';
 
-export interface StockBalanceListQuery {
+export interface StockBalanceListQuery extends PaginationQuery {
   supply_id?: string;
+  supplyId?: string;
   area_id?: string;
+  areaId?: string;
   storage_location_id?: string;
+  storageLocationId?: string;
   low_stock?: string | boolean;
 }
 
-export interface StockTransactionListQuery {
+export interface StockTransactionListQuery extends PaginationQuery {
   supply_id?: string;
+  supplyId?: string;
   area_id?: string;
+  areaId?: string;
+  storageLocationId?: string;
   type?: StockTransactionType;
   order_id?: string;
+  createdBy?: string;
   date_from?: string;
   date_to?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export type StockAdjustmentType = Extract<

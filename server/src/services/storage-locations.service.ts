@@ -11,9 +11,10 @@ import {
   fail,
   normalizeOptionalText,
   normalizeRequiredText,
-  normalizeSearchQuery,
   parseActiveFilter,
 } from './master-data.helpers';
+import { STORAGE_LOCATION_SORT_FIELDS } from '../schemas/master-data';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 const SELECT = `
   id, code, area_id, name, is_active,
@@ -59,21 +60,35 @@ export class StorageLocationsService {
     }
   }
 
-  async list(query: StorageLocationListQuery) {
-    const areaId = assertFilterId(query.area_id, 'area_id');
-    const active = parseActiveFilter(query.is_active);
-    const search = normalizeSearchQuery(query.q);
+  async list(query: StorageLocationListQuery = {}) {
+    const areaId = assertFilterId(query.areaId ?? query.area_id, 'areaId');
+    const active = parseActiveFilter(query.isActive ?? query.is_active);
+    const pagination = parsePagination(query, {
+      allowedSortBy: STORAGE_LOCATION_SORT_FIELDS,
+      defaultSortBy: 'code',
+      defaultSortOrder: 'asc',
+      legacySearch: query.q,
+    });
     let request = this.db
       .from('storage_locations')
-      .select(SELECT)
-      .eq('is_active', active)
-      .order('code', { ascending: true });
+      .select(SELECT, { count: 'exact' })
+      .eq('is_active', active);
 
     if (areaId) request = request.eq('area_id', areaId);
-    if (search) request = request.or(`code.ilike.*${search}*,name.ilike.*${search}*`);
-    const { data, error } = await request;
+    if (pagination.search) {
+      request = request.or(
+        `code.ilike.*${pagination.search}*,name.ilike.*${pagination.search}*`,
+      );
+    }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Cannot list storage locations');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string) {

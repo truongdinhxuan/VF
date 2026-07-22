@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -7,6 +7,9 @@ const distRoot = resolve(process.cwd(), 'dist');
 
 const readJavaScriptFiles = (directory: string): string[] => {
   if (!existsSync(directory)) return [];
+  if (!statSync(directory).isDirectory()) {
+    return directory.endsWith('.js') ? [readFileSync(directory, 'utf8')] : [];
+  }
 
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -23,9 +26,17 @@ describe('clean TypeScript build output', () => {
     assert.equal(existsSync(resolve(distRoot, 'controllers/auth/register.js')), false);
   });
 
-  it('does not contain the removed user deletion field', () => {
+  it('does not contain the removed user deletion field in user modules', () => {
     const legacyField = ['is', 'deleted'].join('');
-    const output = readJavaScriptFiles(distRoot).join('\n');
+    const output = [
+      resolve(distRoot, 'controllers/users'),
+      resolve(distRoot, 'interfaces/users.js'),
+      resolve(distRoot, 'routes/users'),
+      resolve(distRoot, 'schemas/users.js'),
+      resolve(distRoot, 'services/users.service.js'),
+    ]
+      .flatMap(readJavaScriptFiles)
+      .join('\n');
     assert.equal(output.toLowerCase().includes(legacyField), false);
   });
 });

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {useForm} from "react-hook-form"
 import { useAuth } from "../../context/AuthContext";
 import { resolveRoleName } from "../../constants/roles";
+import { getApiErrorMessage } from "../../api/errors";
 interface ILoginFormInput {
   email: string;
   password: string;
@@ -47,7 +48,7 @@ export const LoginPage = () => {
       
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);
-      alert("Đăng nhập thất bại, vui lòng kiểm tra lại thông tin!");
+      alert(getApiErrorMessage(error, "Đăng nhập thất bại, vui lòng kiểm tra lại thông tin!"));
     }
   };
   return (

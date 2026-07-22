@@ -10,6 +10,7 @@ import type {
   RejectOrderInput,
   UpdateOrderInput,
 } from "../types/orders";
+import type { PaginatedResponse } from '../types/pagination.types';
 
 interface ApiEnvelope<T> {
   data: T;
@@ -17,8 +18,11 @@ interface ApiEnvelope<T> {
 
 const get = <T>(response: ApiEnvelope<T>): T => response.data;
 
-export const listOrders = async (params: OrderListParams = {}): Promise<Order[]> =>
-  get(await instance.get<ApiEnvelope<Order[]>, ApiEnvelope<Order[]>>("orders", { params }));
+export const listOrders = async (
+  params: OrderListParams = {},
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<Order>> =>
+  instance.get<PaginatedResponse<Order>, PaginatedResponse<Order>>('orders', { params, signal });
 
 export const getOrder = async (id: string): Promise<Order> =>
   get(await instance.get<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`));

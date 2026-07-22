@@ -37,10 +37,9 @@ const Sidebar = ({
   const { user, role, logoutContext } = useAuth();
   const navigation = navigationForRole(role);
   const profile = user?.publicData;
-  const legacyName = [profile?.last_name, profile?.middle_name, profile?.first_name]
+  const displayName = [profile?.last_name, profile?.first_name]
     .filter(Boolean)
-    .join(" ");
-  const displayName = profile?.full_name || legacyName || profile?.email || "Người dùng";
+    .join(" ") || profile?.email || "Người dùng";
 
   const checkActive = (to: string) => {
     if (to === "/admin/orders") {

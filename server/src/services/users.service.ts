@@ -6,8 +6,14 @@ import type {
   RoleRecord,
   UserRecord,
 } from '../interfaces/database';
-import type { CreateUserBody, UpdateUserBody } from '../interfaces/users';
+import type {
+  CreateUserBody,
+  UpdateUserBody,
+  UserListQuery,
+} from '../interfaces/users';
 import { USER_COLUMNS } from '../interfaces/users';
+import { USER_SORT_FIELDS } from '../schemas/users';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -55,6 +61,15 @@ const normalizeNullableText = (
 ): string | null | undefined => {
   if (value === undefined || value === null) return value;
   return value.trim() || null;
+};
+
+const parseUserActiveFilter = (
+  value: string | boolean | undefined,
+): boolean | null => {
+  if (value === undefined || value === '') return null;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return userFail(400, 'isActive phải là true hoặc false');
 };
 
 export const USER_COLUMN_SELECT = USER_COLUMNS.join(', ');
@@ -166,16 +181,43 @@ export class UsersService {
     await Promise.all(checks);
   }
 
-  async list(): Promise<{ users: UserProfileRecord[]; total: number }> {
-    const { data, error, count } = await this.db
+  async list(query: UserListQuery = {}) {
+    const pagination = parsePagination(query, {
+      allowedSortBy: USER_SORT_FIELDS,
+      defaultSortBy: 'created_at',
+      defaultSortOrder: 'desc',
+    });
+    const active = parseUserActiveFilter(query.isActive);
+    let request = this.db
       .from('users')
-      .select(USER_EXPANDED_SELECT, { count: 'exact' })
-      .order('created_at', { ascending: false });
+      .select(USER_EXPANDED_SELECT, { count: 'exact' });
+    if (pagination.search) {
+      const conditions = [
+        `email.ilike.*${pagination.search}*`,
+        `first_name.ilike.*${pagination.search}*`,
+        `last_name.ilike.*${pagination.search}*`,
+      ];
+      if (/^-?\d+$/.test(pagination.search)) {
+        conditions.push(`vinfast_id.eq.${Number(pagination.search)}`);
+      }
+      request = request.or(conditions.join(','));
+    }
+    if (query.roleId) request = request.eq('role_id', query.roleId);
+    if (query.positionId) request = request.eq('position_id', query.positionId);
+    if (query.areaId) request = request.eq('area_id', query.areaId);
+    if (active !== null) request = request.eq('is_active', active);
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult(
+      { data: (data ?? null) as unknown as UserProfileRecord[] | null, error, count },
+      pagination,
+    );
+    if (result) return result;
     if (error) userDatabaseError(error, 'Không thể lấy danh sách người dùng');
-    return {
-      users: (data ?? []) as unknown as UserProfileRecord[],
-      total: count ?? data?.length ?? 0,
-    };
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string): Promise<UserProfileRecord> {

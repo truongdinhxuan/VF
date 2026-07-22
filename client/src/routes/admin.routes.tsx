@@ -3,8 +3,10 @@ import { lazy } from "react";
 import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import {
-  MATERIAL_ROLES,
+  MASTER_DATA_MANAGER_ROLES,
   PACKING_ROLE,
+  STOCK_MUTATOR_ROLES,
+  STOCK_VIEWER_ROLES,
   USER_MANAGEMENT_ROLES,
 } from "../constants/roles";
 
@@ -15,7 +17,23 @@ const AdminLayout = lazy(() =>
 );
 const DashboardPage = lazy(() => import("../pages/admin/dashboard/DashboardPage"));
 const UsersPage = lazy(() => import("../pages/admin/users/UsersPage"));
+const RolesPage = lazy(() => import("../pages/admin/roles/RolesPage"));
+const PositionsPage = lazy(() => import("../pages/admin/positions/PositionsPage"));
+const AreasPage = lazy(() => import("../pages/admin/areas/AreasPage"));
 const SuppliesPage = lazy(() => import("../pages/admin/supplies/SuppliesPage"));
+const SupplyCategoriesPage = lazy(() =>
+  import("../pages/admin/supply-categories/SupplyCategoriesPage"),
+);
+const UnitsPage = lazy(() => import("../pages/admin/units/UnitsPage"));
+const StorageLocationsPage = lazy(() =>
+  import("../pages/admin/storage-locations/StorageLocationsPage"),
+);
+const StockBalancesPage = lazy(() =>
+  import("../pages/admin/stock-balances/StockBalancesPage"),
+);
+const StockTransactionsPage = lazy(() =>
+  import("../pages/admin/stock-transactions/StockTransactionsPage"),
+);
 const MilkrunPage = lazy(() => import("../pages/admin/milkrun/MilkrunPage"));
 const AdminPlaceholderPage = lazy(() => import("../pages/admin/AdminPlaceholderPage"));
 const OrdersListPage = lazy(() => import("../pages/admin/orders/OrdersListPage"));
@@ -41,26 +59,23 @@ export const adminRoutes: RouteObject = {
       ],
     },
     {
-      element: <ProtectedRoute allowedRoles={MATERIAL_ROLES} />,
+      element: <ProtectedRoute allowedRoles={STOCK_VIEWER_ROLES} />,
       children: [
-        {
-          path: "stock-balances",
-          element: (
-            <AdminPlaceholderPage
-              title="Stock balances"
-              description="Tồn kho hiện tại theo vật tư, khu vực và vị trí lưu."
-            />
-          ),
-        },
-        {
-          path: "stock-transactions",
-          element: (
-            <AdminPlaceholderPage
-              title="Stock transactions"
-              description="Audit log biến động kho; không sửa hoặc xóa giao dịch cũ."
-            />
-          ),
-        },
+        { path: "stock-balances", element: <StockBalancesPage /> },
+        { path: "stock-transactions", element: <StockTransactionsPage /> },
+        { path: "storage-locations", element: <StorageLocationsPage /> },
+      ],
+    },
+    {
+      element: <ProtectedRoute allowedRoles={MASTER_DATA_MANAGER_ROLES} />,
+      children: [
+        { path: "supply-categories", element: <SupplyCategoriesPage /> },
+        { path: "units", element: <UnitsPage /> },
+      ],
+    },
+    {
+      element: <ProtectedRoute allowedRoles={STOCK_MUTATOR_ROLES} />,
+      children: [
         {
           path: "stock-adjustments",
           element: (
@@ -79,22 +94,19 @@ export const adminRoutes: RouteObject = {
             />
           ),
         },
-        { path: "milkrun", element: <MilkrunPage /> },
       ],
+    },
+    {
+      element: <ProtectedRoute allowedRoles={STOCK_MUTATOR_ROLES} />,
+      children: [{ path: "milkrun", element: <MilkrunPage /> }],
     },
     {
       element: <ProtectedRoute allowedRoles={USER_MANAGEMENT_ROLES} />,
       children: [
         { path: "users", element: <UsersPage /> },
-        {
-          path: "roles",
-          element: (
-            <AdminPlaceholderPage
-              title="Roles"
-              description="Hệ thống chỉ sử dụng bốn role đã định nghĩa trong Application.xlsx."
-            />
-          ),
-        },
+        { path: "roles", element: <RolesPage /> },
+        { path: "positions", element: <PositionsPage /> },
+        { path: "areas", element: <AreasPage /> },
       ],
     },
   ],

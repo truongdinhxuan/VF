@@ -14,6 +14,11 @@ import {
   OrderServiceError,
   type OrderActor,
 } from '../../services/orders.service';
+import {
+  isPaginatedResult,
+  PaginationValidationError,
+  toPaginatedResponse,
+} from '../../utils/pagination';
 
 const actorFrom = (request: FastifyRequest): OrderActor => {
   if (!request.user) throw new OrderServiceError(401, 'Unauthorized');
@@ -32,8 +37,13 @@ const respond = async (
 ) => {
   try {
     const data = await handler();
-    return reply.code(successCode).send({ data });
+    return reply.code(successCode).send(
+      isPaginatedResult(data) ? toPaginatedResponse(data) : { data },
+    );
   } catch (error) {
+    if (error instanceof PaginationValidationError) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
     if (error instanceof OrderServiceError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }

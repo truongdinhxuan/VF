@@ -19,6 +19,7 @@ import {
   PACKING_ROLE,
 } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
+import { orderListSchema } from '../../schemas/orders';
 
 const orderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/', { preHandler: verifyTokenAndRole([PACKING_ROLE]) }, createOrder);
@@ -28,7 +29,11 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: verifyTokenAndRole([PACKING_ROLE]) },
     submitOrder,
   );
-  fastify.get('/', { preHandler: verifyTokenAndRole(ROLE_NAMES) }, listOrders);
+  fastify.get(
+    '/',
+    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: orderListSchema },
+    listOrders,
+  );
   fastify.get('/:id', { preHandler: verifyTokenAndRole(ROLE_NAMES) }, getOrder);
   fastify.post(
     '/:id/approve',

@@ -5,10 +5,6 @@ export const login = async ({ email, password }: { email: string, password: stri
     return instance.post(`auth/login`, { email, password })
 }
 
-export const register = async (data: IUser) => {
-    return instance.post(`auth/register`, data)
-}
-
 export const logout = async () => {
     return instance.post(`auth/logout`)
 }

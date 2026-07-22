@@ -20,6 +20,7 @@ import {
   PACKING_ROLE,
 } from "../../../constants/roles";
 import { useAuth } from "../../../context/AuthContext";
+import { useDebounce } from "../../../hooks/useDebounce";
 import type { StorageLocationOption } from "../../../types/catalog";
 import type { Order, OrderItem } from "../../../types/orders";
 
@@ -49,6 +50,8 @@ const OrderDetailPage = () => {
   const [storageLocations, setStorageLocations] = useState<StorageLocationOption[]>([]);
   const [storageLocationsLoading, setStorageLocationsLoading] = useState(false);
   const [storageLocationsError, setStorageLocationsError] = useState<string | null>(null);
+  const [storageLocationSearch, setStorageLocationSearch] = useState("");
+  const debouncedStorageLocationSearch = useDebounce(storageLocationSearch);
 
   useEffect(() => {
     if (!id) return;
@@ -67,6 +70,24 @@ const OrderDetailPage = () => {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (panel !== "issue" || !order) return;
+    const controller = new AbortController();
+    setStorageLocationsLoading(true);
+    setStorageLocationsError(null);
+    listStorageLocations({ page: 1, pageSize: 20, search: debouncedStorageLocationSearch.trim() || undefined, areaId: order.to_area_id, isActive: true, sortBy: 'code', sortOrder: 'asc' }, controller.signal)
+      .then((response) => {
+        if (!controller.signal.aborted) setStorageLocations(response.data);
+      })
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted) setStorageLocationsError(getApiErrorMessage(requestError, "Không thể tải danh sách vị trí kho."));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStorageLocationsLoading(false);
+      });
+    return () => controller.abort();
+  }, [debouncedStorageLocationSearch, order, panel]);
 
   const items = useMemo(() => order?.order_items ?? [], [order]);
   const actorId = user?.publicData.id ?? user?.id;
@@ -133,20 +154,7 @@ const OrderDetailPage = () => {
     if (!order) return;
     openPanel("issue");
     setStorageLocations([]);
-    setStorageLocationsLoading(true);
-    setStorageLocationsError(null);
-    listStorageLocations({ area_id: order.to_area_id })
-      .then((data) => {
-        setStorageLocations(
-          data.filter((location) => location.is_active && location.area_id === order.to_area_id),
-        );
-      })
-      .catch((requestError: unknown) => {
-        setStorageLocationsError(
-          getApiErrorMessage(requestError, "Không thể tải danh sách vị trí kho."),
-        );
-      })
-      .finally(() => setStorageLocationsLoading(false));
+    setStorageLocationSearch("");
   };
 
   const saveItems = () => {
@@ -318,6 +326,7 @@ const OrderDetailPage = () => {
 
       {panel === "issue" && (
         <ActionCard title="Cấp hàng" note="Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
+          <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           {storageLocationsLoading && (
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
               Đang tải vị trí kho của area nhận...

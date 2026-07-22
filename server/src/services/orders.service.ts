@@ -26,6 +26,8 @@ import type {
   ReceiveOrderBody,
   RejectOrderBody,
 } from '../interfaces/orders';
+import { ORDER_SORT_FIELDS } from '../schemas/orders';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 export interface OrderActor {
   id: string;
@@ -87,6 +89,20 @@ function translateRuleError(error: unknown): never {
 function databaseError(error: SupabaseErrorLike | null, fallback: string): never {
   if (error?.code === 'PGRST116') serviceError(404, 'Order not found');
   serviceError(400, error?.message ?? fallback);
+}
+
+function normalizeListDate(
+  value: string | undefined,
+  field: string,
+  endOfDay = false,
+): string | null {
+  if (!value) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`
+    : value;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) serviceError(400, `${field} không hợp lệ`);
+  return parsed.toISOString();
 }
 
 function rpcError(error: SupabaseErrorLike): never {
@@ -284,16 +300,32 @@ export class OrderService {
     return this.findOrder(orderId);
   }
 
-  async list(actor: OrderActor, query: OrderListQuery) {
+  async list(actor: OrderActor, query: OrderListQuery = {}) {
     if (query.status && !ORDER_STATUSES.includes(query.status)) {
       serviceError(400, 'Invalid order status');
     }
+    const pagination = parsePagination(query, {
+      allowedSortBy: ORDER_SORT_FIELDS,
+      defaultSortBy: 'created_at',
+      defaultSortOrder: 'desc',
+    });
 
-    let request = this.db.from('orders').select('*').order('created_at', { ascending: false });
+    let request = this.db.from('orders').select('*', { count: 'exact' });
     if (actor.role === PACKING_ROLE) request = request.eq('from_area_id', actor.areaId);
     if (query.status) request = request.eq('status', query.status);
     if (query.from_area_id) request = request.eq('from_area_id', query.from_area_id);
     if (query.to_area_id) request = request.eq('to_area_id', query.to_area_id);
+    if (query.createdBy) request = request.eq('requested_by', query.createdBy);
+    if (query.areaId) {
+      request = request.or(
+        `from_area_id.eq.${query.areaId},to_area_id.eq.${query.areaId}`,
+      );
+    }
+    if (pagination.search) {
+      request = request.or(
+        `code.ilike.*${pagination.search}*,note.ilike.*${pagination.search}*,rejected_reason.ilike.*${pagination.search}*,cancel_reason.ilike.*${pagination.search}*`,
+      );
+    }
 
     if (query.date) {
       const start = new Date(`${query.date}T00:00:00.000Z`);
@@ -301,11 +333,25 @@ export class OrderService {
       const end = new Date(start);
       end.setUTCDate(end.getUTCDate() + 1);
       request = request.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+    } else {
+      const dateFrom = normalizeListDate(query.dateFrom, 'dateFrom');
+      const dateTo = normalizeListDate(query.dateTo, 'dateTo', true);
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        serviceError(400, 'dateFrom phải nhỏ hơn hoặc bằng dateTo');
+      }
+      if (dateFrom) request = request.gte('created_at', dateFrom);
+      if (dateTo) request = request.lte('created_at', dateTo);
     }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
 
-    const { data, error } = await request;
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Cannot list orders');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(actor: OrderActor, orderId: string) {

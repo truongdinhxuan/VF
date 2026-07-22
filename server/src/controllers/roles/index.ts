@@ -1,10 +1,12 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { RoleListQuery } from '../../interfaces/master-data';
 import type { CreateRoleBody, UpdateRoleBody } from '../../interfaces/master-data';
 import { RolesService } from '../../services/roles.service';
 import { respondWithData } from '../master-data-response';
 
 export const listRoles = (request: FastifyRequest, reply: FastifyReply) =>
-  respondWithData(request, reply, () => new RolesService(request.server).list());
+  respondWithData(request, reply, () =>
+    new RolesService(request.server).list(request.query as RoleListQuery));
 
 export const getRole = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(request, reply, () =>

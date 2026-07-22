@@ -1,26 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import type { StockBalanceListQuery } from '../interfaces/stock';
-import { parseOptionalBoolean, stockDatabaseError } from './stock.helpers';
+import { STOCK_BALANCE_SORT_FIELDS } from '../schemas/stock';
+import { createPaginatedResult, parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
+import { stockDatabaseError } from './stock.helpers';
+import {
+  inCondition,
+  resolveStockSearchReferences,
+} from './stock-search';
 
 const SELECT = `
   id, supply_id, area_id, storage_location_id, quantity, created_at, updated_at,
   supply:supplies!stock_balances_supply_id_fkey(
-    id, code, short_text, min_stock,
-    unit:units!supplies_unit_id_fkey(id, code, symbol, name)
+    id, code, description, min_stock,
+    unit:units!supplies_unit_id_fkey(id, code, symbol)
   ),
   area:areas!stock_balances_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_balances_storage_location_id_fkey(id, code, name)
 `;
-
-interface BalanceWithSupply {
-  supply_id: string;
-  quantity: number | string;
-  supply: { min_stock: number | string | null } | Array<{ min_stock: number | string | null }> | null;
-  [key: string]: unknown;
-}
-
-const relationOne = <T>(value: T | T[] | null): T | null =>
-  Array.isArray(value) ? value[0] ?? null : value;
 
 export class StockBalancesService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -29,47 +25,48 @@ export class StockBalancesService {
     return this.fastify.supabaseAdmin;
   }
 
-  async list(query: StockBalanceListQuery) {
-    const lowStock = parseOptionalBoolean(query.low_stock, 'low_stock');
+  async list(query: StockBalanceListQuery = {}) {
+    const pagination = parsePagination(query, {
+      allowedSortBy: STOCK_BALANCE_SORT_FIELDS,
+      defaultSortBy: 'updated_at',
+      defaultSortOrder: 'desc',
+    });
     let request = this.db
       .from('stock_balances')
-      .select(SELECT)
-      .order('updated_at', { ascending: false });
+      .select(SELECT, { count: 'exact' });
 
-    if (query.supply_id) request = request.eq('supply_id', query.supply_id);
-    if (query.area_id) request = request.eq('area_id', query.area_id);
-    if (query.storage_location_id) {
-      request = request.eq('storage_location_id', query.storage_location_id);
+    const supplyId = query.supplyId ?? query.supply_id;
+    const areaId = query.areaId ?? query.area_id;
+    const storageLocationId = query.storageLocationId ?? query.storage_location_id;
+    if (supplyId) request = request.eq('supply_id', supplyId);
+    if (areaId) request = request.eq('area_id', areaId);
+    if (storageLocationId) {
+      request = request.eq('storage_location_id', storageLocationId);
     }
-
-    const { data, error } = await request;
-    if (error) stockDatabaseError(error, 'Cannot list stock balances');
-    const allItems = (data ?? []) as unknown as BalanceWithSupply[];
-
-    const totalMap = new Map<string, number>();
-    for (const item of allItems) {
-      totalMap.set(
-        item.supply_id,
-        (totalMap.get(item.supply_id) ?? 0) + Number(item.quantity),
+    if (pagination.search) {
+      const references = await resolveStockSearchReferences(
+        this.db,
+        pagination.search,
       );
+      const conditions = [
+        inCondition('supply_id', references.supplyIds),
+        inCondition('area_id', references.areaIds),
+        inCondition('storage_location_id', references.storageLocationIds),
+      ].filter((condition): condition is string => Boolean(condition));
+      if (conditions.length === 0) {
+        return createPaginatedResult([], pagination, 0);
+      }
+      request = request.or(conditions.join(','));
     }
-
-    const items = lowStock === null
-      ? allItems
-      : allItems.filter((item) => {
-          const supply = relationOne(item.supply);
-          const threshold = Number(supply?.min_stock ?? 0);
-          const isLow = (totalMap.get(item.supply_id) ?? 0) <= threshold;
-          return lowStock ? isLow : !isLow;
-        });
-
-    return {
-      items,
-      totals_by_supply: [...totalMap.entries()].map(([supply_id, total_quantity]) => ({
-        supply_id,
-        total_quantity,
-      })),
-    };
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
+    if (error) stockDatabaseError(error, 'Cannot list stock balances');
+    throw new Error('Unreachable pagination state');
   }
 
   async get(id: string) {

@@ -26,8 +26,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    setLoading(true);
     try {
-      setUser(await getMyProfile());
+      const profile = await getMyProfile();
+      setUser(profile);
     } catch (error) {
       console.error("Token không hợp lệ hoặc đã hết hạn:", error);
       localStorage.removeItem("access_token");
@@ -39,10 +41,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     let isActive = true;
-    getMyProfile()
+    void getMyProfile()
       .then((profile) => {
         if (isActive) setUser(profile);
       })

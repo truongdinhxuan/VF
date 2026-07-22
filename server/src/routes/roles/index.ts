@@ -11,12 +11,17 @@ import { SYSTEM_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
   idParamsSchema,
+  roleListQuerySchema,
   roleCreateSchema,
   roleUpdateSchema,
 } from '../../schemas/master-data';
 
 const roleRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/', { preHandler: verifyTokenAndRole(ROLE_NAMES) }, listRoles);
+  fastify.get(
+    '/',
+    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: roleListQuerySchema },
+    listRoles,
+  );
   fastify.get(
     '/:id',
     { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: idParamsSchema },

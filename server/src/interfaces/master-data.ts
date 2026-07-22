@@ -1,13 +1,17 @@
 import type { RoleName } from '../domain/enums';
+import type { PaginationQuery } from './pagination';
 
-export interface ActiveListQuery {
+export interface ActiveListQuery extends PaginationQuery {
   is_active?: string | boolean;
+  isActive?: string | boolean;
   q?: string;
 }
 
-export interface SearchListQuery {
+export interface SearchListQuery extends PaginationQuery {
   q?: string;
 }
+
+export type RoleListQuery = PaginationQuery;
 
 export interface CreateRoleBody {
   role_name: RoleName;
@@ -31,7 +35,6 @@ export type UpdateAreaBody = Partial<CreateAreaBody>;
 
 export interface CreateSupplyCategoryBody {
   code: string;
-  name: string;
   description?: string | null;
   is_active?: boolean;
 }
@@ -41,7 +44,6 @@ export type UpdateSupplyCategoryBody = Partial<CreateSupplyCategoryBody>;
 export interface CreateUnitBody {
   code: string;
   symbol: string;
-  name?: string | null;
   is_active?: boolean;
 }
 

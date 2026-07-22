@@ -60,10 +60,12 @@ describe('master data CRUD contracts', () => {
     const supplies = read('src/services/supplies.service.ts');
     const locations = read('src/services/storage-locations.service.ts');
 
-    for (const source of [areas, categories, units, locations]) {
+    for (const source of [areas, locations]) {
       assert.match(source, /update\(\{ is_active: false \}\)/);
     }
-    assert.match(supplies, /update\(\{ is_active: false, is_deleted: true \}\)/);
+    for (const source of [categories, units, supplies]) {
+      assert.match(source, /update\(\{ is_active: false, is_deleted: true \}\)/);
+    }
   });
 
   it('only hard-deletes Role and Position after checking user references', () => {

@@ -42,24 +42,26 @@ export interface UserRecord {
 export interface SupplyCategoryRecord {
   id: string;
   code: string;
-  name: string;
   description: string | null;
   is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  is_deleted: boolean | null;
 }
 
 export interface UnitRecord {
   id: string;
   code: string;
   symbol: string;
-  name: string | null;
   is_active: boolean;
+  updated_at: string | null;
+  created_at: string | null;
+  is_deleted: boolean | null;
 }
 
 export interface SupplyRecord {
   id: string;
   code: string;
-  short_text: string;
-  translator_text: string | null;
   description: string | null;
   category_id: string;
   unit_id: string;
@@ -69,6 +71,8 @@ export interface SupplyRecord {
   image_url: string | null;
   is_active: boolean;
   is_deleted: boolean;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface StorageLocationRecord {

@@ -90,15 +90,17 @@ describe('Phase 1 backend foundation', () => {
       'created_at', 'updated_at', 'first_name', 'last_name',
     ]);
     assert.deepEqual(interfaceProperties('SupplyCategoryRecord'), [
-      'id', 'code', 'name', 'description', 'is_active',
+      'id', 'code', 'description', 'is_active', 'created_at', 'updated_at',
+      'is_deleted',
     ]);
     assert.deepEqual(interfaceProperties('UnitRecord'), [
-      'id', 'code', 'symbol', 'name', 'is_active',
+      'id', 'code', 'symbol', 'is_active', 'updated_at', 'created_at',
+      'is_deleted',
     ]);
     assert.deepEqual(interfaceProperties('SupplyRecord'), [
-      'id', 'code', 'short_text', 'translator_text', 'description', 'category_id',
-      'unit_id', 'min_stock', 'max_stock', 'safety_stock', 'image_url',
-      'is_active', 'is_deleted',
+      'id', 'code', 'description', 'category_id', 'unit_id', 'min_stock',
+      'max_stock', 'safety_stock', 'image_url', 'is_active', 'is_deleted',
+      'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StorageLocationRecord'), [
       'id', 'code', 'area_id', 'name', 'is_active',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { listAreas } from "../../../api/areas.service";
@@ -6,6 +6,7 @@ import { getApiErrorMessage } from "../../../api/errors";
 import { createOrder } from "../../../api/orders.service";
 import { listSupplies } from "../../../api/supplies.service";
 import { useAuth } from "../../../context/AuthContext";
+import { useServerLookup } from "../../../hooks/useServerLookup";
 import type { AreaOption, SupplyOption } from "../../../types/catalog";
 import type { CreateOrderInput } from "../../../types/orders";
 
@@ -24,9 +25,14 @@ const CreateOrderPage = () => {
   const { user } = useAuth();
   const fromAreaId = user?.publicData.area_id ?? "";
   const fromAreaName = user?.publicData.area?.name;
-  const [supplies, setSupplies] = useState<SupplyOption[]>([]);
-  const [suppliesLoading, setSuppliesLoading] = useState(true);
-  const [suppliesError, setSuppliesError] = useState<string | null>(null);
+  const supplyLoader = useCallback((search: string | undefined, signal: AbortSignal) => listSupplies({ page: 1, pageSize: 20, search, isActive: true, isDeleted: false, sortBy: 'code', sortOrder: 'asc' }, signal), []);
+  const {
+    items: supplies,
+    loading: suppliesLoading,
+    error: suppliesError,
+    search: supplySearch,
+    setSearch: setSupplySearch,
+  } = useServerLookup<SupplyOption>({ loader: supplyLoader, errorMessage: 'Không thể tải danh sách vật tư.' });
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
   const [areasError, setAreasError] = useState<string | null>(null);
@@ -47,34 +53,18 @@ const CreateOrderPage = () => {
   const { fields, append, remove } = useFieldArray({ control, name: "order_list" });
 
   useEffect(() => {
-    let active = true;
-    listSupplies({ is_active: true })
-      .then((data) => {
-        if (active) setSupplies(data.filter((item) => item.is_active && !item.is_deleted));
+    const controller = new AbortController();
+    listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' }, controller.signal)
+      .then((response) => {
+        if (!controller.signal.aborted) setAreas(response.data);
       })
       .catch((requestError: unknown) => {
-        if (active) {
-          setSuppliesError(getApiErrorMessage(requestError, "Không thể tải danh sách vật tư."));
-        }
+        if (!controller.signal.aborted) setAreasError(getApiErrorMessage(requestError, "Không thể tải danh sách area."));
       })
       .finally(() => {
-        if (active) setSuppliesLoading(false);
+        if (!controller.signal.aborted) setAreasLoading(false);
       });
-
-    listAreas()
-      .then((data) => {
-        if (active) setAreas(data.filter((item) => item.is_active));
-      })
-      .catch((requestError: unknown) => {
-        if (active) setAreasError(getApiErrorMessage(requestError, "Không thể tải danh sách area."));
-      })
-      .finally(() => {
-        if (active) setAreasLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    return () => controller.abort();
   }, []);
 
   const onSubmit = async (values: CreateOrderForm) => {
@@ -95,11 +85,6 @@ const CreateOrderPage = () => {
       setSubmitError("Area nhận không còn active hoặc không hợp lệ.");
       return;
     }
-    if (values.order_list.some((item) => !supplies.some((supply) => supply.id === item.supply_id))) {
-      setSubmitError("Order chứa vật tư không còn active hoặc không hợp lệ.");
-      return;
-    }
-
     const payload: CreateOrderInput = {
       from_area_id: fromAreaId,
       to_area_id: values.to_area_id.trim(),
@@ -190,6 +175,7 @@ const CreateOrderPage = () => {
           </div>
 
           {suppliesLoading && <p className="mt-4 text-sm text-slate-500">Đang tải danh mục vật tư...</p>}
+          <input type="search" value={supplySearch} onChange={(event) => setSupplySearch(event.target.value)} placeholder="Tìm vật tư trên server..." className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           {suppliesError && (
             <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               {suppliesError}
@@ -221,7 +207,7 @@ const CreateOrderPage = () => {
                             : "Chọn vật tư"}
                     </option>
                     {supplies.map((supply) => (
-                      <option key={supply.id} value={supply.id}>{supply.code} — {supply.short_text}</option>
+                      <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` — ${supply.description}` : ''}</option>
                     ))}
                   </select>
                   {errors.order_list?.[index]?.supply_id && (

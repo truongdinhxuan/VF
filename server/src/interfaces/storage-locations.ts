@@ -1,6 +1,10 @@
-export interface StorageLocationListQuery {
+import type { PaginationQuery } from './pagination';
+
+export interface StorageLocationListQuery extends PaginationQuery {
   area_id?: string;
+  areaId?: string;
   is_active?: string | boolean;
+  isActive?: string | boolean;
   q?: string;
 }
 

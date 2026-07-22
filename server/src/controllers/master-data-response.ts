@@ -1,5 +1,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { MasterDataServiceError } from '../services/master-data.helpers';
+import {
+  isPaginatedResult,
+  PaginationValidationError,
+  toPaginatedResponse,
+} from '../utils/pagination';
 
 export const respondWithData = async (
   request: FastifyRequest,
@@ -8,8 +13,14 @@ export const respondWithData = async (
   successCode = 200,
 ) => {
   try {
-    return reply.code(successCode).send({ data: await handler() });
+    const result = await handler();
+    return reply.code(successCode).send(
+      isPaginatedResult(result) ? toPaginatedResponse(result) : { data: result },
+    );
   } catch (error) {
+    if (error instanceof PaginationValidationError) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
     if (error instanceof MasterDataServiceError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }

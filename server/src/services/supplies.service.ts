@@ -13,25 +13,27 @@ import {
   fail,
   normalizeOptionalText,
   normalizeRequiredText,
-  normalizeSearchQuery,
   parseActiveFilter,
 } from './master-data.helpers';
+import { SUPPLY_SORT_FIELDS } from '../schemas/master-data';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 export { normalizeSearchQuery, parseActiveFilter } from './master-data.helpers';
 
 const RELATIONS = `
-  category:supply_categories!supplies_category_id_fkey(id, code, name),
-  unit:units!supplies_unit_id_fkey(id, code, symbol, name)
+  category:supply_categories!supplies_category_id_fkey(id, code, description),
+  unit:units!supplies_unit_id_fkey(id, code, symbol)
 `;
 
 const PACKING_SELECT = `
-  id, code, short_text, category_id, unit_id, is_active, is_deleted,
+  id, code, description, category_id, unit_id, is_active, is_deleted,
   ${RELATIONS}
 `;
 
 const FULL_SELECT = `
-  id, code, short_text, translator_text, description, category_id, unit_id,
+  id, code, description, category_id, unit_id,
   min_stock, max_stock, safety_stock, image_url, is_active, is_deleted,
+  created_at, updated_at,
   ${RELATIONS}
 `;
 
@@ -56,6 +58,7 @@ export class SuppliesService {
       .select('id, is_active')
       .eq('id', id)
       .eq('is_active', true)
+      .or('is_deleted.eq.false,is_deleted.is.null')
       .single();
     if (error || !data) fail(400, `${label} không tồn tại hoặc không active`);
   }
@@ -84,24 +87,41 @@ export class SuppliesService {
   }
 
   async list(role: RoleName, query: SupplyListQuery) {
-    const isActive = parseActiveFilter(query.is_active);
-    const categoryId = assertFilterId(query.category_id, 'category_id');
-    const search = normalizeSearchQuery(query.q);
+    const isActive = parseActiveFilter(query.isActive ?? query.is_active);
+    const isDeleted = parseActiveFilter(query.isDeleted, false);
+    const categoryId = assertFilterId(query.categoryId ?? query.category_id, 'categoryId');
+    const unitId = assertFilterId(query.unitId, 'unitId');
+    const pagination = parsePagination(query, {
+      allowedSortBy: SUPPLY_SORT_FIELDS,
+      defaultSortBy: 'code',
+      defaultSortOrder: 'asc',
+      legacySearch: query.q,
+    });
     const fields = this.selectFor(role);
 
     let request = this.db
       .from('supplies')
-      .select(fields)
+      .select(fields, { count: 'exact' })
       .eq('is_active', isActive)
-      .eq('is_deleted', false)
-      .order('code', { ascending: true });
+      .eq('is_deleted', isDeleted);
 
     if (categoryId) request = request.eq('category_id', categoryId);
-    if (search) request = request.or(`code.ilike.*${search}*,short_text.ilike.*${search}*`);
+    if (unitId) request = request.eq('unit_id', unitId);
+    if (pagination.search) {
+      request = request.or(
+        `code.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
+      );
+    }
+    request = request.order(pagination.sortBy, {
+      ascending: pagination.sortOrder === 'asc',
+    });
+    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
 
-    const { data, error } = await request;
+    const { data, error, count } = await request.range(pagination.from, pagination.to);
+    const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
+    if (result) return result;
     if (error) databaseError(error, 'Cannot list supplies');
-    return data ?? [];
+    throw new Error('Unreachable pagination state');
   }
 
   async get(role: RoleName, id: string) {
@@ -121,8 +141,6 @@ export class SuppliesService {
     ]);
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
-      short_text: normalizeRequiredText(body.short_text, 'short_text'),
-      translator_text: normalizeOptionalText(body.translator_text, 'translator_text') ?? null,
       description: normalizeOptionalText(body.description, 'description') ?? null,
       category_id: body.category_id,
       unit_id: body.unit_id,
@@ -156,10 +174,7 @@ export class SuppliesService {
       await this.assertCodeCanChange(id, code);
       payload.code = code;
     }
-    if (body.short_text !== undefined) {
-      payload.short_text = normalizeRequiredText(body.short_text, 'short_text');
-    }
-    for (const field of ['translator_text', 'description', 'image_url'] as const) {
+    for (const field of ['description', 'image_url'] as const) {
       if (body[field] !== undefined) {
         payload[field] = normalizeOptionalText(body[field], field);
       }

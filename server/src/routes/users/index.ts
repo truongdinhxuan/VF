@@ -12,13 +12,14 @@ import {
   createUserSchema,
   updatePasswordSchema,
   updateUserSchema,
+  userListSchema,
   userIdParamsSchema,
 } from '../../schemas/users';
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(USER_MANAGER_ROLES) },
+    { preHandler: verifyTokenAndRole(USER_MANAGER_ROLES), schema: userListSchema },
     userIndex,
   );
   fastify.get(
