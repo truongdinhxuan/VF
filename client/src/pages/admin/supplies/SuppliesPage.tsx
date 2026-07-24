@@ -4,7 +4,7 @@ import { listSupplyCategories } from '../../../api/supply-categories.service';
 import { createSupply, deactivateSupply, listSupplies, updateSupply } from '../../../api/supplies.service';
 import { listUnits } from '../../../api/units.service';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
-import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, LoadingState, RowActions, StatusBadge } from '../../../components/admin/crud/CrudPrimitives';
+import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge } from '../../../components/admin/crud/CrudPrimitives';
 import { MASTER_DATA_MANAGER_ROLES } from '../../../constants/roles';
 import { useAuth } from '../../../context/AuthContext';
 import { useCrudResource } from '../../../hooks/useCrudResource';
@@ -121,9 +121,11 @@ const SuppliesPage = () => {
   return <div className="space-y-6">
     <CrudPageHeader title="Supplies" description="Danh mục vật tư dùng cho tồn kho và order." createLabel="Thêm vật tư" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    {resource.loading ? <LoadingState /> : resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
+    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}
       data={resource.items}
+      loading={resource.loading}
+      loadingText="Đang tải danh sách vật tư..."
       keyExtractor={(item) => item.id}
       searchPlaceholder="Tìm mã hoặc mô tả vật tư..."
       searchValue={searchInput}

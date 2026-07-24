@@ -15,6 +15,8 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
+  loading?: boolean;
+  loadingText?: string;
   emptyText?: string;
   keyExtractor?: (item: T) => React.Key;
   renderTopToolbar?: () => React.ReactNode;
@@ -32,6 +34,8 @@ export const DataTable = <T extends object>({
   searchPlaceholder = 'Search...',
   searchValue = '',
   onSearchChange,
+  loading = false,
+  loadingText = 'Đang tải dữ liệu...',
   emptyText = 'Không có dữ liệu.',
   keyExtractor,
   renderTopToolbar,
@@ -63,7 +67,10 @@ export const DataTable = <T extends object>({
       </div>
     )}
 
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div
+      className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      aria-busy={loading}
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[800px] border-collapse text-left text-sm">
           <thead>
@@ -93,7 +100,16 @@ export const DataTable = <T extends object>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {data.length > 0 ? data.map((item, rowIndex) => (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length} className="px-6 py-12 text-center text-slate-500">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+                    {loadingText}
+                  </span>
+                </td>
+              </tr>
+            ) : data.length > 0 ? data.map((item, rowIndex) => (
               <tr key={keyExtractor?.(item) ?? rowIndex} className="bg-white transition-colors hover:bg-slate-50/50">
                 {columns.map((column, columnIndex) => (
                   <td key={columnIndex} className="px-6 py-4 text-slate-700">
