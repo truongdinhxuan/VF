@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { getApiErrorMessage } from '../api/errors';
 
 export interface CrudFeedback {
@@ -7,56 +13,44 @@ export interface CrudFeedback {
 }
 
 export const useCrudResource = <T,>(
-  loader: () => Promise<T[]>,
+  loader: (signal: AbortSignal) => Promise<T[]>,
   loadErrorMessage: string,
+  queryKey: QueryKey,
+  options: {
+    staleTime?: number;
+    invalidateQueryKeys?: readonly QueryKey[];
+  } = {},
 ) => {
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [mutating, setMutating] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
-
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await loader());
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError, loadErrorMessage));
-    } finally {
-      setLoading(false);
-    }
-  }, [loader, loadErrorMessage]);
-
-  useEffect(() => {
-    let active = true;
-    void loader()
-      .then((data) => {
-        if (active) setItems(data);
-      })
-      .catch((requestError: unknown) => {
-        if (active) setError(getApiErrorMessage(requestError, loadErrorMessage));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [loader, loadErrorMessage]);
+  const queryClient = useQueryClient();
+  const resourceQuery = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => loader(signal),
+    staleTime: options.staleTime ?? 15 * 60 * 1000,
+  });
+  const resourceMutation = useMutation({
+    mutationFn: (action: () => Promise<unknown>) => action(),
+  });
+  const reload = useCallback(
+    () => resourceQuery.refetch().then(() => undefined),
+    [resourceQuery],
+  );
 
   const runMutation = async (
     action: () => Promise<unknown>,
     successMessage: string,
     failureMessage: string,
   ): Promise<boolean> => {
-    setMutating(true);
     setFeedback(null);
     try {
-      await action();
+      await resourceMutation.mutateAsync(action);
       setFeedback({ type: 'success', message: successMessage });
-      await reload();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey }),
+        ...(options.invalidateQueryKeys ?? []).map((key) =>
+          queryClient.invalidateQueries({ queryKey: key }),
+        ),
+      ]);
       return true;
     } catch (requestError) {
       setFeedback({
@@ -64,16 +58,16 @@ export const useCrudResource = <T,>(
         message: getApiErrorMessage(requestError, failureMessage),
       });
       return false;
-    } finally {
-      setMutating(false);
     }
   };
 
   return {
-    items,
-    loading,
-    error,
-    mutating,
+    items: resourceQuery.data ?? [],
+    loading: resourceQuery.isPending || resourceQuery.isFetching,
+    error: resourceQuery.isError
+      ? getApiErrorMessage(resourceQuery.error, loadErrorMessage)
+      : null,
+    mutating: resourceMutation.isPending,
     feedback,
     setFeedback,
     reload,

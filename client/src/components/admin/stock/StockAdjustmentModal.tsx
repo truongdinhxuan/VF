@@ -5,7 +5,9 @@ import { listStorageLocations } from '../../../api/storage-locations.service';
 import { listSupplies } from '../../../api/supplies.service';
 import { useCrudResource } from '../../../hooks/useCrudResource';
 import { useServerLookup } from '../../../hooks/useServerLookup';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { CreateStockAdjustmentInput, StockAdjustmentType } from '../../../types/stock-transactions';
+import { SelectSkeleton } from '../../common/skeleton';
 import { CrudModal, FieldError, FormActions, inputClassName, labelClassName } from '../crud/CrudPrimitives';
 
 const ADJUSTMENT_TYPES: readonly { value: StockAdjustmentType; label: string }[] = [
@@ -15,7 +17,11 @@ const ADJUSTMENT_TYPES: readonly { value: StockAdjustmentType; label: string }[]
   { value: 'EXPORT', label: 'Xuất kho' },
 ];
 
-const loadAreas = async () => (await listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
+const loadAreas = async (signal: AbortSignal) =>
+  (await listAreas(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
 
 export const StockAdjustmentModal = ({
   busy,
@@ -26,12 +32,24 @@ export const StockAdjustmentModal = ({
   onClose: () => void;
   onSubmit: (input: CreateStockAdjustmentInput) => Promise<boolean>;
 }) => {
-  const areas = useCrudResource(loadAreas, 'Không thể tải danh sách khu vực.');
+  const areas = useCrudResource(
+    loadAreas,
+    'Không thể tải danh sách khu vực.',
+    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
+  );
   const [selectedAreaId, setSelectedAreaId] = useState('');
   const supplyLoader = useCallback((search: string | undefined, signal: AbortSignal) => listSupplies({ page: 1, pageSize: 20, search, isActive: true, isDeleted: false, sortBy: 'code', sortOrder: 'asc' }, signal), []);
   const locationLoader = useCallback((search: string | undefined, signal: AbortSignal) => listStorageLocations({ page: 1, pageSize: 20, search, areaId: selectedAreaId || undefined, isActive: true, sortBy: 'code', sortOrder: 'asc' }, signal), [selectedAreaId]);
-  const supplies = useServerLookup({ loader: supplyLoader, errorMessage: 'Không thể tải danh sách vật tư.' });
-  const locations = useServerLookup({ loader: locationLoader, errorMessage: 'Không thể tải danh sách vị trí kho.' });
+  const supplies = useServerLookup({
+    loader: supplyLoader,
+    queryKey: (search) => queryKeys.supplies.lookup({ search, pageSize: 20, isActive: true, isDeleted: false }),
+    errorMessage: 'Không thể tải danh sách vật tư.',
+  });
+  const locations = useServerLookup({
+    loader: locationLoader,
+    queryKey: (search) => queryKeys.storageLocations.lookup({ search, areaId: selectedAreaId || undefined, pageSize: 20, isActive: true }),
+    errorMessage: 'Không thể tải danh sách vị trí kho.',
+  });
   const {
     register,
     handleSubmit,
@@ -79,15 +97,15 @@ export const StockAdjustmentModal = ({
           <label className={labelClassName}>
             <span>Vật tư</span>
             <input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} />
-            <select {...register('supply_id', { required: 'Vui lòng chọn vật tư.' })} disabled={referencesLoading} className={inputClassName}>
-              <option value="">{supplies.loading ? 'Đang tải vật tư...' : 'Chọn vật tư'}</option>
+            {supplies.loading && supplies.items.length === 0 ? <SelectSkeleton label="Đang tải vật tư" /> : <select {...register('supply_id', { required: 'Vui lòng chọn vật tư.' })} disabled={referencesLoading} className={inputClassName}>
+              <option value="">Chọn vật tư</option>
               {supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` - ${supply.description}` : ''}</option>)}
-            </select>
+            </select>}
             {!supplies.loading && supplies.items.length === 0 ? <FieldError message="Không có vật tư active." /> : <FieldError message={errors.supply_id?.message} />}
           </label>
           <label className={labelClassName}>
             <span>Khu vực</span>
-            <select
+            {areas.loading && areas.items.length === 0 ? <SelectSkeleton label="Đang tải khu vực" /> : <select
               {...areaRegistration}
               disabled={referencesLoading}
               className={inputClassName}
@@ -97,18 +115,18 @@ export const StockAdjustmentModal = ({
                 setValue('storage_location_id', '');
               }}
             >
-              <option value="">{areas.loading ? 'Đang tải khu vực...' : 'Chọn khu vực'}</option>
+              <option value="">Chọn khu vực</option>
               {areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
-            </select>
+            </select>}
             {!areas.loading && areas.items.length === 0 ? <FieldError message="Không có khu vực active." /> : <FieldError message={errors.area_id?.message} />}
           </label>
           <label className={labelClassName}>
             <span>Vị trí kho</span>
             <input type="search" value={locations.search} onChange={(event) => locations.setSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." disabled={!selectedAreaId} className={inputClassName} />
-            <select {...register('storage_location_id', { required: 'Vui lòng chọn vị trí kho.' })} disabled={!selectedAreaId || locations.loading} className={inputClassName}>
-              <option value="">{!selectedAreaId ? 'Chọn khu vực trước' : locations.loading ? 'Đang tải vị trí...' : 'Chọn vị trí kho'}</option>
+            {selectedAreaId && locations.loading && locations.items.length === 0 ? <SelectSkeleton label="Đang tải vị trí kho" /> : <select {...register('storage_location_id', { required: 'Vui lòng chọn vị trí kho.' })} disabled={!selectedAreaId || locations.loading} className={inputClassName}>
+              <option value="">{!selectedAreaId ? 'Chọn khu vực trước' : 'Chọn vị trí kho'}</option>
               {locations.items.map((location) => <option key={location.id} value={location.id}>{location.code}{location.name ? ` - ${location.name}` : ''}</option>)}
-            </select>
+            </select>}
             {selectedAreaId && !locations.loading && locations.items.length === 0 ? <FieldError message="Khu vực chưa có vị trí kho active." /> : <FieldError message={errors.storage_location_id?.message} />}
           </label>
           <label className={labelClassName}>

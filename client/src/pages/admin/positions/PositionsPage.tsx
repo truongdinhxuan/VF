@@ -10,10 +10,11 @@ import { DataTable, type Column } from '../../../components/admin/DataTable';
 import {
   ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader,
   ErrorState, FieldError, FormActions, inputClassName, labelClassName,
-  LoadingState, RowActions,
+  RowActions,
 } from '../../../components/admin/crud/CrudPrimitives';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { PaginationParams } from '../../../types/pagination.types';
 import type { Position, PositionListParams } from '../../../types/positions';
 
@@ -42,12 +43,20 @@ const PositionForm = ({ position, busy, onCancel, onSave }: {
 
 const PositionsPage = () => {
   const loader = useCallback((query: PositionQuery, signal: AbortSignal) => listPositions(query, signal), []);
-  const resource = usePaginatedResource<Position, PositionQuery>({ loader, initialQuery, loadErrorMessage: 'Không thể tải danh sách vị trí.' });
+  const resource = usePaginatedResource<Position, PositionQuery>({
+    loader,
+    initialQuery,
+    loadErrorMessage: 'Không thể tải danh sách vị trí.',
+    queryKey: queryKeys.positions.lists,
+    invalidateQueryKeys: [queryKeys.users.all],
+  });
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   useEffect(() => {
-    if ((resource.query.search ?? '') !== debouncedSearch.trim()) resource.updateQuery({ search: debouncedSearch.trim() || undefined });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if ((resourceSearch ?? '') !== debouncedSearch.trim()) updateResourceQuery({ search: debouncedSearch.trim() || undefined });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
   const [editing, setEditing] = useState<Position | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Position | null>(null);
@@ -69,7 +78,7 @@ const PositionsPage = () => {
     <div className="space-y-6">
       <CrudPageHeader title="Positions" description="Quản lý danh mục vị trí công việc của người dùng." createLabel="Thêm vị trí" onCreate={() => { setEditing(null); setFormOpen(true); }} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-      {resource.loading ? <LoadingState /> : resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} keyExtractor={(item) => item.id} searchPlaceholder="Tìm vị trí..." searchValue={search} onSearchChange={setSearch} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có vị trí phù hợp." />}
+      {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm vị trí..." searchValue={search} onSearchChange={setSearch} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có vị trí phù hợp." />}
       {formOpen && <CrudModal title={editing ? 'Chỉnh sửa vị trí' : 'Tạo vị trí'} busy={resource.mutating} onClose={() => setFormOpen(false)}><PositionForm key={editing?.id ?? 'create'} position={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
       {deleteTarget && <ConfirmDialog title="Xóa vị trí?" message={`Vị trí “${deleteTarget.position_name}” chỉ được xóa khi chưa được sử dụng.`} confirmLabel="Xóa vị trí" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deletePosition(deleteTarget.id), 'Đã xóa vị trí.', 'Không thể xóa vị trí.', { removeCurrentItem: true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>

@@ -17,12 +17,12 @@ import {
   FormActions,
   inputClassName,
   labelClassName,
-  LoadingState,
   RowActions,
 } from '../../../components/admin/crud/CrudPrimitives';
 import { ROLE_NAMES, type RoleName } from '../../../constants/roles';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { PaginationParams } from '../../../types/pagination.types';
 import type { Role, RoleListParams } from '../../../types/roles';
 
@@ -80,14 +80,18 @@ const RolesPage = () => {
     loader,
     initialQuery,
     loadErrorMessage: 'Không thể tải danh sách role.',
+    queryKey: queryKeys.roles.lists,
+    invalidateQueryKeys: [queryKeys.users.all],
   });
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   useEffect(() => {
-    if ((resource.query.search ?? '') !== debouncedSearch.trim()) {
-      resource.updateQuery({ search: debouncedSearch.trim() || undefined });
+    if ((resourceSearch ?? '') !== debouncedSearch.trim()) {
+      updateResourceQuery({ search: debouncedSearch.trim() || undefined });
     }
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
   const [editing, setEditing] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
@@ -125,12 +129,13 @@ const RolesPage = () => {
     <div className="space-y-6">
       <CrudPageHeader title="Roles" description="Quản lý các vai trò được phép sử dụng trong hệ thống." onCreate={openCreate} createLabel="Thêm role" />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-      {resource.loading ? <LoadingState /> : resource.error ? (
+      {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
       ) : (
         <DataTable
           columns={columns}
           data={resource.items}
+          loading={resource.loading}
           keyExtractor={(role) => role.id}
           searchPlaceholder="Tìm role..."
           searchValue={search}

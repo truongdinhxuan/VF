@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getMyProfile } from "../api/users.service";
 import { resolveRoleName, type RoleName } from "../constants/roles";
+import { queryClient } from "../lib/queryClient";
 import type { IUser } from "../types/users";
 
 interface AuthContextType {
@@ -33,6 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Token không hợp lệ hoặc đã hết hạn:", error);
       localStorage.removeItem("access_token");
+      queryClient.clear();
       setUser(null);
     } finally {
       setLoading(false);
@@ -53,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .catch((error: unknown) => {
         console.error("Token không hợp lệ hoặc đã hết hạn:", error);
         localStorage.removeItem("access_token");
+        queryClient.clear();
         if (isActive) setUser(null);
       })
       .finally(() => {
@@ -65,6 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const loginContext = async (token: string) => {
+    queryClient.clear();
     localStorage.setItem("access_token", token);
     setLoading(true);
     await fetchUser();
@@ -72,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logoutContext = () => {
     localStorage.removeItem("access_token");
+    queryClient.clear();
     setUser(null);
   };
 

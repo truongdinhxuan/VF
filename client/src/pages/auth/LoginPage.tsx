@@ -31,15 +31,11 @@ export const LoginPage = () => {
     if (!email || !password) return;
 
     try {
-      console.log("Đang gửi dữ liệu đăng nhập qua React Hook Form:", { email, password });
       const response = await login({ email, password });
-
-      console.log("Đăng nhập thành công:", response);
       
       if (response.token) {
         // loginContext lưu token vào local storage
         await loginContext(response.token); 
-        console.log("✅ Đã lưu token vào LocalStorage thành công!");
       }
 
       // Phân luồng điều hướng dựa theo Role

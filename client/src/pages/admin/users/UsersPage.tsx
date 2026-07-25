@@ -15,13 +15,15 @@ import {
   FormActions,
   inputClassName,
   labelClassName,
-  LoadingState,
   RowActions,
   StatusBadge,
 } from '../../../components/admin/crud/CrudPrimitives';
+import { SelectSkeleton } from '../../../components/common/skeleton';
 import { useCrudResource } from '../../../hooks/useCrudResource';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { useServerLookup } from '../../../hooks/useServerLookup';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { Area } from '../../../types/areas';
 import type { Position } from '../../../types/positions';
 import type { PaginationParams } from '../../../types/pagination.types';
@@ -52,14 +54,27 @@ interface UserReferenceData {
   positions: Position[];
   areas: Area[];
   users: UserProfile[];
+  managerSearch: string;
+  setManagerSearch: (value: string) => void;
   loading: boolean;
   errors: string[];
 }
 
-const loadManagers = async () => (await getUsers({ page: 1, pageSize: 100, isActive: true, sortBy: 'first_name', sortOrder: 'asc' })).data;
-const loadRoles = async () => (await listRoles({ page: 1, pageSize: 100, sortBy: 'role_name', sortOrder: 'asc' })).data;
-const loadPositions = async () => (await listPositions({ page: 1, pageSize: 100, sortBy: 'position_name', sortOrder: 'asc' })).data;
-const loadAreas = async () => (await listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
+const loadRoles = async (signal: AbortSignal) =>
+  (await listRoles(
+    { page: 1, pageSize: 100, sortBy: 'role_name', sortOrder: 'asc' },
+    signal,
+  )).data;
+const loadPositions = async (signal: AbortSignal) =>
+  (await listPositions(
+    { page: 1, pageSize: 100, sortBy: 'position_name', sortOrder: 'asc' },
+    signal,
+  )).data;
+const loadAreas = async (signal: AbortSignal) =>
+  (await listAreas(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
 
 const getRoleName = (user: UserProfile): string => {
   if (typeof user.role === 'string') return user.role;
@@ -143,36 +158,43 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
         )}
         <label className={labelClassName}>
           <span>Role</span>
-          <select {...register('role_id', { required: 'Vui lòng chọn role.' })} disabled={references.loading} className={inputClassName}>
-            <option value="">{references.loading ? 'Đang tải role...' : 'Chọn role'}</option>
+          {references.loading && references.roles.length === 0 ? <SelectSkeleton label="Đang tải role" /> : <select {...register('role_id', { required: 'Vui lòng chọn role.' })} className={inputClassName}>
+            <option value="">Chọn role</option>
             {references.roles.map((role) => <option key={role.id} value={role.id}>{role.role_name}</option>)}
-          </select>
+          </select>}
           {!references.loading && references.roles.length === 0 ? <FieldError message="Không có role để lựa chọn." /> : <FieldError message={errors.role_id?.message} />}
         </label>
         <label className={labelClassName}>
           <span>Position</span>
-          <select {...register('position_id')} disabled={references.loading} className={inputClassName}>
+          {references.loading && references.positions.length === 0 ? <SelectSkeleton label="Đang tải position" /> : <select {...register('position_id')} className={inputClassName}>
             <option value="">Không chọn</option>
             {references.positions.map((position) => <option key={position.id} value={position.id}>{position.position_name}</option>)}
-          </select>
+          </select>}
           {!references.loading && references.positions.length === 0 && <p className="text-xs text-slate-500">Chưa có position; trường này có thể để trống.</p>}
         </label>
         <label className={labelClassName}>
           <span>Area</span>
-          <select {...register('area_id', { required: 'Vui lòng chọn area.' })} disabled={references.loading} className={inputClassName}>
-            <option value="">{references.loading ? 'Đang tải area...' : 'Chọn area'}</option>
+          {references.loading && references.areas.length === 0 ? <SelectSkeleton label="Đang tải area" /> : <select {...register('area_id', { required: 'Vui lòng chọn area.' })} className={inputClassName}>
+            <option value="">Chọn area</option>
             {references.areas.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
-          </select>
+          </select>}
           {!references.loading && references.areas.length === 0 ? <FieldError message="Không có area active để lựa chọn." /> : <FieldError message={errors.area_id?.message} />}
         </label>
         <label className={labelClassName}>
           <span>Người quản lý</span>
-          <select {...register('managed_by_user_id')} disabled={references.loading} className={inputClassName}>
+          <input
+            type="search"
+            value={references.managerSearch}
+            onChange={(event) => references.setManagerSearch(event.target.value)}
+            placeholder="Tìm người quản lý trên server..."
+            className={inputClassName}
+          />
+          {references.loading && references.users.length === 0 ? <SelectSkeleton label="Đang tải người quản lý" /> : <select {...register('managed_by_user_id')} className={inputClassName}>
             <option value="">Không chọn</option>
             {references.users.filter((candidate) => candidate.id !== user?.id && candidate.is_active).map((candidate) => (
               <option key={candidate.id} value={candidate.id}>{candidate.first_name} {candidate.last_name} ({candidate.email})</option>
             ))}
-          </select>
+          </select>}
         </label>
         <label className={labelClassName}>
           <span>Số điện thoại</span>
@@ -200,13 +222,40 @@ const UsersPage = () => {
     loader,
     initialQuery: { page: 1, pageSize: 20, sortBy: 'created_at', sortOrder: 'desc' },
     loadErrorMessage: 'Không thể tải danh sách người dùng.',
+    queryKey: queryKeys.users.lists,
   });
-  const roles = useCrudResource(loadRoles, 'Không thể tải danh sách role.');
-  const positions = useCrudResource(loadPositions, 'Không thể tải danh sách position.');
-  const areas = useCrudResource(loadAreas, 'Không thể tải danh sách area.');
-  const managers = useCrudResource(loadManagers, 'Không thể tải danh sách người quản lý.');
+  const roles = useCrudResource(
+    loadRoles,
+    'Không thể tải danh sách role.',
+    queryKeys.roles.lookup({ pageSize: 100 }),
+  );
+  const positions = useCrudResource(
+    loadPositions,
+    'Không thể tải danh sách position.',
+    queryKeys.positions.lookup({ pageSize: 100 }),
+  );
+  const areas = useCrudResource(
+    loadAreas,
+    'Không thể tải danh sách area.',
+    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
+  );
+  const managerLoader = useCallback(
+    (search: string | undefined, signal: AbortSignal) =>
+      getUsers(
+        { page: 1, pageSize: 20, search, isActive: true, sortBy: 'first_name', sortOrder: 'asc' },
+        signal,
+      ),
+    [],
+  );
+  const managers = useServerLookup({
+    loader: managerLoader,
+    queryKey: (search) => queryKeys.users.lookup({ search, pageSize: 20, isActive: true }),
+    errorMessage: 'Không thể tải danh sách người quản lý.',
+  });
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<UserProfile | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<UserProfile | null>(null);
@@ -216,14 +265,16 @@ const UsersPage = () => {
     positions: positions.items,
     areas: areas.items,
     users: managers.items,
+    managerSearch: managers.search,
+    setManagerSearch: managers.setSearch,
     loading: roles.loading || positions.loading || areas.loading || managers.loading,
     errors: [roles.error, positions.error, areas.error, managers.error].filter((error): error is string => Boolean(error)),
   };
 
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
-    if (search !== resource.query.search) resource.updateQuery({ search });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if (search !== resourceSearch) updateResourceQuery({ search });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: UserFormValues) => {
     const commonInput = {
@@ -269,12 +320,13 @@ const UsersPage = () => {
     <div className="space-y-6">
       <CrudPageHeader title="Users" description="Quản lý hồ sơ, role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={() => { setEditing(null); setFormOpen(true); }} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-      {resource.loading ? <LoadingState /> : resource.error ? (
+      {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
       ) : (
         <DataTable
           columns={columns}
           data={resource.items}
+          loading={resource.loading}
           keyExtractor={(user) => user.id}
           searchPlaceholder="Tìm email, VinFast ID hoặc tên..."
           searchValue={searchInput}

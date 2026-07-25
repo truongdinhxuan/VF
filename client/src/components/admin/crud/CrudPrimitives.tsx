@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {useEffect} from 'react';
 import type { CrudFeedback } from '../../../hooks/useCrudResource';
 import { AnimatePresence, motion } from 'motion/react';
+import { AppTooltip } from '../../common/AppTooltip';
 
 export const inputClassName =
   'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition ' +
@@ -99,34 +100,22 @@ export const CrudFeedbackToast = ({
             {feedback.message}
           </span>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md px-1 text-lg font-bold leading-none opacity-70 hover:opacity-100"
-            aria-label="Đóng thông báo"
-          >
-            ×
-          </button>
+          <AppTooltip content="Đóng thông báo" side="left">
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-md px-1 text-lg font-bold leading-none opacity-70 hover:opacity-100"
+              aria-label="Đóng thông báo"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </AppTooltip>
         </motion.div>
       )}
     </AnimatePresence>,
     document.body,
   );
 };
-
-export const LoadingState = ({
-  label = 'Đang tải dữ liệu...',
-}: {
-  label?: string;
-}) => (
-  <div
-    role="status"
-    aria-live="polite"
-    className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm sm:p-10"
-  >
-    {label}
-  </div>
-);
 
 export const ErrorState = ({
   message,
@@ -193,15 +182,17 @@ export const CrudModal = ({
             {title}
           </h2>
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Đóng cửa sổ"
-          >
-            ×
-          </button>
+          <AppTooltip content="Đóng cửa sổ" side="left" disabled={busy}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+              className="shrink-0 rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Đóng cửa sổ"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </AppTooltip>
         </div>
 
         <div className="max-h-[calc(100vh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:p-5">

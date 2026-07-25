@@ -3,19 +3,25 @@ import { useForm } from 'react-hook-form';
 import { listAreas } from '../../../api/areas.service';
 import { createStorageLocation, deactivateStorageLocation, listStorageLocations, updateStorageLocation } from '../../../api/storage-locations.service';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
-import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, LoadingState, RowActions, StatusBadge } from '../../../components/admin/crud/CrudPrimitives';
+import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge } from '../../../components/admin/crud/CrudPrimitives';
+import { SelectSkeleton } from '../../../components/common/skeleton';
 import { MASTER_DATA_MANAGER_ROLES } from '../../../constants/roles';
 import { useAuth } from '../../../context/AuthContext';
 import { useCrudResource } from '../../../hooks/useCrudResource';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { Area } from '../../../types/areas';
 import type { PaginationParams } from '../../../types/pagination.types';
 import type { CreateStorageLocationInput, StorageLocation, StorageLocationListParams } from '../../../types/storage-locations';
 
 type StorageLocationQuery = StorageLocationListParams & PaginationParams;
 
-const loadAreas = async () => (await listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
+const loadAreas = async (signal: AbortSignal) =>
+  (await listAreas(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
 
 const StorageLocationForm = ({ item, areas, areasLoading, areasError, busy, onCancel, onSave }: {
   item: StorageLocation | null;
@@ -33,10 +39,10 @@ const StorageLocationForm = ({ item, areas, areasLoading, areasError, busy, onCa
   return <form onSubmit={handleSubmit(onSave)} className="space-y-4">
     <div className="grid gap-4 sm:grid-cols-2">
       <label className={labelClassName}><span>Khu vực</span>
-        <select {...register('area_id', { required: 'Vui lòng chọn khu vực.' })} disabled={areasLoading || Boolean(areasError)} className={inputClassName}>
-          <option value="">{areasLoading ? 'Đang tải khu vực...' : 'Chọn khu vực'}</option>
+        {areasLoading && areas.length === 0 ? <SelectSkeleton label="Đang tải khu vực" /> : <select {...register('area_id', { required: 'Vui lòng chọn khu vực.' })} disabled={Boolean(areasError)} className={inputClassName}>
+          <option value="">Chọn khu vực</option>
           {areas.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}
-        </select>
+        </select>}
         {areasError ? <FieldError message={`Không tải được khu vực: ${areasError}`} /> : areas.length === 0 && !areasLoading ? <FieldError message="Chưa có khu vực active để lựa chọn." /> : <FieldError message={errors.area_id?.message} />}
       </label>
       <label className={labelClassName}><span>Mã vị trí kho</span><input {...register('code', { required: 'Vui lòng nhập mã vị trí.', setValueAs: (value: string) => value.trim() })} className={inputClassName} /><FieldError message={errors.code?.message} /></label>
@@ -56,18 +62,26 @@ const StorageLocationsPage = () => {
     loader,
     initialQuery: { page: 1, pageSize: 20, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     loadErrorMessage: 'Không thể tải danh sách vị trí kho.',
+    queryKey: queryKeys.storageLocations.lists,
+    invalidateQueryKeys: [queryKeys.stockBalances.all, queryKeys.stockTransactions.all],
   });
-  const areas = useCrudResource(loadAreas, 'Không thể tải danh sách khu vực.');
+  const areas = useCrudResource(
+    loadAreas,
+    'Không thể tải danh sách khu vực.',
+    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
+  );
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<StorageLocation | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StorageLocation | null>(null);
 
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
-    if (search !== resource.query.search) resource.updateQuery({ search });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if (search !== resourceSearch) updateResourceQuery({ search });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: CreateStorageLocationInput) => {
     const ok = await resource.runMutation(
@@ -89,9 +103,10 @@ const StorageLocationsPage = () => {
   return <div className="space-y-6">
     <CrudPageHeader title="Storage locations" description="Quản lý vị trí lưu kho theo khu vực." createLabel="Thêm vị trí kho" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    {resource.loading ? <LoadingState /> : resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
+    {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}
       data={resource.items}
+      loading={resource.loading}
       keyExtractor={(item) => item.id}
       searchPlaceholder="Tìm mã hoặc tên vị trí..."
       searchValue={searchInput}

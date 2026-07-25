@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { listOrders } from '../../../api/orders.service';
 import { OrderStatusBadge } from '../../../components/admin/orders/OrderStatusBadge';
 import { Pagination } from '../../../components/common/Pagination';
+import { TableSkeleton } from '../../../components/common/skeleton';
 import { PACKING_ROLE } from '../../../constants/roles';
 import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { PaginationParams } from '../../../types/pagination.types';
 import { ORDER_STATUSES, type Order, type OrderListParams, type OrderStatus } from '../../../types/orders';
 
@@ -22,14 +24,17 @@ const OrdersListPage = () => {
     loader,
     initialQuery: { page: 1, pageSize: 20, sortBy: 'created_at', sortOrder: 'desc' },
     loadErrorMessage: 'Không thể tải danh sách order.',
+    queryKey: queryKeys.orders.lists,
   });
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
 
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
-    if (search !== resource.query.search) resource.updateQuery({ search });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if (search !== resourceSearch) updateResourceQuery({ search });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   return <section className="space-y-5">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -48,10 +53,17 @@ const OrdersListPage = () => {
       <select value={resource.query.sortOrder ?? 'desc'} onChange={(event) => resource.updateQuery({ sortOrder: event.target.value as 'asc' | 'desc' })} className={controlClassName}><option value="desc">Giảm dần</option><option value="asc">Tăng dần</option></select>
     </div>
 
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {resource.loading ? <div className="p-10 text-center text-sm text-slate-500">Đang tải danh sách order...</div> : resource.error ? <div className="p-10 text-center"><p className="text-sm font-semibold text-rose-700">{resource.error}</p><button type="button" onClick={resource.reload} className="mt-3 text-sm font-semibold text-blue-600 hover:underline">Thử lại</button></div> : resource.items.length === 0 ? <div className="p-10 text-center"><p className="font-semibold text-slate-700">Không có order phù hợp</p><p className="mt-1 text-sm text-slate-500">Thay đổi bộ lọc hoặc tạo order mới nếu bạn có quyền.</p></div> : <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Mã order</th><th className="px-5 py-3">Trạng thái</th><th className="px-5 py-3">Từ area</th><th className="px-5 py-3">Đến area</th><th className="px-5 py-3">Ngày tạo</th><th className="px-5 py-3 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-slate-100">{resource.items.map((order) => <tr key={order.id} className="hover:bg-slate-50/80"><td className="px-5 py-4 font-semibold text-slate-900">{order.code}</td><td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td><td className="px-5 py-4 font-mono text-xs text-slate-600">{order.from_area_id}</td><td className="px-5 py-4 font-mono text-xs text-slate-600">{order.to_area_id}</td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{formatDate(order.created_at)}</td><td className="px-5 py-4 text-right"><Link to={`/admin/orders/${order.id}`} className="font-semibold text-blue-600 hover:text-blue-800">Xem chi tiết</Link></td></tr>)}</tbody></table></div>}
-    </div>
-    {!resource.loading && !resource.error && <Pagination {...resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} />}
+    {resource.loading && resource.items.length === 0 ? (
+      <TableSkeleton columns={6} showToolbar={false} label="Đang tải danh sách order" />
+    ) : (
+      <>
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-busy={resource.loading}>
+          {resource.loading && <div role="status" aria-live="polite" className="absolute right-3 top-3 z-10 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 shadow-sm">Đang cập nhật...</div>}
+          {resource.error ? <div className="p-10 text-center"><p className="text-sm font-semibold text-rose-700">{resource.error}</p><button type="button" onClick={resource.reload} className="mt-3 text-sm font-semibold text-blue-600 hover:underline">Thử lại</button></div> : resource.items.length === 0 ? <div className="p-10 text-center"><p className="font-semibold text-slate-700">Không có order phù hợp</p><p className="mt-1 text-sm text-slate-500">Thay đổi bộ lọc hoặc tạo order mới nếu bạn có quyền.</p></div> : <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Mã order</th><th className="px-5 py-3">Trạng thái</th><th className="px-5 py-3">Từ area</th><th className="px-5 py-3">Đến area</th><th className="px-5 py-3">Ngày tạo</th><th className="px-5 py-3 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-slate-100">{resource.items.map((order) => <tr key={order.id} className="hover:bg-slate-50/80"><td className="px-5 py-4 font-semibold text-slate-900">{order.code}</td><td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td><td className="px-5 py-4 font-mono text-xs text-slate-600">{order.from_area_id}</td><td className="px-5 py-4 font-mono text-xs text-slate-600">{order.to_area_id}</td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{formatDate(order.created_at)}</td><td className="px-5 py-4 text-right"><Link to={`/admin/orders/${order.id}`} className="font-semibold text-blue-600 hover:text-blue-800">Xem chi tiết</Link></td></tr>)}</tbody></table></div>}
+        </div>
+        {!resource.error && <Pagination {...resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} />}
+      </>
+    )}
   </section>;
 };
 

@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { listAreas } from "../../../api/areas.service";
 import { getApiErrorMessage } from "../../../api/errors";
 import { createOrder } from "../../../api/orders.service";
 import { listSupplies } from "../../../api/supplies.service";
+import { SelectSkeleton } from "../../../components/common/skeleton";
 import { useAuth } from "../../../context/AuthContext";
+import { useCrudResource } from "../../../hooks/useCrudResource";
 import { useServerLookup } from "../../../hooks/useServerLookup";
+import { queryKeys } from "../../../lib/queryKeys";
 import type { AreaOption, SupplyOption } from "../../../types/catalog";
 import type { CreateOrderInput } from "../../../types/orders";
 
@@ -20,8 +24,15 @@ interface CreateOrderForm {
   }>;
 }
 
+const loadAreas = async (signal: AbortSignal) =>
+  (await listAreas(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
+
 const CreateOrderPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const fromAreaId = user?.publicData.area_id ?? "";
   const fromAreaName = user?.publicData.area?.name;
@@ -32,10 +43,19 @@ const CreateOrderPage = () => {
     error: suppliesError,
     search: supplySearch,
     setSearch: setSupplySearch,
-  } = useServerLookup<SupplyOption>({ loader: supplyLoader, errorMessage: 'Không thể tải danh sách vật tư.' });
-  const [areas, setAreas] = useState<AreaOption[]>([]);
-  const [areasLoading, setAreasLoading] = useState(true);
-  const [areasError, setAreasError] = useState<string | null>(null);
+  } = useServerLookup<SupplyOption>({
+    loader: supplyLoader,
+    queryKey: (search) => queryKeys.supplies.lookup({ search, pageSize: 20, isActive: true, isDeleted: false }),
+    errorMessage: 'Không thể tải danh sách vật tư.',
+  });
+  const areaResource = useCrudResource<AreaOption>(
+    loadAreas,
+    'Không thể tải danh sách area.',
+    queryKeys.areas.lookup({ pageSize: 100, isActive: true }),
+  );
+  const areas = areaResource.items;
+  const areasLoading = areaResource.loading;
+  const areasError = areaResource.error;
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
@@ -51,21 +71,6 @@ const CreateOrderPage = () => {
     },
   });
   const { fields, append, remove } = useFieldArray({ control, name: "order_list" });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    listAreas({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' }, controller.signal)
-      .then((response) => {
-        if (!controller.signal.aborted) setAreas(response.data);
-      })
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setAreasError(getApiErrorMessage(requestError, "Không thể tải danh sách area."));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setAreasLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   const onSubmit = async (values: CreateOrderForm) => {
     setSubmitError(null);
@@ -98,6 +103,7 @@ const CreateOrderPage = () => {
 
     try {
       const order = await createOrder(payload);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists });
       navigate(`/admin/orders/${order.id}`);
     } catch (requestError) {
       setSubmitError(getApiErrorMessage(requestError, "Không thể tạo order."));
@@ -124,25 +130,26 @@ const CreateOrderPage = () => {
           </label>
           <label className="space-y-1.5 text-sm font-semibold text-slate-700">
             Area nhận
-            <select
-              {...register("to_area_id", { required: "Area nhận là bắt buộc." })}
-              disabled={areasLoading || Boolean(areasError) || areas.length === 0}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-            >
-              <option value="">
-                {areasLoading
-                  ? "Đang tải areas..."
-                  : areasError
+            {areasLoading && areas.length === 0 ? (
+              <SelectSkeleton label="Đang tải danh sách area" />
+            ) : (
+              <select
+                {...register("to_area_id", { required: "Area nhận là bắt buộc." })}
+                disabled={Boolean(areasError) || areas.length === 0}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">
+                  {areasError
                     ? "Không thể tải areas"
                     : areas.length === 0
                       ? "Không có area active"
                       : "Chọn area nhận"}
-              </option>
-              {areas.map((area) => (
-                <option key={area.id} value={area.id}>{area.code} — {area.name}</option>
-              ))}
-            </select>
-            {areasLoading && <span className="text-xs font-normal text-slate-500">Đang tải danh sách area...</span>}
+                </option>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.id}>{area.code} — {area.name}</option>
+                ))}
+              </select>
+            )}
             {areasError && <span className="text-xs font-normal text-rose-600">{areasError}</span>}
             {!areasLoading && !areasError && areas.length === 0 && (
               <span className="text-xs font-normal text-amber-700">Không có area active để chọn.</span>
@@ -174,7 +181,6 @@ const CreateOrderPage = () => {
             </button>
           </div>
 
-          {suppliesLoading && <p className="mt-4 text-sm text-slate-500">Đang tải danh mục vật tư...</p>}
           <input type="search" value={supplySearch} onChange={(event) => setSupplySearch(event.target.value)} placeholder="Tìm vật tư trên server..." className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           {suppliesError && (
             <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
@@ -192,24 +198,26 @@ const CreateOrderPage = () => {
               <div key={field.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[2fr_150px_2fr_auto]">
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Vật tư
-                  <select
-                    {...register(`order_list.${index}.supply_id`, { required: "Chọn vật tư." })}
-                    disabled={suppliesLoading || Boolean(suppliesError) || supplies.length === 0}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
-                  >
-                    <option value="">
-                      {suppliesLoading
-                        ? "Đang tải vật tư..."
-                        : suppliesError
+                  {suppliesLoading && supplies.length === 0 ? (
+                    <SelectSkeleton label="Đang tải danh mục vật tư" />
+                  ) : (
+                    <select
+                      {...register(`order_list.${index}.supply_id`, { required: "Chọn vật tư." })}
+                      disabled={Boolean(suppliesError) || supplies.length === 0}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        {suppliesError
                           ? "Không thể tải vật tư"
                           : supplies.length === 0
                             ? "Không có vật tư active"
                             : "Chọn vật tư"}
-                    </option>
-                    {supplies.map((supply) => (
-                      <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` — ${supply.description}` : ''}</option>
-                    ))}
-                  </select>
+                      </option>
+                      {supplies.map((supply) => (
+                        <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` — ${supply.description}` : ''}</option>
+                      ))}
+                    </select>
+                  )}
                   {errors.order_list?.[index]?.supply_id && (
                     <span className="block normal-case text-rose-600">{errors.order_list[index]?.supply_id?.message}</span>
                   )}

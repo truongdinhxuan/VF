@@ -1,42 +1,40 @@
-import { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query';
+import { useState } from 'react';
 import { getApiErrorMessage } from '../api/errors';
 import type { PaginatedResponse } from '../types/pagination.types';
 import { useDebounce } from './useDebounce';
 
 export const useServerLookup = <T,>({
   loader,
+  queryKey,
   errorMessage,
   delay = 400,
+  enabled = true,
 }: {
   loader: (search: string | undefined, signal: AbortSignal) => Promise<PaginatedResponse<T>>;
+  queryKey: (search: string | undefined) => QueryKey;
   errorMessage: string;
   delay?: number;
+  enabled?: boolean;
 }) => {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, delay);
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const normalizedSearch = debouncedSearch.trim() || undefined;
+  const lookupQuery = useQuery({
+    queryKey: queryKey(normalizedSearch),
+    queryFn: ({ signal }) => loader(normalizedSearch, signal),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    const normalizedSearch = debouncedSearch.trim() || undefined;
-
-    void loader(normalizedSearch, controller.signal)
-      .then((response) => {
-        if (!controller.signal.aborted) setItems(response.data);
-      })
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setError(getApiErrorMessage(requestError, errorMessage));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [debouncedSearch, errorMessage, loader]);
-
-  return { search, setSearch, items, loading, error };
+  return {
+    search,
+    setSearch,
+    items: lookupQuery.data?.data ?? [],
+    loading: enabled && (lookupQuery.isPending || lookupQuery.isFetching),
+    error: lookupQuery.isError
+      ? getApiErrorMessage(lookupQuery.error, errorMessage)
+      : null,
+  };
 };

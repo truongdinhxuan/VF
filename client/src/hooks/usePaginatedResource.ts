@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { getApiErrorMessage } from '../api/errors';
 import type {
   PaginatedResponse,
@@ -20,55 +27,33 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
   loader,
   initialQuery,
   loadErrorMessage,
+  queryKey,
+  invalidateQueryKeys = [],
 }: {
   loader: (query: Q, signal: AbortSignal) => Promise<PaginatedResponse<T>>;
   initialQuery: Q;
   loadErrorMessage: string;
+  queryKey: QueryKey;
+  invalidateQueryKeys?: readonly QueryKey[];
 }) => {
   const [query, setQueryState] = useState<Q>(initialQuery);
-  const [items, setItems] = useState<T[]>([]);
-  const [pagination, setPagination] = useState<PaginationMeta>(() =>
-    emptyPagination(initialQuery),
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [mutating, setMutating] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
-  const [revision, setRevision] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-
-    void loader(query, controller.signal)
-      .then((response) => {
-        if (controller.signal.aborted) return;
-        if (
-          response.data.length === 0
-          && response.pagination.totalPages > 0
-          && query.page > response.pagination.totalPages
-        ) {
-          setQueryState((current) => ({
-            ...current,
-            page: response.pagination.totalPages,
-          }));
-          return;
-        }
-        setItems(response.data);
-        setPagination(response.pagination);
-      })
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(getApiErrorMessage(requestError, loadErrorMessage));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [loadErrorMessage, loader, query, revision]);
+  const queryClient = useQueryClient();
+  const resourceRootKey = queryKey.slice(0, 1);
+  const resourceQuery = useQuery({
+    queryKey: [...queryKey, query],
+    queryFn: ({ signal }) => loader(query, signal),
+    placeholderData: keepPreviousData,
+  });
+  const resourceMutation = useMutation({
+    mutationFn: (action: () => Promise<unknown>) => action(),
+  });
+  const items = resourceQuery.data?.data ?? [];
+  const pagination = resourceQuery.data?.pagination ?? emptyPagination(query);
+  const loading = resourceQuery.isPending || resourceQuery.isFetching;
+  const error = resourceQuery.isError
+    ? getApiErrorMessage(resourceQuery.error, loadErrorMessage)
+    : null;
 
   const updateQuery = useCallback((patch: Partial<Q>, resetPage = true) => {
     setQueryState((current) => ({
@@ -83,7 +68,10 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
     (pageSize: number) => updateQuery({ pageSize } as Partial<Q>, true),
     [updateQuery],
   );
-  const reload = useCallback(() => setRevision((current) => current + 1), []);
+  const reload = useCallback(
+    () => resourceQuery.refetch().then(() => undefined),
+    [resourceQuery],
+  );
 
   const runMutation = async (
     action: () => Promise<unknown>,
@@ -91,16 +79,17 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
     failureMessage: string,
     options: { removeCurrentItem?: boolean } = {},
   ): Promise<boolean> => {
-    setMutating(true);
     setFeedback(null);
     try {
-      await action();
+      await resourceMutation.mutateAsync(action);
       setFeedback({ type: 'success', message: successMessage });
       if (options.removeCurrentItem && items.length === 1 && query.page > 1) {
         setQueryState((current) => ({ ...current, page: current.page - 1 }));
-      } else {
-        reload();
       }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: resourceRootKey }),
+        ...invalidateQueryKeys.map((key) => queryClient.invalidateQueries({ queryKey: key })),
+      ]);
       return true;
     } catch (requestError) {
       setFeedback({
@@ -108,8 +97,6 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
         message: getApiErrorMessage(requestError, failureMessage),
       });
       return false;
-    } finally {
-      setMutating(false);
     }
   };
 
@@ -119,7 +106,7 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
     pagination,
     loading,
     error,
-    mutating,
+    mutating: resourceMutation.isPending,
     feedback,
     setFeedback,
     updateQuery,

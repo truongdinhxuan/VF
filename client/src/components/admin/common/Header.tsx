@@ -1,6 +1,7 @@
 import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch } from "@fortawesome/free-solid-svg-icons/faSearch";
+import { AppTooltip } from "../../common/AppTooltip";
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
@@ -29,12 +30,16 @@ const Header = ({
     `}>      
       <div className="flex items-center gap-4">
         {/* Nút Hamburger cho Mobile (< 768px) */}
-        <button
-          onClick={() => setIsMobileSidebarOpen(true)}
-          className="block md:hidden rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-200"
-        >
-          <i className="hgi-stroke hgi-menu-05 text-2xl"></i>
-        </button>
+        <AppTooltip content="Mở menu" side="bottom">
+          <button
+            type="button"
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="block rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-200 md:hidden"
+            aria-label="Mở menu"
+          >
+            <i className="hgi-stroke hgi-menu-05 text-2xl" aria-hidden="true"></i>
+          </button>
+        </AppTooltip>
 
         {/* Tiêu đề hoặc Welcome Text (Tuỳ chọn cho mobile đỡ trống) */}
         {/* <h2 className="hidden sm:block text-lg font-semibold text-slate-800">
@@ -45,7 +50,7 @@ const Header = ({
       <div className="flex items-center gap-2 sm:gap-4">
         {/* Thanh tìm kiếm (Ẩn ở mobile nhỏ, hiện ở màn hình vừa và lớn) */}
         <div className="relative hidden md:block">
-          <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-400" />
+          <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-400" aria-hidden="true" />
           <input
             type="text"
             value={searchQuery}
@@ -54,9 +59,16 @@ const Header = ({
             className="w-48 lg:w-64 xl:w-80 rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm font-medium text-slate-700 transition-all placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              <i className="hgi-stroke hgi-cancel-01 text-sm"></i>
-            </button>
+            <AppTooltip content="Xóa tìm kiếm" side="bottom">
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Xóa tìm kiếm"
+              >
+                <i className="hgi-stroke hgi-cancel-01 text-sm" aria-hidden="true"></i>
+              </button>
+            </AppTooltip>
           )}
         </div>
 
@@ -64,13 +76,19 @@ const Header = ({
 
         {/* Nút Thông Báo */}
         <div className="relative" ref={notificationRef}>
-          <button
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-            className="relative flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800"
-          >
-            <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500"></span>
-            <i className="hgi-stroke hgi-notification-01 text-2xl"></i>
-          </button>
+          <AppTooltip content="Thông báo" side="bottom">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              className="relative flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800"
+              aria-label="Mở thông báo"
+              aria-expanded={isNotificationsOpen}
+              aria-haspopup="menu"
+            >
+              <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" aria-hidden="true"></span>
+              <i className="hgi-stroke hgi-notification-01 text-2xl" aria-hidden="true"></i>
+            </button>
+          </AppTooltip>
 
           {/* Bảng Dropdown Thông Báo */}
           {isNotificationsOpen && (

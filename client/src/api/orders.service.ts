@@ -24,8 +24,8 @@ export const listOrders = async (
 ): Promise<PaginatedResponse<Order>> =>
   instance.get<PaginatedResponse<Order>, PaginatedResponse<Order>>('orders', { params, signal });
 
-export const getOrder = async (id: string): Promise<Order> =>
-  get(await instance.get<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`));
+export const getOrder = async (id: string, signal?: AbortSignal): Promise<Order> =>
+  get(await instance.get<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, { signal }));
 
 export const createOrder = async (input: CreateOrderInput): Promise<Order> =>
   get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>("orders", input));

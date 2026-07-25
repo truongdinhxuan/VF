@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getApiErrorMessage } from "../../../api/errors";
 import { listStorageLocations } from "../../../api/storage-locations.service";
@@ -14,13 +15,15 @@ import {
   updateOrder,
 } from "../../../api/orders.service";
 import { OrderStatusBadge } from "../../../components/admin/orders/OrderStatusBadge";
+import { CardSkeleton, SelectSkeleton } from "../../../components/common/skeleton";
 import {
   ORDER_APPROVER_ROLES,
   ORDER_ISSUER_ROLES,
   PACKING_ROLE,
 } from "../../../constants/roles";
 import { useAuth } from "../../../context/AuthContext";
-import { useDebounce } from "../../../hooks/useDebounce";
+import { useServerLookup } from "../../../hooks/useServerLookup";
+import { queryKeys } from "../../../lib/queryKeys";
 import type { StorageLocationOption } from "../../../types/catalog";
 import type { Order, OrderItem } from "../../../types/orders";
 
@@ -38,56 +41,57 @@ const itemRemaining = (item: OrderItem) =>
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user, role } = useAuth();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const orderQuery = useQuery({
+    queryKey: queryKeys.orders.detail(id ?? ''),
+    queryFn: ({ signal }) => getOrder(id!, signal),
+    enabled: Boolean(id),
+  });
+  const orderMutation = useMutation({
+    mutationFn: (operation: () => Promise<Order>) => operation(),
+  });
+  const order = orderQuery.data ?? null;
+  const loading = orderQuery.isPending;
+  const loadError = orderQuery.isError
+    ? getApiErrorMessage(orderQuery.error, "Không thể tải order.")
+    : null;
   const [actionError, setActionError] = useState<string | null>(null);
-  const [mutating, setMutating] = useState(false);
+  const mutating = orderMutation.isPending;
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [reason, setReason] = useState("");
   const [itemValues, setItemValues] = useState<ItemValues>({});
   const [editing, setEditing] = useState(false);
-  const [storageLocations, setStorageLocations] = useState<StorageLocationOption[]>([]);
-  const [storageLocationsLoading, setStorageLocationsLoading] = useState(false);
-  const [storageLocationsError, setStorageLocationsError] = useState<string | null>(null);
-  const [storageLocationSearch, setStorageLocationSearch] = useState("");
-  const debouncedStorageLocationSearch = useDebounce(storageLocationSearch);
-
-  useEffect(() => {
-    if (!id) return;
-    let active = true;
-    getOrder(id)
-      .then((data) => {
-        if (active) setOrder(data);
-      })
-      .catch((requestError: unknown) => {
-        if (active) setLoadError(getApiErrorMessage(requestError, "Không thể tải order."));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    if (panel !== "issue" || !order) return;
-    const controller = new AbortController();
-    setStorageLocationsLoading(true);
-    setStorageLocationsError(null);
-    listStorageLocations({ page: 1, pageSize: 20, search: debouncedStorageLocationSearch.trim() || undefined, areaId: order.to_area_id, isActive: true, sortBy: 'code', sortOrder: 'asc' }, controller.signal)
-      .then((response) => {
-        if (!controller.signal.aborted) setStorageLocations(response.data);
-      })
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setStorageLocationsError(getApiErrorMessage(requestError, "Không thể tải danh sách vị trí kho."));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setStorageLocationsLoading(false);
-      });
-    return () => controller.abort();
-  }, [debouncedStorageLocationSearch, order, panel]);
+  const storageLocationLoader = useCallback(
+    (search: string | undefined, signal: AbortSignal) => {
+      if (!order) throw new Error("Order chưa sẵn sàng.");
+      return listStorageLocations({
+        page: 1,
+        pageSize: 20,
+        search,
+        areaId: order.to_area_id,
+        isActive: true,
+        sortBy: 'code',
+        sortOrder: 'asc',
+      }, signal);
+    },
+    [order],
+  );
+  const storageLocationLookup = useServerLookup<StorageLocationOption>({
+    loader: storageLocationLoader,
+    queryKey: (search) => queryKeys.storageLocations.lookup({
+      search,
+      areaId: order?.to_area_id,
+      pageSize: 20,
+      isActive: true,
+    }),
+    errorMessage: "Không thể tải danh sách vị trí kho.",
+    enabled: panel === "issue" && Boolean(order),
+  });
+  const storageLocations = storageLocationLookup.items;
+  const storageLocationsLoading = storageLocationLookup.loading;
+  const storageLocationsError = storageLocationLookup.error;
+  const storageLocationSearch = storageLocationLookup.search;
+  const setStorageLocationSearch = storageLocationLookup.setSearch;
 
   const items = useMemo(() => order?.order_items ?? [], [order]);
   const actorId = user?.publicData.id ?? user?.id;
@@ -107,19 +111,26 @@ const OrderDetailPage = () => {
   const canReceive = Boolean(order && isPackingOwner && order.status === "ISSUED");
   const canComplete = Boolean(order && isIssuer && ["ISSUED", "RECEIVED"].includes(order.status));
 
-  const runMutation = async (operation: () => Promise<Order>) => {
-    setMutating(true);
+  const runMutation = async (
+    operation: () => Promise<Order>,
+    affectsStock = false,
+  ) => {
     setActionError(null);
     try {
-      const updated = await operation();
-      setOrder(updated);
+      const updated = await orderMutation.mutateAsync(operation);
+      queryClient.setQueryData(queryKeys.orders.detail(updated.id), updated);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists });
+      if (affectsStock) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.stockTransactions.all }),
+        ]);
+      }
       setPanel(null);
       setEditing(false);
       setReason("");
     } catch (requestError) {
       setActionError(getApiErrorMessage(requestError, "Không thể cập nhật order."));
-    } finally {
-      setMutating(false);
     }
   };
 
@@ -153,7 +164,6 @@ const OrderDetailPage = () => {
   const openIssuePanel = () => {
     if (!order) return;
     openPanel("issue");
-    setStorageLocations([]);
     setStorageLocationSearch("");
   };
 
@@ -224,11 +234,11 @@ const OrderDetailPage = () => {
         order_item_id: item.id,
         issues: [{ storage_location_id: storageLocationId, quantity }],
       })),
-    }));
+    }), true);
   };
 
   if (loading) {
-    return <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Đang tải chi tiết order...</div>;
+    return <CardSkeleton lines={8} label="Đang tải chi tiết order" />;
   }
   if (loadError || !order || !id) {
     return (
@@ -327,11 +337,6 @@ const OrderDetailPage = () => {
       {panel === "issue" && (
         <ActionCard title="Cấp hàng" note="Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
           <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          {storageLocationsLoading && (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-              Đang tải vị trí kho của area nhận...
-            </div>
-          )}
           {storageLocationsError && (
             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               {storageLocationsError}
@@ -346,27 +351,29 @@ const OrderDetailPage = () => {
             {items.map((item) => (
               <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr]">
                 <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply_id}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
-                <select
-                  value={itemValues[item.id]?.storageLocationId ?? ""}
-                  onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], storageLocationId: event.target.value } }))}
-                  disabled={storageLocationsLoading || Boolean(storageLocationsError) || storageLocations.length === 0}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-                >
-                  <option value="">
-                    {storageLocationsLoading
-                      ? "Đang tải vị trí..."
-                      : storageLocationsError
+                {storageLocationsLoading && storageLocations.length === 0 ? (
+                  <SelectSkeleton label="Đang tải vị trí kho của area nhận" />
+                ) : (
+                  <select
+                    value={itemValues[item.id]?.storageLocationId ?? ""}
+                    onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], storageLocationId: event.target.value } }))}
+                    disabled={Boolean(storageLocationsError) || storageLocations.length === 0}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <option value="">
+                      {storageLocationsError
                         ? "Không thể tải vị trí"
                         : storageLocations.length === 0
                           ? "Không có vị trí active"
                           : "Chọn vị trí kho"}
-                  </option>
-                  {storageLocations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.code}{location.name ? ` — ${location.name}` : ""}
                     </option>
-                  ))}
-                </select>
+                    {storageLocations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.code}{location.name ? ` — ${location.name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input type="number" min="0" step="any" max={itemRemaining(item)} value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} placeholder="Số lượng cấp" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               </div>
             ))}

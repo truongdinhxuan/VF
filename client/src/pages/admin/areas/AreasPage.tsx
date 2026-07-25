@@ -5,10 +5,11 @@ import { DataTable, type Column } from '../../../components/admin/DataTable';
 import {
   ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader,
   ErrorState, FieldError, FormActions, inputClassName, labelClassName,
-  LoadingState, RowActions, StatusBadge,
+  RowActions, StatusBadge,
 } from '../../../components/admin/crud/CrudPrimitives';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { Area, AreaListParams, CreateAreaInput } from '../../../types/areas';
 import type { PaginationParams } from '../../../types/pagination.types';
 
@@ -46,12 +47,20 @@ const AreaForm = ({ area, busy, onCancel, onSave }: {
 
 const AreasPage = () => {
   const loader = useCallback((query: AreaQuery, signal: AbortSignal) => listAreas(query, signal), []);
-  const resource = usePaginatedResource<Area, AreaQuery>({ loader, initialQuery, loadErrorMessage: 'Không thể tải danh sách khu vực.' });
+  const resource = usePaginatedResource<Area, AreaQuery>({
+    loader,
+    initialQuery,
+    loadErrorMessage: 'Không thể tải danh sách khu vực.',
+    queryKey: queryKeys.areas.lists,
+    invalidateQueryKeys: [queryKeys.storageLocations.all, queryKeys.users.all],
+  });
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   useEffect(() => {
-    if ((resource.query.search ?? '') !== debouncedSearch.trim()) resource.updateQuery({ search: debouncedSearch.trim() || undefined });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if ((resourceSearch ?? '') !== debouncedSearch.trim()) updateResourceQuery({ search: debouncedSearch.trim() || undefined });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
   const [editing, setEditing] = useState<Area | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Area | null>(null);
@@ -72,7 +81,7 @@ const AreasPage = () => {
     <div className="space-y-6">
       <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={() => { setEditing(null); setFormOpen(true); }} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-      {resource.loading ? <LoadingState /> : resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc tên khu vực..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có khu vực phù hợp." />}
+      {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc tên khu vực..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có khu vực phù hợp." />}
       {formOpen && <CrudModal title={editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực'} busy={resource.mutating} onClose={() => setFormOpen(false)}><AreaForm key={editing?.id ?? 'create'} area={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
       {deleteTarget && <ConfirmDialog title="Ngừng hoạt động khu vực?" message={`Khu vực “${deleteTarget.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateArea(deleteTarget.id), 'Đã deactivate khu vực.', 'Không thể deactivate khu vực.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>

@@ -5,11 +5,13 @@ import { createSupply, deactivateSupply, listSupplies, updateSupply } from '../.
 import { listUnits } from '../../../api/units.service';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
 import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge } from '../../../components/admin/crud/CrudPrimitives';
+import { SelectSkeleton } from '../../../components/common/skeleton';
 import { MASTER_DATA_MANAGER_ROLES } from '../../../constants/roles';
 import { useAuth } from '../../../context/AuthContext';
 import { useCrudResource } from '../../../hooks/useCrudResource';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
+import { queryKeys } from '../../../lib/queryKeys';
 import type { SupplyCategory } from '../../../types/supply-categories';
 import type { PaginationParams } from '../../../types/pagination.types';
 import type { CreateSupplyInput, Supply, SupplyListParams } from '../../../types/supplies';
@@ -17,8 +19,16 @@ import type { Unit } from '../../../types/units';
 
 type SupplyQuery = SupplyListParams & PaginationParams;
 
-const loadCategories = async () => (await listSupplyCategories({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
-const loadUnits = async () => (await listUnits({ page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' })).data;
+const loadCategories = async (signal: AbortSignal) =>
+  (await listSupplyCategories(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
+const loadUnits = async (signal: AbortSignal) =>
+  (await listUnits(
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+    signal,
+  )).data;
 const optionalNumber = (value: string) => value === '' ? null : Number(value);
 
 const SupplyForm = ({ item, busy, categories, categoriesLoading, categoriesError, units, unitsLoading, unitsError, onCancel, onSave }: {
@@ -52,17 +62,17 @@ const SupplyForm = ({ item, busy, categories, categoriesLoading, categoriesError
     <div className="grid gap-4 sm:grid-cols-2">
       <label className={labelClassName}><span>Mã vật tư</span><input {...register('code', { required: 'Vui lòng nhập mã vật tư.', setValueAs: (value: string) => value.trim() })} className={inputClassName} /><FieldError message={errors.code?.message} /></label>
       <label className={labelClassName}><span>Danh mục</span>
-        <select {...register('category_id', { required: 'Vui lòng chọn danh mục.' })} disabled={categoriesLoading || Boolean(categoriesError)} className={inputClassName}>
-          <option value="">{categoriesLoading ? 'Đang tải danh mục...' : 'Chọn danh mục'}</option>
+        {categoriesLoading && categories.length === 0 ? <SelectSkeleton label="Đang tải danh mục vật tư" /> : <select {...register('category_id', { required: 'Vui lòng chọn danh mục.' })} disabled={Boolean(categoriesError)} className={inputClassName}>
+          <option value="">Chọn danh mục</option>
           {categories.map((category) => <option key={category.id} value={category.id}>{category.code}{category.description ? ` - ${category.description}` : ''}</option>)}
-        </select>
+        </select>}
         {categoriesError ? <FieldError message={`Không tải được danh mục: ${categoriesError}`} /> : categories.length === 0 && !categoriesLoading ? <FieldError message="Chưa có danh mục active để lựa chọn." /> : <FieldError message={errors.category_id?.message} />}
       </label>
       <label className={labelClassName}><span>Đơn vị tính</span>
-        <select {...register('unit_id', { required: 'Vui lòng chọn đơn vị tính.' })} disabled={unitsLoading || Boolean(unitsError)} className={inputClassName}>
-          <option value="">{unitsLoading ? 'Đang tải đơn vị...' : 'Chọn đơn vị'}</option>
+        {unitsLoading && units.length === 0 ? <SelectSkeleton label="Đang tải đơn vị tính" /> : <select {...register('unit_id', { required: 'Vui lòng chọn đơn vị tính.' })} disabled={Boolean(unitsError)} className={inputClassName}>
+          <option value="">Chọn đơn vị</option>
           {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} - {unit.symbol}</option>)}
-        </select>
+        </select>}
         {unitsError ? <FieldError message={`Không tải được đơn vị: ${unitsError}`} /> : units.length === 0 && !unitsLoading ? <FieldError message="Chưa có đơn vị active để lựa chọn." /> : <FieldError message={errors.unit_id?.message} />}
       </label>
     </div>
@@ -86,19 +96,31 @@ const SuppliesPage = () => {
     loader,
     initialQuery: { page: 1, pageSize: 20, isActive: true, isDeleted: false, sortBy: 'code', sortOrder: 'asc' },
     loadErrorMessage: 'Không thể tải danh sách vật tư.',
+    queryKey: queryKeys.supplies.lists,
+    invalidateQueryKeys: [queryKeys.stockBalances.all, queryKeys.stockTransactions.all],
   });
-  const categories = useCrudResource(loadCategories, 'Không thể tải danh mục vật tư.');
-  const units = useCrudResource(loadUnits, 'Không thể tải đơn vị tính.');
+  const categories = useCrudResource(
+    loadCategories,
+    'Không thể tải danh mục vật tư.',
+    queryKeys.supplyCategories.lookup({ pageSize: 100, isActive: true }),
+  );
+  const units = useCrudResource(
+    loadUnits,
+    'Không thể tải đơn vị tính.',
+    queryKeys.units.lookup({ pageSize: 100, isActive: true }),
+  );
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput);
+  const resourceSearch = resource.query.search;
+  const updateResourceQuery = resource.updateQuery;
   const [editing, setEditing] = useState<Supply | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Supply | null>(null);
 
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
-    if (search !== resource.query.search) resource.updateQuery({ search });
-  }, [debouncedSearch, resource.query.search, resource.updateQuery]);
+    if (search !== resourceSearch) updateResourceQuery({ search });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: CreateSupplyInput) => {
     const ok = await resource.runMutation(

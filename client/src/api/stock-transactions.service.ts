@@ -18,10 +18,11 @@ export const listStockTransactions = async (
     { params, signal },
   );
 
-export const getStockTransaction = async (id: string): Promise<StockTransaction> =>
+export const getStockTransaction = async (id: string, signal?: AbortSignal): Promise<StockTransaction> =>
   unwrapData(
     await instance.get<ApiEnvelope<StockTransaction>, ApiEnvelope<StockTransaction>>(
       `stock-transactions/${id}`,
+      { signal },
     ),
   );
 
