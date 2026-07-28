@@ -14,6 +14,32 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+export interface OrderAreaSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface OrderUserSummary {
+  id: string;
+  vinfast_id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface OrderSupplySummary {
+  id: string;
+  code: string;
+  description: string | null;
+}
+
+export interface OrderUnitSummary {
+  id: string;
+  code: string;
+  symbol: string;
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -24,6 +50,8 @@ export interface OrderItem {
   quantity_approved: number | null;
   quantity_issued: number | null;
   note: string | null;
+  supply?: OrderSupplySummary | null;
+  unit?: OrderUnitSummary | null;
 }
 
 export interface Order {
@@ -46,6 +74,12 @@ export interface Order {
   received_at: string | null;
   created_at: string;
   updated_at: string;
+  from_area?: OrderAreaSummary | null;
+  to_area?: OrderAreaSummary | null;
+  requester?: OrderUserSummary | null;
+  approver?: OrderUserSummary | null;
+  forklift?: OrderUserSummary | null;
+  taken_away?: OrderUserSummary | null;
   order_items?: OrderItem[];
 }
 

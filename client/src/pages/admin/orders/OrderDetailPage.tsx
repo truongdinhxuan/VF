@@ -68,7 +68,7 @@ const OrderDetailPage = () => {
         page: 1,
         pageSize: 20,
         search,
-        areaId: order.to_area_id,
+        areaId: order.from_area_id,
         isActive: true,
         sortBy: 'code',
         sortOrder: 'asc',
@@ -80,7 +80,7 @@ const OrderDetailPage = () => {
     loader: storageLocationLoader,
     queryKey: (search) => queryKeys.storageLocations.lookup({
       search,
-      areaId: order?.to_area_id,
+      areaId: order?.from_area_id,
       pageSize: 20,
       isActive: true,
     }),
@@ -250,6 +250,11 @@ const OrderDetailPage = () => {
   }
 
   const hasActions = canEdit || canSubmit || canCancel || canApprove || canIssue || canReceive || canComplete;
+  const fromAreaName = order.from_area?.name ?? order.from_area_id;
+  const toAreaName = order.to_area?.name ?? order.to_area_id;
+  const requesterName = order.requester
+    ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
+    : order.requested_by;
 
   return (
     <section className="space-y-5">
@@ -269,9 +274,9 @@ const OrderDetailPage = () => {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Area gửi", order.from_area_id],
-          ["Area nhận", order.to_area_id],
-          ["Người tạo", order.requested_by],
+          ["Area gửi", fromAreaName],
+          ["Area nhận", toAreaName],
+          ["Người tạo", requesterName],
           ["Ngày tạo", formatDate(order.created_at)],
         ].map(([label, value]) => (
           <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -335,8 +340,8 @@ const OrderDetailPage = () => {
       )}
 
       {panel === "issue" && (
-        <ActionCard title="Cấp hàng" note="Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
-          <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder="Tìm vị trí kho trên server..." className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+        <ActionCard title={`Cấp hàng từ ${fromAreaName}`} note="Chỉ được chọn vị trí kho thuộc Area gửi. Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
+          <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder={`Tìm vị trí kho thuộc ${fromAreaName}...`} className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           {storageLocationsError && (
             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               {storageLocationsError}
@@ -344,15 +349,15 @@ const OrderDetailPage = () => {
           )}
           {!storageLocationsLoading && !storageLocationsError && storageLocations.length === 0 && (
             <div className="mb-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              Không có vị trí kho active trong area {order.to_area_id}.
+              Không có vị trí kho active trong Area gửi {fromAreaName}.
             </div>
           )}
           <div className="space-y-3">
             {items.map((item) => (
               <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr]">
-                <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply_id}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
+                <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply?.code ?? item.supply_id}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
                 {storageLocationsLoading && storageLocations.length === 0 ? (
-                  <SelectSkeleton label="Đang tải vị trí kho của area nhận" />
+                  <SelectSkeleton label="Đang tải vị trí kho của Area gửi" />
                 ) : (
                   <select
                     value={itemValues[item.id]?.storageLocationId ?? ""}
@@ -396,7 +401,7 @@ const OrderDetailPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {items.map((item) => (
                   <tr key={item.id}>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply_id}</td>
+                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? item.supply_id}</td>
                     <td className="px-5 py-4">{editing ? <input type="number" min="0.000001" step="any" value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5" /> : item.quantity_requested}</td>
                     <td className="px-5 py-4">{item.quantity_approved ?? "—"}</td>
                     <td className="px-5 py-4">{item.quantity_issued ?? 0}</td>
@@ -432,7 +437,7 @@ const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = fa
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <label className="grid gap-3 rounded-xl border border-slate-200 p-3 text-sm md:grid-cols-[1fr_180px] md:items-center"><span><strong className="block text-slate-800">{item.supply_id}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span></span><span><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></span></label>
+  <label className="grid gap-3 rounded-xl border border-slate-200 p-3 text-sm md:grid-cols-[1fr_180px] md:items-center"><span><strong className="block text-slate-800">{item.supply?.code ?? item.supply_id}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span></span><span><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></span></label>
 );
 
 const InfoNote = ({ label, value }: { label: string; value: string }) => <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm text-slate-700">{value}</p></div>;

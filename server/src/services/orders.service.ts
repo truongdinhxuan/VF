@@ -45,9 +45,12 @@ interface SupplyLookup {
 interface OrderItemData {
   id: string;
   order_id: string;
+  supply_id: string;
+  unit_id: string;
   quantity_requested: number | string;
   quantity_approved: number | string | null;
   quantity_issued: number | string | null;
+  note: string | null;
 }
 
 interface OrderData {
@@ -107,6 +110,10 @@ function normalizeListDate(
 
 function rpcError(error: SupabaseErrorLike): never {
   const message = error.message ?? 'Cannot issue order';
+  if (/does not belong to the order source area|inactive, deleted/i.test(message)) {
+    serviceError(400, message);
+  }
+  if (/stock balance not found/i.test(message)) serviceError(409, message);
   if (/not found/i.test(message)) serviceError(404, message);
   if (/stock|approved|status|issue|location/i.test(message)) serviceError(409, message);
   serviceError(400, message);
@@ -116,6 +123,27 @@ const generateOrderCode = (): string => {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   return `ORD-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
 };
+
+const ORDER_USER_SELECT = 'id, vinfast_id, email, first_name, last_name';
+
+const ORDER_LIST_SELECT = `
+  *,
+  from_area:areas!orders_from_area_id_fkey(id, code, name),
+  to_area:areas!orders_to_area_id_fkey(id, code, name),
+  requester:users!orders_requested_by_fkey(${ORDER_USER_SELECT}),
+  approver:users!orders_approved_by_fkey(${ORDER_USER_SELECT}),
+  forklift:users!orders_forklift_by_fkey(${ORDER_USER_SELECT}),
+  taken_away:users!orders_taken_away_by_fkey(${ORDER_USER_SELECT})
+`;
+
+const ORDER_DETAIL_SELECT = `
+  ${ORDER_LIST_SELECT},
+  order_items(
+    *,
+    supply:supplies!order_items_supply_id_fkey(id, code, description),
+    unit:units!order_items_unit_id_fkey(id, code, symbol)
+  )
+`;
 
 export class OrderService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -127,7 +155,7 @@ export class OrderService {
   private async findOrder(orderId: string): Promise<OrderData> {
     const { data, error } = await this.db
       .from('orders')
-      .select('*, order_items(*)')
+      .select(ORDER_DETAIL_SELECT)
       .eq('id', orderId)
       .single();
 
@@ -310,7 +338,9 @@ export class OrderService {
       defaultSortOrder: 'desc',
     });
 
-    let request = this.db.from('orders').select('*', { count: 'exact' });
+    let request = this.db
+      .from('orders')
+      .select(ORDER_LIST_SELECT, { count: 'exact' });
     if (actor.role === PACKING_ROLE) request = request.eq('from_area_id', actor.areaId);
     if (query.status) request = request.eq('status', query.status);
     if (query.from_area_id) request = request.eq('from_area_id', query.from_area_id);
@@ -381,10 +411,17 @@ export class OrderService {
       try {
         return {
           id: item.id,
+          order_id: item.order_id,
+          supply_id: item.supply_id,
+          unit_id: item.unit_id,
+          quantity_requested: Number(item.quantity_requested),
           quantity_approved: assertApprovedQuantity(
             approval.quantity_approved,
             Number(item.quantity_requested),
           ),
+          quantity_issued:
+            item.quantity_issued === null ? null : Number(item.quantity_issued),
+          note: item.note,
         };
       } catch (error) {
         return translateRuleError(error);

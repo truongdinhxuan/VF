@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/202607140002_order_issue_rpc.sql'),
+  resolve(process.cwd(), 'supabase/migrations/202607280001_fix_order_issue_source_area.sql'),
   'utf8',
 );
 const orderService = readFileSync(
@@ -28,6 +28,23 @@ describe('atomic order issue migration', () => {
   it('contains both approved-quantity and stock-quantity guards', () => {
     assert.match(migration, /Cannot issue more than quantity_approved/i);
     assert.match(migration, /Insufficient stock/i);
+  });
+
+  it('only issues from an active location in the order source area', () => {
+    assert.match(migration, /location\.area_id\s*=\s*v_order\.from_area_id/i);
+    assert.match(migration, /location\.is_active\s*=\s*true/i);
+    assert.match(migration, /does not belong to the order source area/i);
+  });
+
+  it('deducts and records stock against the order source area', () => {
+    assert.match(
+      migration,
+      /from public\.stock_balances[\s\S]*area_id\s*=\s*v_order\.from_area_id/i,
+    );
+    assert.match(
+      migration,
+      /insert into public\.stock_transactions[\s\S]*v_order\.from_area_id/i,
+    );
   });
 
   it('is executable only by the service role', () => {
