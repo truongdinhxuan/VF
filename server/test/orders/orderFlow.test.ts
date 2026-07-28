@@ -8,6 +8,7 @@ import {
   assertOrderActionAllowed,
   assertRejectedReason,
   assertStockAvailable,
+  calculateStockAvailability,
   orderActionAffectsStock,
 } from '../../src/domain/orderRules';
 import {
@@ -57,8 +58,22 @@ describe('order state flow', () => {
 
 describe('order quantity rules', () => {
   it('rejects quantity_approved above quantity_requested', () => {
+    assert.throws(() => assertApprovedQuantity(0, 10), /greater than 0/);
     assert.throws(() => assertApprovedQuantity(11, 10), /quantity_approved/);
     assert.equal(assertApprovedQuantity(10, 10), 10);
+  });
+
+  it('reports current stock shortages without changing order quantities', () => {
+    assert.deepEqual(calculateStockAvailability(100, 50), {
+      available_quantity: 50,
+      shortage_quantity: 50,
+      has_stock_shortage: true,
+    });
+    assert.deepEqual(calculateStockAvailability(100, 120), {
+      available_quantity: 120,
+      shortage_quantity: 0,
+      has_stock_shortage: false,
+    });
   });
 
   it('rejects issue above quantity_approved including previous issues', () => {

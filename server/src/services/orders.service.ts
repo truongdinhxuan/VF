@@ -7,6 +7,7 @@ import {
   assertOrderActionAllowed,
   assertPositiveQuantity,
   assertRejectedReason,
+  calculateStockAvailability,
   OrderRuleError,
 } from '../domain/orderRules';
 import {
@@ -51,6 +52,14 @@ interface OrderItemData {
   quantity_approved: number | string | null;
   quantity_issued: number | string | null;
   note: string | null;
+  available_quantity?: number;
+  shortage_quantity?: number;
+  has_stock_shortage?: boolean;
+}
+
+interface StockBalanceAvailabilityRow {
+  supply_id: string;
+  quantity: number | string;
 }
 
 interface OrderData {
@@ -160,7 +169,46 @@ export class OrderService {
       .single();
 
     if (error || !data) databaseError(error, 'Cannot get order');
-    return data as OrderData;
+    return this.attachStockAvailability(data as OrderData);
+  }
+
+  private async attachStockAvailability(order: OrderData): Promise<OrderData> {
+    const supplyIds = [...new Set(order.order_items.map((item) => item.supply_id))];
+    if (supplyIds.length === 0) return order;
+
+    const { data, error } = await this.db
+      .from('stock_balances')
+      .select(`
+        supply_id,
+        quantity,
+        storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
+      `)
+      .eq('area_id', order.from_area_id)
+      .eq('storage_location.is_active', true)
+      .in('supply_id', supplyIds);
+
+    if (error) databaseError(error, 'Cannot calculate order stock availability');
+
+    const availableBySupply = new Map<string, number>();
+    for (const balance of (data ?? []) as StockBalanceAvailabilityRow[]) {
+      const quantity = Number(balance.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+      availableBySupply.set(
+        balance.supply_id,
+        (availableBySupply.get(balance.supply_id) ?? 0) + quantity,
+      );
+    }
+
+    return {
+      ...order,
+      order_items: order.order_items.map((item) => ({
+        ...item,
+        ...calculateStockAvailability(
+          Number(item.quantity_requested),
+          availableBySupply.get(item.supply_id) ?? 0,
+        ),
+      })),
+    };
   }
 
   private assertPackingOwner(actor: OrderActor, order: OrderData): void {
@@ -427,10 +475,6 @@ export class OrderService {
         return translateRuleError(error);
       }
     });
-
-    if (!updates.some((item) => item.quantity_approved > 0)) {
-      serviceError(400, 'At least one order item must have quantity_approved greater than 0');
-    }
 
     const { error: itemError } = await this.db
       .from('order_items')

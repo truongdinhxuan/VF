@@ -49,6 +49,9 @@ export interface OrderItem {
   quantity_requested: number;
   quantity_approved: number | null;
   quantity_issued: number | null;
+  available_quantity: number;
+  shortage_quantity: number;
+  has_stock_shortage: boolean;
   note: string | null;
   supply?: OrderSupplySummary | null;
   unit?: OrderUnitSummary | null;

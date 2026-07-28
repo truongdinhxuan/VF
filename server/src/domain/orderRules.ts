@@ -70,12 +70,27 @@ export const assertApprovedQuantity = (
   quantityRequested: number,
 ): number => {
   const value = Number(quantityApproved);
-  if (!Number.isFinite(value) || value < 0 || value > quantityRequested) {
+  if (!Number.isFinite(value) || value <= 0 || value > quantityRequested) {
     throw new OrderRuleError(
-      'quantity_approved must be between 0 and quantity_requested',
+      'quantity_approved must be greater than 0 and less than or equal to quantity_requested',
     );
   }
   return value;
+};
+
+export const calculateStockAvailability = (
+  quantityRequested: number,
+  availableQuantity: number,
+) => {
+  const requested = Math.max(0, Number(quantityRequested) || 0);
+  const available = Math.max(0, Number(availableQuantity) || 0);
+  const shortage = Math.max(0, requested - available);
+
+  return {
+    available_quantity: available,
+    shortage_quantity: shortage,
+    has_stock_shortage: shortage > 0,
+  };
 };
 
 export const assertIssueWithinApproved = (

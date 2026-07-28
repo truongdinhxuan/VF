@@ -15,6 +15,7 @@ import {
   updateOrder,
 } from "../../../api/orders.service";
 import { OrderStatusBadge } from "../../../components/admin/orders/OrderStatusBadge";
+import { StockAvailabilityWarning } from "../../../components/admin/orders/StockAvailabilityWarning";
 import { CardSkeleton, SelectSkeleton } from "../../../components/common/skeleton";
 import {
   ORDER_APPROVER_ROLES,
@@ -192,11 +193,11 @@ const OrderDetailPage = () => {
     }));
     const invalid = approvals.some((approval, index) =>
       !Number.isFinite(approval.quantity_approved) ||
-      approval.quantity_approved < 0 ||
+      approval.quantity_approved <= 0 ||
       approval.quantity_approved > Number(items[index].quantity_requested),
     );
-    if (invalid || !approvals.some((approval) => approval.quantity_approved > 0)) {
-      setActionError("Số duyệt phải từ 0 đến số yêu cầu và ít nhất một dòng phải lớn hơn 0.");
+    if (invalid) {
+      setActionError("Số duyệt của mỗi dòng phải lớn hơn 0 và không vượt số lượng yêu cầu.");
       return;
     }
     void runMutation(() => approveOrder(id, { items: approvals }));
@@ -252,6 +253,7 @@ const OrderDetailPage = () => {
   const hasActions = canEdit || canSubmit || canCancel || canApprove || canIssue || canReceive || canComplete;
   const fromAreaName = order.from_area?.name ?? order.from_area_id;
   const toAreaName = order.to_area?.name ?? order.to_area_id;
+  const stockShortageItems = items.filter((item) => item.has_stock_shortage);
   const requesterName = order.requester
     ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
     : order.requested_by;
@@ -286,6 +288,13 @@ const OrderDetailPage = () => {
         ))}
       </div>
 
+      {stockShortageItems.length > 0 && (
+        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-bold">⚠ {stockShortageItems.length} vật tư đang có tồn thấp tại Area gửi.</p>
+          <p className="mt-1">Đây là cảnh báo tại thời điểm kiểm tra. Order vẫn có thể submit hoặc approve và chưa làm thay đổi tồn kho.</p>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -309,7 +318,7 @@ const OrderDetailPage = () => {
       </div>
 
       {panel === "approve" && (
-        <ActionCard title="Duyệt số lượng" note="Approve chỉ cập nhật order, không trừ tồn.">
+        <ActionCard title="Duyệt số lượng" note="Mỗi dòng phải duyệt lớn hơn 0 và không vượt số yêu cầu. Tồn thấp chỉ cảnh báo; approve không trừ tồn.">
           <div className="space-y-3">
             {items.map((item) => (
               <QuantityRow key={item.id} item={item} label="Số lượng duyệt" value={itemValues[item.id]?.quantity ?? ""} max={item.quantity_requested} onChange={(quantity) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity } }))} />
@@ -397,12 +406,13 @@ const OrderDetailPage = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Supply ID</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Supply ID</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Tồn khả dụng</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {items.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item.id} className={item.has_stock_shortage ? "bg-amber-50/70" : undefined}>
                     <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? item.supply_id}</td>
                     <td className="px-5 py-4">{editing ? <input type="number" min="0.000001" step="any" value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5" /> : item.quantity_requested}</td>
+                    <td className="px-5 py-4"><StockAvailabilityWarning item={item} compact /></td>
                     <td className="px-5 py-4">{item.quantity_approved ?? "—"}</td>
                     <td className="px-5 py-4">{item.quantity_issued ?? 0}</td>
                     <td className="px-5 py-4">{editing ? <input value={itemValues[item.id]?.note ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} className="w-full min-w-48 rounded-lg border border-slate-300 px-2 py-1.5" /> : (item.note ?? "—")}</td>
@@ -437,7 +447,7 @@ const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = fa
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <label className="grid gap-3 rounded-xl border border-slate-200 p-3 text-sm md:grid-cols-[1fr_180px] md:items-center"><span><strong className="block text-slate-800">{item.supply?.code ?? item.supply_id}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span></span><span><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></span></label>
+  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? item.supply_id}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0.000001" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
 );
 
 const InfoNote = ({ label, value }: { label: string; value: string }) => <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm text-slate-700">{value}</p></div>;

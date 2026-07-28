@@ -53,7 +53,10 @@ describe('atomic order issue migration', () => {
   });
 
   it('keeps direct stock mutation out of create/submit/approve service code', () => {
-    assert.doesNotMatch(orderService, /\.from\(['"]stock_balances['"]\)/);
+    assert.doesNotMatch(
+      orderService,
+      /\.from\(['"]stock_balances['"]\)[\s\S]{0,500}\.(?:insert|update|delete|upsert)\(/,
+    );
     assert.doesNotMatch(
       orderService,
       /\.from\(['"]stock_transactions['"]\)[\s\S]{0,120}\.(?:insert|update|delete)\(/,
