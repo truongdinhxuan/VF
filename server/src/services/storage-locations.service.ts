@@ -17,8 +17,8 @@ import { STORAGE_LOCATION_SORT_FIELDS } from '../schemas/master-data';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
 const SELECT = `
-  id, code, area_id, name, is_active,
-  area:areas!storage_locations_area_id_fkey(id, code, name, is_active)
+  id, code, area_id, name, description, is_active, is_deleted, created_at, updated_at,
+  area:areas!storage_locations_area_id_fkey(id, code, name, is_active, is_deleted)
 `;
 
 export class StorageLocationsService {
@@ -34,6 +34,7 @@ export class StorageLocationsService {
       .select('id')
       .eq('id', areaId)
       .eq('is_active', true)
+      .eq('is_deleted', false)
       .single();
     if (error || !data) fail(400, 'area_id không tồn tại hoặc không active');
   }
@@ -72,12 +73,13 @@ export class StorageLocationsService {
     let request = this.db
       .from('storage_locations')
       .select(SELECT, { count: 'exact' })
-      .eq('is_active', active);
+      .eq('is_active', active)
+      .eq('is_deleted', false);
 
     if (areaId) request = request.eq('area_id', areaId);
     if (pagination.search) {
       request = request.or(
-        `code.ilike.*${pagination.search}*,name.ilike.*${pagination.search}*`,
+        `code.ilike.*${pagination.search}*,name.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
       );
     }
     request = request.order(pagination.sortBy, {
@@ -107,7 +109,9 @@ export class StorageLocationsService {
       code: normalizeRequiredText(body.code, 'code', 100),
       area_id: body.area_id,
       name: normalizeOptionalText(body.name, 'name', 255) ?? null,
+      description: normalizeOptionalText(body.description, 'description') ?? null,
       is_active: body.is_active ?? true,
+      is_deleted: false,
     };
     const { data, error } = await this.db
       .from('storage_locations')
@@ -127,7 +131,13 @@ export class StorageLocationsService {
     if (body.code !== undefined) payload.code = normalizeRequiredText(body.code, 'code', 100);
     if (body.area_id !== undefined) payload.area_id = body.area_id;
     if (body.name !== undefined) payload.name = normalizeOptionalText(body.name, 'name', 255);
-    if (body.is_active !== undefined) payload.is_active = body.is_active;
+    if (body.description !== undefined) {
+      payload.description = normalizeOptionalText(body.description, 'description');
+    }
+    if (body.is_active !== undefined) {
+      payload.is_active = body.is_active;
+      if (body.is_active) payload.is_deleted = false;
+    }
 
     const { data, error } = await this.db
       .from('storage_locations')
@@ -142,7 +152,7 @@ export class StorageLocationsService {
   async remove(id: string) {
     const { data, error } = await this.db
       .from('storage_locations')
-      .update({ is_active: false })
+      .update({ is_active: false, is_deleted: true })
       .eq('id', id)
       .select(SELECT)
       .single();

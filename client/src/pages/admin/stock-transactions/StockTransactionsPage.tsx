@@ -30,6 +30,8 @@ const loadAreas = async (signal: AbortSignal) =>
 const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const transactionTypeClass = (type: StockTransactionType) => type.endsWith('_IN') || type === 'RECEIVE' || type === 'IMPORT' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700';
+const transactionTypeCode = (transaction: StockTransaction) =>
+  (transaction.transaction_type?.code ?? 'UNKNOWN') as StockTransactionType;
 
 const StockTransactionsPage = () => {
   const { role } = useAuth();
@@ -88,7 +90,10 @@ const StockTransactionsPage = () => {
   };
 
   const columns: Column<StockTransaction>[] = [
-    { header: 'Loại', accessor: 'type', sortKey: 'type', render: (item) => <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${transactionTypeClass(item.type)}`}>{item.type}</span> },
+    { header: 'Loại', accessor: 'transaction_type_id', sortKey: 'type', render: (item) => {
+      const type = transactionTypeCode(item);
+      return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${transactionTypeClass(type)}`}>{type}</span>;
+    } },
     { header: 'Vật tư', accessor: 'supply_id', render: (item) => item.supply ? <div><p className="font-semibold text-slate-800">{item.supply.code}</p><p className="text-xs text-slate-500">{item.supply.description || '—'}</p></div> : '—' },
     { header: 'Khu vực / Vị trí', accessor: 'area_id', render: (item) => <div><p>{item.area ? `${item.area.code} - ${item.area.name}` : '—'}</p><p className="text-xs text-slate-500">{item.storage_location?.code ?? '—'}</p></div> },
     { header: 'Số lượng', accessor: 'quantity', sortKey: 'quantity', render: (item) => numberFormatter.format(item.quantity) },
@@ -121,7 +126,7 @@ const StockTransactionsPage = () => {
     </div>
     {[supplies.error, areas.error, locations.error].some(Boolean) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Một số bộ lọc không tải được. Danh sách transaction vẫn được hiển thị nếu API chính hoạt động.</p>}
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm transaction, vật tư, lý do..." searchValue={searchInput} onSearchChange={setSearchInput} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có transaction phù hợp với bộ lọc." />}
-    {detailOpen && <CrudModal title="Chi tiết stock transaction" onClose={() => setDetailOpen(false)}>{detailLoading ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailError ? <ErrorState message={detailError} onRetry={() => void detailQuery.refetch()} /> : detail ? <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">{[['Type', detail.type], ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : detail.supply_id], ['Khu vực', detail.area ? `${detail.area.code} - ${detail.area.name}` : detail.area_id], ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : detail.storage_location_id], ['Số lượng', numberFormatter.format(detail.quantity)], ['Tồn trước', numberFormatter.format(detail.before_quantity)], ['Tồn sau', numberFormatter.format(detail.after_quantity)], ['Lý do', detail.reason || '—'], ['Ghi chú', detail.note || '—'], ['Người tạo', detail.creator ? `${detail.creator.first_name} ${detail.creator.last_name}`.trim() : detail.created_by], ['Thời gian', dateFormatter.format(new Date(detail.created_at))], ['Order ID', detail.order_id || '—']].map(([label, value]) => <div key={label}><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm text-slate-800">{value}</dd></div>)}</dl> : null}</CrudModal>}
+    {detailOpen && <CrudModal title="Chi tiết stock transaction" onClose={() => setDetailOpen(false)}>{detailLoading ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailError ? <ErrorState message={detailError} onRetry={() => void detailQuery.refetch()} /> : detail ? <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">{[['Type', transactionTypeCode(detail)], ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : detail.supply_id], ['Khu vực', detail.area ? `${detail.area.code} - ${detail.area.name}` : detail.area_id], ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : detail.storage_location_id], ['Số lượng', numberFormatter.format(detail.quantity)], ['Tồn trước', numberFormatter.format(detail.before_quantity)], ['Tồn sau', numberFormatter.format(detail.after_quantity)], ['Lý do', detail.reason || '—'], ['Ghi chú', detail.note || '—'], ['Người tạo', detail.creator ? `${detail.creator.first_name} ${detail.creator.last_name}`.trim() : detail.created_by], ['Thời gian', dateFormatter.format(new Date(detail.created_at))], ['Order ID', detail.order_id || '—']].map(([label, value]) => <div key={label}><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm text-slate-800">{value}</dd></div>)}</dl> : null}</CrudModal>}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
   </div>;
 };

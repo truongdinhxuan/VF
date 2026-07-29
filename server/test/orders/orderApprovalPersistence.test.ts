@@ -7,6 +7,13 @@ const orderService = readFileSync(
   resolve(process.cwd(), 'src/services/orders.service.ts'),
   'utf8',
 );
+const lookupMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    'supabase/migrations/202607290001_lookup_master_data_foundation.sql',
+  ),
+  'utf8',
+);
 
 describe('order approval item persistence', () => {
   it('includes every required OrderItem column in approval upserts', () => {
@@ -31,10 +38,19 @@ describe('order approval item persistence', () => {
     }
   });
 
-  it('still performs one batch upsert keyed by OrderItem id', () => {
+  it('performs approval and actor audit in one database RPC', () => {
     assert.match(
       orderService,
-      /\.from\('order_items'\)\s*\.upsert\(updates,\s*\{\s*onConflict:\s*'id'\s*\}\)/,
+      /\.rpc\('review_order'/,
+    );
+    assert.match(orderService, /p_actor_id:\s*actor\.id/);
+    assert.match(
+      lookupMigration,
+      /insert into public\.order_revisions[\s\S]*created_by[\s\S]*p_actor_id/i,
+    );
+    assert.match(
+      lookupMigration,
+      /p_action_code not in \('APPROVE', 'REJECT'\)/i,
     );
   });
 });

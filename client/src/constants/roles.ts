@@ -1,63 +1,81 @@
-export const ROLE_NAMES = [
-  'data Đóng gói',
-  'data Vật tư',
-  'Tổ trưởng vật tư',
-  'Material Control',
-  'Admin',
-] as const;
+export const ROLE_CODE = {
+  ADMIN: 'ADMIN',
+  DATA_PACKING: 'DATA_PACKING',
+  DATA_MATERIAL: 'DATA_MATERIAL',
+  MATERIAL_LEADER: 'MATERIAL_LEADER',
+  MATERIAL_CONTROL: 'MATERIAL_CONTROL',
+} as const;
 
-export type RoleName = (typeof ROLE_NAMES)[number];
+export type RoleCode = (typeof ROLE_CODE)[keyof typeof ROLE_CODE];
 
-export const PACKING_ROLE: RoleName = 'data Đóng gói';
-export const MATERIAL_DATA_ROLE: RoleName = 'data Vật tư';
-export const MATERIAL_LEAD_ROLE: RoleName = 'Tổ trưởng vật tư';
-export const MATERIAL_CONTROL_ROLE: RoleName = 'Material Control';
-export const ADMIN_ROLE: RoleName = 'Admin';
+export const ROLE_CODES = Object.values(ROLE_CODE) as RoleCode[];
 
-export const MATERIAL_ROLES: readonly RoleName[] = [
+export const PACKING_ROLE: RoleCode = ROLE_CODE.DATA_PACKING;
+export const MATERIAL_DATA_ROLE: RoleCode = ROLE_CODE.DATA_MATERIAL;
+export const MATERIAL_LEAD_ROLE: RoleCode = ROLE_CODE.MATERIAL_LEADER;
+export const MATERIAL_CONTROL_ROLE: RoleCode = ROLE_CODE.MATERIAL_CONTROL;
+export const ADMIN_ROLE: RoleCode = ROLE_CODE.ADMIN;
+
+export const ORDER_CREATOR_ROLES: readonly RoleCode[] = [PACKING_ROLE, ADMIN_ROLE];
+
+export const MATERIAL_ROLES: readonly RoleCode[] = [
   MATERIAL_DATA_ROLE,
   MATERIAL_LEAD_ROLE,
   MATERIAL_CONTROL_ROLE,
 ];
 
-export const STOCK_VIEWER_ROLES: readonly RoleName[] = [
+export const STOCK_VIEWER_ROLES: readonly RoleCode[] = [
   ...MATERIAL_ROLES,
   ADMIN_ROLE,
 ];
 
-export const STOCK_MUTATOR_ROLES: readonly RoleName[] = [
-  MATERIAL_DATA_ROLE,
-  MATERIAL_LEAD_ROLE,
-];
-
-export const ORDER_APPROVER_ROLES: readonly RoleName[] = [
+export const STOCK_MUTATOR_ROLES: readonly RoleCode[] = [
   MATERIAL_DATA_ROLE,
   MATERIAL_LEAD_ROLE,
   MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
 ];
 
-export const ORDER_ISSUER_ROLES: readonly RoleName[] = STOCK_MUTATOR_ROLES;
-export const USER_MANAGEMENT_ROLES: readonly RoleName[] = [ADMIN_ROLE];
-export const SYSTEM_MANAGEMENT_ROLES: readonly RoleName[] = [ADMIN_ROLE];
-export const MASTER_DATA_MANAGER_ROLES: readonly RoleName[] = [
+export const ORDER_APPROVER_ROLES: readonly RoleCode[] = [
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+
+export const ORDER_ISSUER_ROLES: readonly RoleCode[] = STOCK_MUTATOR_ROLES;
+
+export const USER_VIEWER_ROLES: readonly RoleCode[] = [
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+export const USER_MANAGEMENT_ROLES: readonly RoleCode[] = [ADMIN_ROLE];
+export const SYSTEM_MANAGEMENT_ROLES: readonly RoleCode[] = [ADMIN_ROLE];
+export const MASTER_DATA_VIEWER_ROLES: readonly RoleCode[] = [
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+export const MASTER_DATA_MANAGER_ROLES: readonly RoleCode[] = [
   MATERIAL_DATA_ROLE,
   MATERIAL_LEAD_ROLE,
   ADMIN_ROLE,
 ];
 
-const extractRoleCandidate = (value: unknown): string | null => {
+const extractRoleCode = (value: unknown): string | null => {
   if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return extractRoleCandidate(value[0]);
+  if (Array.isArray(value)) return extractRoleCode(value[0]);
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    if (typeof record.role_name === 'string') return record.role_name;
+    if (typeof record.code === 'string') return record.code;
   }
   return null;
 };
 
-export const resolveRoleName = (value: unknown): RoleName | null => {
-  const candidate = extractRoleCandidate(value)?.trim();
-  return candidate && ROLE_NAMES.includes(candidate as RoleName)
-    ? candidate as RoleName
+export const resolveRoleCode = (value: unknown): RoleCode | null => {
+  const candidate = extractRoleCode(value)?.trim();
+  return candidate && ROLE_CODES.includes(candidate as RoleCode)
+    ? candidate as RoleCode
     : null;
 };

@@ -33,7 +33,13 @@ const StorageLocationForm = ({ item, areas, areasLoading, areasError, busy, onCa
   onSave: (values: CreateStorageLocationInput) => Promise<void>;
 }) => {
   const { register, handleSubmit, formState: { errors } } = useForm<CreateStorageLocationInput>({
-    defaultValues: { code: item?.code ?? '', area_id: item?.area_id ?? '', name: item?.name ?? '', is_active: item?.is_active ?? true },
+    defaultValues: {
+      code: item?.code ?? '',
+      area_id: item?.area_id ?? '',
+      name: item?.name ?? '',
+      description: item?.description ?? '',
+      is_active: item?.is_active ?? true,
+    },
   });
   const referencesUnavailable = areasLoading || Boolean(areasError) || areas.length === 0;
   return <form onSubmit={handleSubmit(onSave)} className="space-y-4">
@@ -48,6 +54,16 @@ const StorageLocationForm = ({ item, areas, areasLoading, areasError, busy, onCa
       <label className={labelClassName}><span>Mã vị trí kho</span><input {...register('code', { required: 'Vui lòng nhập mã vị trí.', setValueAs: (value: string) => value.trim() })} className={inputClassName} /><FieldError message={errors.code?.message} /></label>
     </div>
     <label className={labelClassName}><span>Tên vị trí</span><input {...register('name', { setValueAs: (value: string) => value.trim() || null })} className={inputClassName} /></label>
+    <label className={labelClassName}>
+      <span>Mô tả</span>
+      <textarea
+        rows={3}
+        {...register('description', {
+          setValueAs: (value: string) => value.trim() || null,
+        })}
+        className={inputClassName}
+      />
+    </label>
     <p className="text-xs text-slate-500">Mã vị trí phải duy nhất trong khu vực đã chọn.</p>
     <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" {...register('is_active')} className="h-4 w-4 rounded border-slate-300" /> Đang hoạt động</label>
     <FormActions busy={busy || referencesUnavailable} onCancel={onCancel} submitLabel={item ? 'Lưu thay đổi' : 'Tạo vị trí kho'} />
@@ -95,6 +111,7 @@ const StorageLocationsPage = () => {
   const columns: Column<StorageLocation>[] = [
     { header: 'Mã', accessor: 'code', sortKey: 'code' },
     { header: 'Tên vị trí', accessor: 'name', sortKey: 'name', render: (item) => item.name || '—' },
+    { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (item) => item.description || '—' },
     { header: 'Khu vực', accessor: 'area_id', render: (item) => item.area ? `${item.area.code} - ${item.area.name}` : '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
     ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} /> }] : []),

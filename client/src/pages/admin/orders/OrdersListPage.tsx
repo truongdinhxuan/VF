@@ -4,7 +4,7 @@ import { listOrders } from '../../../api/orders.service';
 import { OrderStatusBadge } from '../../../components/admin/orders/OrderStatusBadge';
 import { Pagination } from '../../../components/common/Pagination';
 import { TableSkeleton } from '../../../components/common/skeleton';
-import { PACKING_ROLE } from '../../../constants/roles';
+import { ORDER_CREATOR_ROLES } from '../../../constants/roles';
 import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
@@ -39,7 +39,7 @@ const OrdersListPage = () => {
   return <section className="space-y-5">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Order management</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Orders</h1><p className="mt-1 text-sm text-slate-500">Tạo, gửi, duyệt và cấp hàng theo đúng trạng thái của order.</p></div>
-      {role === PACKING_ROLE && <Link to="/admin/orders/create" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Tạo order</Link>}
+      {role !== null && ORDER_CREATOR_ROLES.includes(role) && <Link to="/admin/orders/create" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Tạo order</Link>}
     </div>
 
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">

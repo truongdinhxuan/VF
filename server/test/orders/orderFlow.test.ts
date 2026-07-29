@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { normalizeRoleName, ROLE_NAMES, type OrderStatus } from '../../src/domain/enums';
+import {
+  normalizeRoleCode,
+  ROLE_CODES,
+  type OrderStatus,
+} from '../../src/domain/enums';
 import {
   assertApprovedQuantity,
   assertCancelReason,
@@ -99,30 +103,30 @@ describe('order reason and role rules', () => {
     assert.equal(assertCancelReason('PENDING', 'changed plan'), 'changed plan');
   });
 
-  it('uses the five configured roles without granting Admin operational actions', () => {
-    assert.deepEqual(ROLE_NAMES, [
-      'data Đóng gói',
-      'data Vật tư',
-      'Tổ trưởng vật tư',
-      'Material Control',
-      'Admin',
+  it('uses the five role codes and grants Admin all operational actions', () => {
+    assert.deepEqual(ROLE_CODES, [
+      'ADMIN',
+      'DATA_PACKING',
+      'DATA_MATERIAL',
+      'MATERIAL_LEADER',
+      'MATERIAL_CONTROL',
     ]);
-    assert.equal(normalizeRoleName('Admin'), 'Admin');
-    assert.equal(normalizeRoleName('admin'), null);
-    assert.deepEqual(USER_MANAGER_ROLES, ['Admin']);
-    assert.equal(canCreateOrder('data Đóng gói'), true);
-    assert.equal(canApproveOrder('data Vật tư'), true);
-    assert.equal(canApproveOrder('Tổ trưởng vật tư'), true);
-    assert.equal(canApproveOrder('Material Control'), true);
-    assert.equal(canApproveOrder('Admin'), false);
-    assert.equal(canIssueOrder('data Vật tư'), true);
-    assert.equal(canIssueOrder('Tổ trưởng vật tư'), true);
-    assert.equal(canIssueOrder('Material Control'), false);
-    assert.equal(canIssueOrder('data Đóng gói'), false);
-    assert.equal(canIssueOrder('Admin'), false);
-    assert.equal(canViewStock('Material Control'), true);
-    assert.equal(canViewStock('Admin'), true);
-    assert.equal(canMutateStock('Material Control'), false);
-    assert.equal(canMutateStock('Admin'), false);
+    assert.equal(normalizeRoleCode('ADMIN'), 'ADMIN');
+    assert.equal(normalizeRoleCode('admin'), null);
+    assert.deepEqual(USER_MANAGER_ROLES, ['ADMIN']);
+    assert.equal(canCreateOrder('DATA_PACKING'), true);
+    assert.equal(canApproveOrder('DATA_MATERIAL'), true);
+    assert.equal(canApproveOrder('MATERIAL_LEADER'), true);
+    assert.equal(canApproveOrder('MATERIAL_CONTROL'), true);
+    assert.equal(canApproveOrder('ADMIN'), true);
+    assert.equal(canIssueOrder('DATA_MATERIAL'), true);
+    assert.equal(canIssueOrder('MATERIAL_LEADER'), true);
+    assert.equal(canIssueOrder('MATERIAL_CONTROL'), true);
+    assert.equal(canIssueOrder('DATA_PACKING'), false);
+    assert.equal(canIssueOrder('ADMIN'), true);
+    assert.equal(canViewStock('MATERIAL_CONTROL'), true);
+    assert.equal(canViewStock('ADMIN'), true);
+    assert.equal(canMutateStock('MATERIAL_CONTROL'), true);
+    assert.equal(canMutateStock('ADMIN'), true);
   });
 });

@@ -6,7 +6,7 @@ import {
   listRoles,
   updateRole,
 } from '../../controllers/roles';
-import { ROLE_NAMES } from '../../domain/enums';
+import { ROLE_CODES } from '../../domain/enums';
 import { SYSTEM_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
@@ -19,12 +19,12 @@ import {
 const roleRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: roleListQuerySchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: roleListQuerySchema },
     listRoles,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: idParamsSchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
     getRole,
   );
   fastify.post(

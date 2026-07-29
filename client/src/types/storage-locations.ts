@@ -6,7 +6,11 @@ export interface StorageLocation {
   code: string;
   area_id: string;
   name: string | null;
+  description: string | null;
   is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
   area?: Pick<Area, 'id' | 'code' | 'name' | 'is_active'> | null;
 }
 
@@ -19,6 +23,7 @@ export interface CreateStorageLocationInput {
   code: string;
   area_id: string;
   name?: string | null;
+  description?: string | null;
   is_active?: boolean;
 }
 

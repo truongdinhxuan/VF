@@ -67,12 +67,12 @@ describe('master data read contracts', () => {
   it('returns only workbook fields and limits packing supply fields', () => {
     assert.match(
       suppliesService,
-      /id, code, description, category_id, unit_id, is_active, is_deleted/,
+      /id, code, short_text, translation_text, description,[\s\S]*category_id, unit_id, is_active, is_deleted/,
     );
     assert.match(suppliesService, /category:supply_categories/);
     assert.match(suppliesService, /unit:units/);
     assert.doesNotMatch(suppliesService, /stock_balances\(\*\)/);
-    assert.doesNotMatch(suppliesService, /short_text|translator_text/);
+    assert.doesNotMatch(suppliesService, /translator_text/);
   });
 
   it('scopes areas and storage locations to active records', () => {
@@ -85,8 +85,8 @@ describe('master data read contracts', () => {
   });
 
   it('protects read routes using all configured roles', () => {
-    assert.match(supplyRoute, /verifyTokenAndRole\(ROLE_NAMES\)/);
-    assert.match(areaRoute, /verifyTokenAndRole\(ROLE_NAMES\)/);
+    assert.match(supplyRoute, /verifyTokenAndRole\(ROLE_CODES\)/);
+    assert.match(areaRoute, /verifyTokenAndRole\(ROLE_CODES\)/);
     assert.match(storageRoute, /verifyTokenAndRole\(STOCK_VIEWER_ROLES\)/);
   });
 });

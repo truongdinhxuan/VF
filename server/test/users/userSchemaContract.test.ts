@@ -11,11 +11,11 @@ const expectedUserColumns = [
   'phone_number',
   'avatar_url',
   'role_id',
-  'position_id',
   'area_id',
   'managed_by_user_id',
   'is_active',
   'is_verified',
+  'is_deleted',
   'created_at',
   'updated_at',
   'first_name',
@@ -37,8 +37,8 @@ const phase1Migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/202607140001_application_phase1.sql'),
   'utf8',
 );
-const schemaContractMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/202607150002_users_schema_contract.sql'),
+const lookupFoundationMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/202607290001_lookup_master_data_foundation.sql'),
   'utf8',
 );
 const authRoutes = readFileSync(
@@ -103,12 +103,12 @@ describe('current users schema contract', () => {
     );
   });
 
-  it('validates the exact users schema in the follow-up migration', () => {
-    for (const column of expectedUserColumns) {
-      assert.match(schemaContractMigration, new RegExp(`\\('${column}'\\)`));
-    }
-    assert.match(schemaContractMigration, /unexpected_columns/i);
-    assert.match(schemaContractMigration, /missing_columns/i);
+  it('removes Position and adds the current soft-delete field forward-only', () => {
+    assert.match(lookupFoundationMigration, /drop column if exists position_id/i);
+    assert.match(
+      lookupFoundationMigration,
+      /add column if not exists is_deleted boolean not null default false/i,
+    );
   });
 
   it('uses Admin-managed user creation instead of public registration', () => {
@@ -124,9 +124,13 @@ describe('current users schema contract', () => {
     assert.match(usersService, /email:\s*currentUser\.email/);
   });
 
-  it('adds and seeds Admin in separate replay-safe migrations', () => {
+  it('keeps the legacy Admin seed replay-safe during lookup migration', () => {
     assert.match(addAdminRoleMigration, /add value if not exists 'Admin'/i);
     assert.match(seedAdminRoleMigration, /values \('Admin'\)/i);
     assert.match(seedAdminRoleMigration, /on conflict \(role_name\) do nothing/i);
+    assert.match(
+      lookupFoundationMigration,
+      /\('Admin', 'ADMIN', 'Admin'\)/i,
+    );
   });
 });

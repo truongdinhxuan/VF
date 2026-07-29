@@ -13,23 +13,22 @@ import {
   faTruck,
   faUserShield,
   faUsers,
-  faUserTie,
   faWarehouse,
 } from "@fortawesome/free-solid-svg-icons";
-import type { RoleName } from "./roles";
+import type { RoleCode } from "./roles";
 import {
-  MASTER_DATA_MANAGER_ROLES,
-  PACKING_ROLE,
+  MASTER_DATA_VIEWER_ROLES,
+  ORDER_CREATOR_ROLES,
   STOCK_MUTATOR_ROLES,
   STOCK_VIEWER_ROLES,
-  USER_MANAGEMENT_ROLES,
+  USER_VIEWER_ROLES,
 } from "./roles";
 
 export interface AdminNavigationItem {
   to: string;
   label: string;
   icon: IconDefinition;
-  roles?: readonly RoleName[];
+  roles?: readonly RoleCode[];
 }
 
 export interface AdminNavigationGroup {
@@ -50,7 +49,7 @@ export const ADMIN_NAVIGATION: readonly AdminNavigationGroup[] = [
         to: "/admin/orders/create",
         label: "Create order",
         icon: faPlus,
-        roles: [PACKING_ROLE],
+        roles: ORDER_CREATOR_ROLES,
       },
       {
         to: "/admin/stock-balances",
@@ -86,13 +85,13 @@ export const ADMIN_NAVIGATION: readonly AdminNavigationGroup[] = [
         to: "/admin/supply-categories",
         label: "Supply categories",
         icon: faLayerGroup,
-        roles: MASTER_DATA_MANAGER_ROLES,
+        roles: MASTER_DATA_VIEWER_ROLES,
       },
       {
         to: "/admin/units",
         label: "Units",
         icon: faRulerCombined,
-        roles: MASTER_DATA_MANAGER_ROLES,
+        roles: MASTER_DATA_VIEWER_ROLES,
       },
       {
         to: "/admin/storage-locations",
@@ -109,25 +108,19 @@ export const ADMIN_NAVIGATION: readonly AdminNavigationGroup[] = [
         to: "/admin/users",
         label: "Users",
         icon: faUsers,
-        roles: USER_MANAGEMENT_ROLES,
+        roles: USER_VIEWER_ROLES,
       },
       {
         to: "/admin/roles",
         label: "Roles",
         icon: faUserShield,
-        roles: USER_MANAGEMENT_ROLES,
-      },
-      {
-        to: "/admin/positions",
-        label: "Positions",
-        icon: faUserTie,
-        roles: USER_MANAGEMENT_ROLES,
+        roles: USER_VIEWER_ROLES,
       },
       {
         to: "/admin/areas",
         label: "Areas",
         icon: faWarehouse,
-        roles: USER_MANAGEMENT_ROLES,
+        roles: USER_VIEWER_ROLES,
       },
       {
         to: "/admin/milkrun",
@@ -139,7 +132,7 @@ export const ADMIN_NAVIGATION: readonly AdminNavigationGroup[] = [
   },
 ];
 
-export const navigationForRole = (role: RoleName | null): AdminNavigationGroup[] =>
+export const navigationForRole = (role: RoleCode | null): AdminNavigationGroup[] =>
   ADMIN_NAVIGATION.map((group) => ({
     ...group,
     items: group.items.filter(

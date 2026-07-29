@@ -6,13 +6,15 @@ import type {
 } from '../interfaces/master-data';
 import {
   databaseError,
+  normalizeOptionalText,
   normalizeRequiredText,
   parseActiveFilter,
 } from './master-data.helpers';
 import { UNIT_SORT_FIELDS } from '../schemas/master-data';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
-const SELECT = 'id, code, symbol, is_active, updated_at, created_at, is_deleted';
+const SELECT =
+  'id, code, symbol, name, description, is_active, is_deleted, created_at, updated_at';
 
 export class UnitsService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -33,10 +35,10 @@ export class UnitsService {
       .from('units')
       .select(SELECT, { count: 'exact' })
       .eq('is_active', active)
-      .or('is_deleted.eq.false,is_deleted.is.null');
+      .eq('is_deleted', false);
     if (pagination.search) {
       request = request.or(
-        `code.ilike.*${pagination.search}*,symbol.ilike.*${pagination.search}*`,
+        `code.ilike.*${pagination.search}*,symbol.ilike.*${pagination.search}*,name.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
       );
     }
     request = request.order(pagination.sortBy, {
@@ -60,6 +62,8 @@ export class UnitsService {
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
       symbol: normalizeRequiredText(body.symbol, 'symbol', 100),
+      name: normalizeRequiredText(body.name, 'name'),
+      description: normalizeOptionalText(body.description, 'description') ?? null,
       is_active: body.is_active ?? true,
       is_deleted: false,
     };
@@ -76,6 +80,10 @@ export class UnitsService {
     const payload: Record<string, unknown> = {};
     if (body.code !== undefined) payload.code = normalizeRequiredText(body.code, 'code', 100);
     if (body.symbol !== undefined) payload.symbol = normalizeRequiredText(body.symbol, 'symbol', 100);
+    if (body.name !== undefined) payload.name = normalizeRequiredText(body.name, 'name');
+    if (body.description !== undefined) {
+      payload.description = normalizeOptionalText(body.description, 'description');
+    }
     if (body.is_active !== undefined) {
       payload.is_active = body.is_active;
       if (body.is_active) payload.is_deleted = false;

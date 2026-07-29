@@ -3,11 +3,11 @@ import { lazy } from "react";
 import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import {
-  MASTER_DATA_MANAGER_ROLES,
-  PACKING_ROLE,
+  MASTER_DATA_VIEWER_ROLES,
+  ORDER_CREATOR_ROLES,
   STOCK_MUTATOR_ROLES,
   STOCK_VIEWER_ROLES,
-  USER_MANAGEMENT_ROLES,
+  USER_VIEWER_ROLES,
 } from "../constants/roles";
 
 const AdminLayout = lazy(() =>
@@ -18,7 +18,6 @@ const AdminLayout = lazy(() =>
 const DashboardPage = lazy(() => import("../pages/admin/dashboard/DashboardPage"));
 const UsersPage = lazy(() => import("../pages/admin/users/UsersPage"));
 const RolesPage = lazy(() => import("../pages/admin/roles/RolesPage"));
-const PositionsPage = lazy(() => import("../pages/admin/positions/PositionsPage"));
 const AreasPage = lazy(() => import("../pages/admin/areas/AreasPage"));
 const SuppliesPage = lazy(() => import("../pages/admin/supplies/SuppliesPage"));
 const SupplyCategoriesPage = lazy(() =>
@@ -50,7 +49,7 @@ export const adminRoutes: RouteObject = {
     { path: "orders", element: <OrdersListPage /> },
     { path: "orders/:id", element: <OrderDetailPage /> },
     {
-      element: <ProtectedRoute allowedRoles={[PACKING_ROLE]} />,
+      element: <ProtectedRoute allowedRoles={ORDER_CREATOR_ROLES} />,
       children: [
         {
           path: "orders/create",
@@ -67,7 +66,7 @@ export const adminRoutes: RouteObject = {
       ],
     },
     {
-      element: <ProtectedRoute allowedRoles={MASTER_DATA_MANAGER_ROLES} />,
+      element: <ProtectedRoute allowedRoles={MASTER_DATA_VIEWER_ROLES} />,
       children: [
         { path: "supply-categories", element: <SupplyCategoriesPage /> },
         { path: "units", element: <UnitsPage /> },
@@ -101,11 +100,10 @@ export const adminRoutes: RouteObject = {
       children: [{ path: "milkrun", element: <MilkrunPage /> }],
     },
     {
-      element: <ProtectedRoute allowedRoles={USER_MANAGEMENT_ROLES} />,
+      element: <ProtectedRoute allowedRoles={USER_VIEWER_ROLES} />,
       children: [
         { path: "users", element: <UsersPage /> },
         { path: "roles", element: <RolesPage /> },
-        { path: "positions", element: <PositionsPage /> },
         { path: "areas", element: <AreasPage /> },
       ],
     },

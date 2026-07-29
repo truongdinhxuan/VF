@@ -18,23 +18,38 @@ import {
   inputClassName,
   labelClassName,
   RowActions,
+  StatusBadge,
 } from '../../../components/admin/crud/CrudPrimitives';
-import { ROLE_NAMES, type RoleName } from '../../../constants/roles';
+import {
+  ROLE_CODES,
+  SYSTEM_MANAGEMENT_ROLES,
+  type RoleCode,
+} from '../../../constants/roles';
+import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
 import { queryKeys } from '../../../lib/queryKeys';
 import type { PaginationParams } from '../../../types/pagination.types';
-import type { Role, RoleListParams } from '../../../types/roles';
+import type {
+  CreateRoleInput,
+  Role,
+  RoleListParams,
+  UpdateRoleInput,
+} from '../../../types/roles';
 
 interface RoleFormValues {
-  role_name: RoleName;
+  code: RoleCode;
+  name: string;
+  description: string;
+  is_active: boolean;
 }
 
 type RoleQuery = RoleListParams & PaginationParams;
+
 const initialQuery: RoleQuery = {
   page: 1,
   pageSize: 20,
-  sortBy: 'role_name',
+  sortBy: 'code',
   sortOrder: 'asc',
 };
 
@@ -54,28 +69,79 @@ const RoleForm = ({
     handleSubmit,
     formState: { errors },
   } = useForm<RoleFormValues>({
-    defaultValues: { role_name: role?.role_name ?? ROLE_NAMES[0] },
+    defaultValues: {
+      code: role?.code ?? ROLE_CODES[0],
+      name: role?.name ?? '',
+      description: role?.description ?? '',
+      is_active: role?.is_active ?? true,
+    },
   });
 
   return (
-    <form onSubmit={handleSubmit(onSave)}>
+    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
       <label className={labelClassName}>
-        <span>Tên role</span>
-        <select {...register('role_name', { required: 'Vui lòng chọn role.' })} className={inputClassName}>
-          {ROLE_NAMES.map((roleName) => (
-            <option key={roleName} value={roleName}>{roleName}</option>
+        <span>Code</span>
+        <select
+          {...register('code', { required: 'Vui lòng chọn role code.' })}
+          disabled={Boolean(role?.is_system)}
+          className={inputClassName}
+        >
+          {ROLE_CODES.map((code) => (
+            <option key={code} value={code}>{code}</option>
           ))}
         </select>
-        <FieldError message={errors.role_name?.message} />
+        <FieldError message={errors.code?.message} />
       </label>
-      <p className="mt-3 text-xs text-slate-500">Role được giới hạn theo cấu hình nghiệp vụ hiện tại của hệ thống.</p>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={role ? 'Lưu thay đổi' : 'Tạo role'} />
+      <label className={labelClassName}>
+        <span>Tên hiển thị</span>
+        <input
+          {...register('name', {
+            required: 'Vui lòng nhập tên role.',
+            setValueAs: (value: string) => value.trim(),
+          })}
+          className={inputClassName}
+        />
+        <FieldError message={errors.name?.message} />
+      </label>
+      <label className={labelClassName}>
+        <span>Mô tả</span>
+        <textarea
+          {...register('description', {
+            setValueAs: (value: string) => value.trim(),
+          })}
+          rows={3}
+          className={inputClassName}
+        />
+      </label>
+      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <input
+          type="checkbox"
+          {...register('is_active')}
+          className="h-4 w-4 rounded border-slate-300"
+        />
+        Đang hoạt động
+      </label>
+      {role?.is_system && (
+        <p className="text-xs text-slate-500">
+          Role hệ thống không cho phép thay đổi code hoặc xóa.
+        </p>
+      )}
+      <FormActions
+        busy={busy}
+        onCancel={onCancel}
+        submitLabel={role ? 'Lưu thay đổi' : 'Tạo role'}
+      />
     </form>
   );
 };
 
 const RolesPage = () => {
-  const loader = useCallback((query: RoleQuery, signal: AbortSignal) => listRoles(query, signal), []);
+  const { role: currentRole } = useAuth();
+  const canMutate = currentRole !== null && SYSTEM_MANAGEMENT_ROLES.includes(currentRole);
+  const loader = useCallback(
+    (query: RoleQuery, signal: AbortSignal) => listRoles(query, signal),
+    [],
+  );
   const resource = usePaginatedResource<Role, RoleQuery>({
     loader,
     initialQuery,
@@ -87,23 +153,27 @@ const RolesPage = () => {
   const debouncedSearch = useDebounce(search);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
-  useEffect(() => {
-    if ((resourceSearch ?? '') !== debouncedSearch.trim()) {
-      updateResourceQuery({ search: debouncedSearch.trim() || undefined });
-    }
-  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
   const [editing, setEditing] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
-  const openCreate = () => {
-    setEditing(null);
-    setFormOpen(true);
-  };
+  useEffect(() => {
+    const nextSearch = debouncedSearch.trim() || undefined;
+    if (resourceSearch !== nextSearch) updateResourceQuery({ search: nextSearch });
+  }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: RoleFormValues) => {
+    const input: CreateRoleInput = {
+      code: values.code,
+      name: values.name,
+      description: values.description || null,
+      is_active: values.is_active,
+    };
+    const action = editing
+      ? () => updateRole(editing.id, input satisfies UpdateRoleInput)
+      : () => createRole(input);
     const succeeded = await resource.runMutation(
-      () => editing ? updateRole(editing.id, values) : createRole(values),
+      action,
       editing ? 'Đã cập nhật role.' : 'Đã tạo role.',
       editing ? 'Không thể cập nhật role.' : 'Không thể tạo role.',
     );
@@ -111,23 +181,50 @@ const RolesPage = () => {
   };
 
   const columns: Column<Role>[] = [
-    { header: 'Tên role', accessor: 'role_name', sortKey: 'role_name' },
+    { header: 'Code', accessor: 'code', sortKey: 'code' },
+    { header: 'Tên', accessor: 'name', sortKey: 'name' },
     {
+      header: 'Mô tả',
+      accessor: 'description',
+      render: (item) => item.description || '—',
+    },
+    {
+      header: 'Loại',
+      accessor: 'is_system',
+      render: (item) => item.is_system ? 'Hệ thống' : 'Tùy chỉnh',
+    },
+    {
+      header: 'Trạng thái',
+      accessor: 'is_active',
+      sortKey: 'is_active',
+      render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} />,
+    },
+    ...(canMutate ? [{
       header: 'Thao tác',
       accessor: 'actions',
-      render: (role) => (
+      render: (item: Role) => (
         <RowActions
-          deleteLabel="Xóa"
-          onEdit={() => { setEditing(role); setFormOpen(true); }}
-          onDelete={() => setDeleteTarget(role)}
+          onEdit={() => {
+            setEditing(item);
+            setFormOpen(true);
+          }}
+          onDelete={item.is_system ? undefined : () => setDeleteTarget(item)}
         />
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Roles" description="Quản lý các vai trò được phép sử dụng trong hệ thống." onCreate={openCreate} createLabel="Thêm role" />
+      <CrudPageHeader
+        title="Roles"
+        description="Quản lý role bằng code nghiệp vụ; Material Control chỉ có quyền xem."
+        createLabel="Thêm role"
+        onCreate={canMutate ? () => {
+          setEditing(null);
+          setFormOpen(true);
+        } : undefined}
+      />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
@@ -136,8 +233,8 @@ const RolesPage = () => {
           columns={columns}
           data={resource.items}
           loading={resource.loading}
-          keyExtractor={(role) => role.id}
-          searchPlaceholder="Tìm role..."
+          keyExtractor={(item) => item.id}
+          searchPlaceholder="Tìm code, tên hoặc mô tả..."
           searchValue={search}
           onSearchChange={setSearch}
           pagination={resource.pagination}
@@ -149,15 +246,25 @@ const RolesPage = () => {
           emptyText="Không có role phù hợp."
         />
       )}
-      {formOpen && (
-        <CrudModal title={editing ? 'Chỉnh sửa role' : 'Tạo role'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
-          <RoleForm key={editing?.id ?? 'create'} role={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
+      {formOpen && canMutate && (
+        <CrudModal
+          title={editing ? 'Chỉnh sửa role' : 'Tạo role'}
+          busy={resource.mutating}
+          onClose={() => setFormOpen(false)}
+        >
+          <RoleForm
+            key={editing?.id ?? 'create'}
+            role={editing}
+            busy={resource.mutating}
+            onCancel={() => setFormOpen(false)}
+            onSave={save}
+          />
         </CrudModal>
       )}
-      {deleteTarget && (
+      {deleteTarget && canMutate && (
         <ConfirmDialog
           title="Xóa role?"
-          message={`Role “${deleteTarget.role_name}” chỉ được xóa khi chưa được sử dụng.`}
+          message={`Role “${deleteTarget.name}” chỉ được xóa khi không phải role hệ thống và chưa được sử dụng.`}
           confirmLabel="Xóa role"
           busy={resource.mutating}
           onCancel={() => setDeleteTarget(null)}
@@ -166,7 +273,9 @@ const RolesPage = () => {
             'Đã xóa role.',
             'Không thể xóa role.',
             { removeCurrentItem: true },
-          ).then((ok) => { if (ok) setDeleteTarget(null); })}
+          ).then((ok) => {
+            if (ok) setDeleteTarget(null);
+          })}
         />
       )}
     </div>

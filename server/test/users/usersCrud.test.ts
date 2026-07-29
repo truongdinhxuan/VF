@@ -30,10 +30,10 @@ describe('Phase 4 users CRUD contract', () => {
     assert.match(service, /Không thể tạo profile public\.users/);
   });
 
-  it('expands role, position and area in list/detail projections', () => {
+  it('expands role and area in list/detail projections without Position', () => {
     assert.match(service, /role:roles!users_role_id_fkey/);
-    assert.match(service, /position:positions!users_position_id_fkey/);
     assert.match(service, /area:areas!users_area_id_fkey/);
+    assert.doesNotMatch(service, /position_id|positions!/);
   });
 
   it('validates unique email/VinFast ID and every requested foreign key', () => {
@@ -41,7 +41,6 @@ describe('Phase 4 users CRUD contract', () => {
     assert.match(service, /VinFast ID đã tồn tại/);
     assert.match(service, /assertConfiguredRole/);
     assert.match(service, /assertArea/);
-    assert.match(service, /assertPosition/);
     assert.match(service, /assertManager/);
   });
 
@@ -56,7 +55,10 @@ describe('Phase 4 users CRUD contract', () => {
 
   it('deactivates the public profile instead of deleting Auth or profile data', () => {
     const deactivateBlock = service.match(/async deactivate\([\s\S]*?\n  \}/)?.[0] ?? '';
-    assert.match(deactivateBlock, /update\(\{ is_active: false \}\)/);
+    assert.match(
+      deactivateBlock,
+      /update\(\{ is_active: false, is_deleted: true \}\)/,
+    );
     assert.doesNotMatch(deactivateBlock, /deleteUser|\.delete\(/);
   });
 });

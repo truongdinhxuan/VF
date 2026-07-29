@@ -42,7 +42,8 @@ describe('user name and approval migration', () => {
 
 describe('verified-account access enforcement', () => {
   it('checks is_verified in the shared internal-data guard', () => {
-    assert.match(authMiddleware, /select\('area_id, is_active, is_verified,/i);
+    assert.match(authMiddleware, /is_verified/);
+    assert.match(authMiddleware, /is_deleted/);
     assert.match(authMiddleware, /if \(!publicData\.is_verified\)/i);
     assert.match(authMiddleware, /ACCOUNT_NOT_VERIFIED/);
   });

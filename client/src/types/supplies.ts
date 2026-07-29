@@ -3,6 +3,7 @@ import type { PaginatedListParams } from './pagination.types';
 export interface SupplyCategorySummary {
   id: string;
   code: string;
+  name: string;
   description: string | null;
 }
 
@@ -10,11 +11,14 @@ export interface UnitSummary {
   id: string;
   code: string;
   symbol: string;
+  name: string;
 }
 
 export interface Supply {
   id: string;
   code: string;
+  short_text: string;
+  translation_text: string | null;
   description: string | null;
   category_id: string;
   unit_id: string;
@@ -24,8 +28,8 @@ export interface Supply {
   max_stock?: number | null;
   safety_stock?: number | null;
   image_url?: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  created_at: string;
+  updated_at: string;
   category?: SupplyCategorySummary | null;
   unit?: UnitSummary | null;
 }
@@ -39,6 +43,8 @@ export interface SupplyListParams extends PaginatedListParams {
 
 export interface CreateSupplyInput {
   code: string;
+  short_text: string;
+  translation_text?: string | null;
   category_id: string;
   unit_id: string;
   description?: string | null;
@@ -52,5 +58,11 @@ export interface CreateSupplyInput {
 export type UpdateSupplyInput = Partial<CreateSupplyInput>;
 export type SupplyOption = Pick<
   Supply,
-  'id' | 'code' | 'description' | 'unit_id' | 'is_active' | 'is_deleted'
+  | 'id'
+  | 'code'
+  | 'short_text'
+  | 'description'
+  | 'unit_id'
+  | 'is_active'
+  | 'is_deleted'
 >;

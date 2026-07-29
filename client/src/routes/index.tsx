@@ -1,7 +1,7 @@
 import { lazy } from "react";
 import { Navigate, type RouteObject, useRoutes } from "react-router-dom";
 import { ProtectedRoute } from "../components/ProtectedRoute";
-import { ROLE_NAMES, STOCK_MUTATOR_ROLES } from "../constants/roles";
+import { ROLE_CODES, STOCK_MUTATOR_ROLES } from "../constants/roles";
 import { adminRoutes } from "./admin.routes";
 import { authRoutes } from "./auth.routes";
 
@@ -14,7 +14,7 @@ export const AppRoutes = () => {
     authRoutes,
     { path: "/403-unauthorized", element: <UnauthorizedPage /> },
     {
-      element: <ProtectedRoute allowedRoles={ROLE_NAMES} />,
+      element: <ProtectedRoute allowedRoles={ROLE_CODES} />,
       children: [adminRoutes],
     },
     {

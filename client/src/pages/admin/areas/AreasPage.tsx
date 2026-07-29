@@ -7,6 +7,8 @@ import {
   ErrorState, FieldError, FormActions, inputClassName, labelClassName,
   RowActions, StatusBadge,
 } from '../../../components/admin/crud/CrudPrimitives';
+import { MASTER_DATA_MANAGER_ROLES } from '../../../constants/roles';
+import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
 import { queryKeys } from '../../../lib/queryKeys';
@@ -21,7 +23,12 @@ const AreaForm = ({ area, busy, onCancel, onSave }: {
   onSave: (values: CreateAreaInput) => Promise<void>;
 }) => {
   const { register, handleSubmit, formState: { errors } } = useForm<CreateAreaInput>({
-    defaultValues: { code: area?.code ?? '', name: area?.name ?? '', is_active: area?.is_active ?? true },
+    defaultValues: {
+      code: area?.code ?? '',
+      name: area?.name ?? '',
+      description: area?.description ?? '',
+      is_active: area?.is_active ?? true,
+    },
   });
   return (
     <form onSubmit={handleSubmit(onSave)} className="space-y-4">
@@ -37,6 +44,16 @@ const AreaForm = ({ area, busy, onCancel, onSave }: {
           <FieldError message={errors.name?.message} />
         </label>
       </div>
+      <label className={labelClassName}>
+        <span>Mô tả</span>
+        <textarea
+          rows={3}
+          {...register('description', {
+            setValueAs: (value: string) => value.trim() || null,
+          })}
+          className={inputClassName}
+        />
+      </label>
       <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         <input type="checkbox" {...register('is_active')} className="h-4 w-4 rounded border-slate-300" /> Đang hoạt động
       </label>
@@ -46,6 +63,8 @@ const AreaForm = ({ area, busy, onCancel, onSave }: {
 };
 
 const AreasPage = () => {
+  const { role } = useAuth();
+  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
   const loader = useCallback((query: AreaQuery, signal: AbortSignal) => listAreas(query, signal), []);
   const resource = usePaginatedResource<Area, AreaQuery>({
     loader,
@@ -74,16 +93,17 @@ const AreasPage = () => {
   };
   const columns: Column<Area>[] = [
     { header: 'Mã', accessor: 'code', sortKey: 'code' }, { header: 'Tên khu vực', accessor: 'name', sortKey: 'name' },
+    { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (area) => area.description || '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (area) => <StatusBadge active={area.is_active} /> },
-    { header: 'Thao tác', accessor: 'actions', render: (area) => <RowActions onEdit={() => { setEditing(area); setFormOpen(true); }} onDelete={() => setDeleteTarget(area)} /> },
+    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (area: Area) => <RowActions onEdit={() => { setEditing(area); setFormOpen(true); }} onDelete={() => setDeleteTarget(area)} /> }] : []),
   ];
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={() => { setEditing(null); setFormOpen(true); }} />
+      <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc tên khu vực..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có khu vực phù hợp." />}
-      {formOpen && <CrudModal title={editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực'} busy={resource.mutating} onClose={() => setFormOpen(false)}><AreaForm key={editing?.id ?? 'create'} area={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-      {deleteTarget && <ConfirmDialog title="Ngừng hoạt động khu vực?" message={`Khu vực “${deleteTarget.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateArea(deleteTarget.id), 'Đã deactivate khu vực.', 'Không thể deactivate khu vực.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+      {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực'} busy={resource.mutating} onClose={() => setFormOpen(false)}><AreaForm key={editing?.id ?? 'create'} area={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+      {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động khu vực?" message={`Khu vực “${deleteTarget.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateArea(deleteTarget.id), 'Đã deactivate khu vực.', 'Không thể deactivate khu vực.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>
   );
 };

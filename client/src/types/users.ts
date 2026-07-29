@@ -1,15 +1,16 @@
-import type { RoleName } from '../constants/roles';
+import type { RoleCode } from '../constants/roles';
 import type { Area } from './areas';
-import type { Position } from './positions';
 import type { PaginatedListParams } from './pagination.types';
 
 export interface RoleSummary {
   id: string;
-  role_name: RoleName;
+  code: RoleCode;
+  name: string;
+  is_active: boolean;
+  is_deleted: boolean;
 }
 
 export type AreaSummary = Pick<Area, 'id' | 'code' | 'name'>;
-export type PositionSummary = Position;
 
 export interface UserRecord {
   id: string;
@@ -18,11 +19,11 @@ export interface UserRecord {
   phone_number: string | null;
   avatar_url: string | null;
   role_id: string;
-  position_id: string | null;
   area_id: string;
   managed_by_user_id: string | null;
   is_active: boolean;
   is_verified: boolean;
+  is_deleted: boolean;
   created_at: string;
   updated_at: string;
   first_name: string;
@@ -30,8 +31,7 @@ export interface UserRecord {
 }
 
 export interface UserProfile extends UserRecord {
-  role: RoleSummary | RoleName | string | null;
-  position?: PositionSummary | null;
+  role: RoleSummary | RoleCode | string | null;
   area: AreaSummary | null;
 }
 
@@ -44,7 +44,6 @@ export interface IUser {
 
 export interface UserListParams extends PaginatedListParams {
   roleId?: string;
-  positionId?: string;
   areaId?: string;
   isActive?: boolean;
 }
@@ -63,7 +62,6 @@ export interface CreateUserInput {
   phone_number?: string | null;
   avatar_url?: string | null;
   role_id: string;
-  position_id?: string | null;
   area_id: string;
   managed_by_user_id?: string | null;
 }
@@ -71,6 +69,7 @@ export interface CreateUserInput {
 export type UpdateUserInput = Partial<Omit<CreateUserInput, 'password'>> & {
   is_active?: boolean;
   is_verified?: boolean;
+  is_deleted?: boolean;
 };
 
 export interface UpdateUserPasswordInput {
@@ -91,3 +90,6 @@ export interface CreateUserResponse {
     publicData: UserProfile;
   };
 }
+
+export const canAccessInternalData = (user: UserProfile): boolean =>
+  user.is_active && user.is_verified && !user.is_deleted;

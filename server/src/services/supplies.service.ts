@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type {} from '../plugins/dbContext';
-import type { RoleName } from '../domain/enums';
+import type { RoleCode } from '../domain/enums';
 import { PACKING_ROLE } from '../domain/permissions';
 import type {
   CreateSupplyBody,
@@ -21,17 +21,18 @@ import { parsePagination, resolvePaginatedQueryResult } from '../utils/paginatio
 export { normalizeSearchQuery, parseActiveFilter } from './master-data.helpers';
 
 const RELATIONS = `
-  category:supply_categories!supplies_category_id_fkey(id, code, description),
-  unit:units!supplies_unit_id_fkey(id, code, symbol)
+  category:supply_categories!supplies_category_id_fkey(id, code, name, description),
+  unit:units!supplies_unit_id_fkey(id, code, symbol, name)
 `;
 
 const PACKING_SELECT = `
-  id, code, description, category_id, unit_id, is_active, is_deleted,
+  id, code, short_text, translation_text, description,
+  category_id, unit_id, is_active, is_deleted,
   ${RELATIONS}
 `;
 
 const FULL_SELECT = `
-  id, code, description, category_id, unit_id,
+  id, code, short_text, translation_text, description, category_id, unit_id,
   min_stock, max_stock, safety_stock, image_url, is_active, is_deleted,
   created_at, updated_at,
   ${RELATIONS}
@@ -44,7 +45,7 @@ export class SuppliesService {
     return this.fastify.supabaseAdmin;
   }
 
-  private selectFor(role: RoleName): string {
+  private selectFor(role: RoleCode): string {
     return role === PACKING_ROLE ? PACKING_SELECT : FULL_SELECT;
   }
 
@@ -86,7 +87,7 @@ export class SuppliesService {
     }
   }
 
-  async list(role: RoleName, query: SupplyListQuery) {
+  async list(role: RoleCode, query: SupplyListQuery) {
     const isActive = parseActiveFilter(query.isActive ?? query.is_active);
     const isDeleted = parseActiveFilter(query.isDeleted, false);
     const categoryId = assertFilterId(query.categoryId ?? query.category_id, 'categoryId');
@@ -109,7 +110,7 @@ export class SuppliesService {
     if (unitId) request = request.eq('unit_id', unitId);
     if (pagination.search) {
       request = request.or(
-        `code.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
+        `code.ilike.*${pagination.search}*,short_text.ilike.*${pagination.search}*,translation_text.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
       );
     }
     request = request.order(pagination.sortBy, {
@@ -124,7 +125,7 @@ export class SuppliesService {
     throw new Error('Unreachable pagination state');
   }
 
-  async get(role: RoleName, id: string) {
+  async get(role: RoleCode, id: string) {
     const { data, error } = await this.db
       .from('supplies')
       .select(this.selectFor(role))
@@ -141,6 +142,9 @@ export class SuppliesService {
     ]);
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
+      short_text: normalizeRequiredText(body.short_text, 'short_text', 255),
+      translation_text:
+        normalizeOptionalText(body.translation_text, 'translation_text') ?? null,
       description: normalizeOptionalText(body.description, 'description') ?? null,
       category_id: body.category_id,
       unit_id: body.unit_id,
@@ -174,7 +178,10 @@ export class SuppliesService {
       await this.assertCodeCanChange(id, code);
       payload.code = code;
     }
-    for (const field of ['description', 'image_url'] as const) {
+    if (body.short_text !== undefined) {
+      payload.short_text = normalizeRequiredText(body.short_text, 'short_text', 255);
+    }
+    for (const field of ['translation_text', 'description', 'image_url'] as const) {
       if (body[field] !== undefined) {
         payload[field] = normalizeOptionalText(body[field], field);
       }

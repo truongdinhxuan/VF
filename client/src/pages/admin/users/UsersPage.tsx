@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { listAreas } from '../../../api/areas.service';
-import { listPositions } from '../../../api/positions.service';
 import { listRoles } from '../../../api/roles.service';
 import { createUser, deactivateUser, getUsers, updateUser } from '../../../api/users.service';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
@@ -19,13 +18,14 @@ import {
   StatusBadge,
 } from '../../../components/admin/crud/CrudPrimitives';
 import { SelectSkeleton } from '../../../components/common/skeleton';
+import { USER_MANAGEMENT_ROLES } from '../../../constants/roles';
+import { useAuth } from '../../../context/AuthContext';
 import { useCrudResource } from '../../../hooks/useCrudResource';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { usePaginatedResource } from '../../../hooks/usePaginatedResource';
 import { useServerLookup } from '../../../hooks/useServerLookup';
 import { queryKeys } from '../../../lib/queryKeys';
 import type { Area } from '../../../types/areas';
-import type { Position } from '../../../types/positions';
 import type { PaginationParams } from '../../../types/pagination.types';
 import type { Role } from '../../../types/roles';
 import type { CreateUserInput, UpdateUserInput, UserListParams, UserProfile } from '../../../types/users';
@@ -42,7 +42,6 @@ interface UserFormValues {
   phone_number: string;
   avatar_url: string;
   role_id: string;
-  position_id: string;
   area_id: string;
   managed_by_user_id: string;
   is_active: boolean;
@@ -51,7 +50,6 @@ interface UserFormValues {
 
 interface UserReferenceData {
   roles: Role[];
-  positions: Position[];
   areas: Area[];
   users: UserProfile[];
   managerSearch: string;
@@ -62,12 +60,7 @@ interface UserReferenceData {
 
 const loadRoles = async (signal: AbortSignal) =>
   (await listRoles(
-    { page: 1, pageSize: 100, sortBy: 'role_name', sortOrder: 'asc' },
-    signal,
-  )).data;
-const loadPositions = async (signal: AbortSignal) =>
-  (await listPositions(
-    { page: 1, pageSize: 100, sortBy: 'position_name', sortOrder: 'asc' },
+    { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },
     signal,
   )).data;
 const loadAreas = async (signal: AbortSignal) =>
@@ -78,7 +71,7 @@ const loadAreas = async (signal: AbortSignal) =>
 
 const getRoleName = (user: UserProfile): string => {
   if (typeof user.role === 'string') return user.role;
-  return user.role?.role_name ?? '—';
+  return user.role ? `${user.role.name} (${user.role.code})` : '—';
 };
 
 const UserForm = ({ user, references, busy, onCancel, onSave }: {
@@ -104,7 +97,6 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
       phone_number: user?.phone_number ?? '',
       avatar_url: user?.avatar_url ?? '',
       role_id: user?.role_id ?? '',
-      position_id: user?.position_id ?? '',
       area_id: user?.area_id ?? '',
       managed_by_user_id: user?.managed_by_user_id ?? '',
       is_active: user?.is_active ?? true,
@@ -160,17 +152,9 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
           <span>Role</span>
           {references.loading && references.roles.length === 0 ? <SelectSkeleton label="Đang tải role" /> : <select {...register('role_id', { required: 'Vui lòng chọn role.' })} className={inputClassName}>
             <option value="">Chọn role</option>
-            {references.roles.map((role) => <option key={role.id} value={role.id}>{role.role_name}</option>)}
+            {references.roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}
           </select>}
           {!references.loading && references.roles.length === 0 ? <FieldError message="Không có role để lựa chọn." /> : <FieldError message={errors.role_id?.message} />}
-        </label>
-        <label className={labelClassName}>
-          <span>Position</span>
-          {references.loading && references.positions.length === 0 ? <SelectSkeleton label="Đang tải position" /> : <select {...register('position_id')} className={inputClassName}>
-            <option value="">Không chọn</option>
-            {references.positions.map((position) => <option key={position.id} value={position.id}>{position.position_name}</option>)}
-          </select>}
-          {!references.loading && references.positions.length === 0 && <p className="text-xs text-slate-500">Chưa có position; trường này có thể để trống.</p>}
         </label>
         <label className={labelClassName}>
           <span>Area</span>
@@ -217,6 +201,8 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
 };
 
 const UsersPage = () => {
+  const { role: currentRole } = useAuth();
+  const canMutate = currentRole !== null && USER_MANAGEMENT_ROLES.includes(currentRole);
   const loader = useCallback((query: UserQuery, signal: AbortSignal) => getUsers(query, signal), []);
   const resource = usePaginatedResource<UserProfile, UserQuery>({
     loader,
@@ -228,11 +214,6 @@ const UsersPage = () => {
     loadRoles,
     'Không thể tải danh sách role.',
     queryKeys.roles.lookup({ pageSize: 100 }),
-  );
-  const positions = useCrudResource(
-    loadPositions,
-    'Không thể tải danh sách position.',
-    queryKeys.positions.lookup({ pageSize: 100 }),
   );
   const areas = useCrudResource(
     loadAreas,
@@ -262,13 +243,12 @@ const UsersPage = () => {
 
   const references: UserReferenceData = {
     roles: roles.items,
-    positions: positions.items,
     areas: areas.items,
     users: managers.items,
     managerSearch: managers.search,
     setManagerSearch: managers.setSearch,
-    loading: roles.loading || positions.loading || areas.loading || managers.loading,
-    errors: [roles.error, positions.error, areas.error, managers.error].filter((error): error is string => Boolean(error)),
+    loading: roles.loading || areas.loading || managers.loading,
+    errors: [roles.error, areas.error, managers.error].filter((error): error is string => Boolean(error)),
   };
 
   useEffect(() => {
@@ -285,7 +265,6 @@ const UsersPage = () => {
       phone_number: values.phone_number.trim() || null,
       avatar_url: values.avatar_url.trim() || null,
       role_id: values.role_id,
-      position_id: values.position_id || null,
       area_id: values.area_id,
       managed_by_user_id: values.managed_by_user_id || null,
     };
@@ -305,20 +284,19 @@ const UsersPage = () => {
     { header: 'VinFast ID', accessor: 'vinfast_id', sortKey: 'vinfast_id' },
     { header: 'Họ và tên', accessor: 'first_name', sortKey: 'first_name', render: (user) => `${user.first_name} ${user.last_name}`.trim() },
     { header: 'Role', accessor: 'role_id', render: getRoleName },
-    { header: 'Position', accessor: 'position_id', render: (user) => user.position?.position_name ?? '—' },
     { header: 'Area', accessor: 'area_id', render: (user) => user.area ? `${user.area.code} - ${user.area.name}` : '—' },
     { header: 'Active', accessor: 'is_active', sortKey: 'is_active', render: (user) => <StatusBadge active={user.is_active} /> },
     { header: 'Duyệt', accessor: 'is_verified', render: (user) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_verified ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{user.is_verified ? 'Đã duyệt' : 'Chờ duyệt'}</span> },
-    { header: 'Thao tác', accessor: 'actions', render: (user) => user.is_active ? (
+    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => user.is_active ? (
       <RowActions onEdit={() => { setEditing(user); setFormOpen(true); }} onDelete={() => setDeactivateTarget(user)} />
     ) : (
       <div className="flex justify-end"><button type="button" onClick={() => { setEditing(user); setFormOpen(true); }} className="font-semibold text-blue-600 hover:text-blue-800">Sửa / kích hoạt</button></div>
-    ) },
+    ) }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Users" description="Quản lý hồ sơ, role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={() => { setEditing(null); setFormOpen(true); }} />
+      <CrudPageHeader title="Users" description="Quản lý hồ sơ, role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
@@ -338,20 +316,19 @@ const UsersPage = () => {
           sortOrder={resource.query.sortOrder}
           onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
           renderTopToolbar={() => <>
-            <select value={resource.query.roleId ?? ''} onChange={(event) => resource.updateQuery({ roleId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả role</option>{roles.items.map((role) => <option key={role.id} value={role.id}>{role.role_name}</option>)}</select>
-            <select value={resource.query.positionId ?? ''} onChange={(event) => resource.updateQuery({ positionId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả position</option>{positions.items.map((position) => <option key={position.id} value={position.id}>{position.position_name}</option>)}</select>
+            <select value={resource.query.roleId ?? ''} onChange={(event) => resource.updateQuery({ roleId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả role</option>{roles.items.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}</select>
             <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả area</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code}</option>)}</select>
             <select value={resource.query.isActive === undefined ? '' : String(resource.query.isActive)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === '' ? undefined : event.target.value === 'true' })} className={inputClassName}><option value="">Tất cả trạng thái</option><option value="true">Active</option><option value="false">Inactive</option></select>
           </>}
           emptyText="Không có người dùng phù hợp."
         />
       )}
-      {formOpen && (
+      {formOpen && canMutate && (
         <CrudModal title={editing ? 'Chỉnh sửa người dùng' : 'Tạo người dùng'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
           <UserForm key={editing?.id ?? 'create'} user={editing} references={references} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
         </CrudModal>
       )}
-      {deactivateTarget && (
+      {deactivateTarget && canMutate && (
         <ConfirmDialog title="Deactivate người dùng?" message={`Tài khoản “${deactivateTarget.email}” sẽ không còn được phép truy cập dữ liệu nội bộ.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeactivateTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUser(deactivateTarget.id), 'Đã deactivate người dùng.', 'Không thể deactivate người dùng.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeactivateTarget(null); })} />
       )}
     </div>

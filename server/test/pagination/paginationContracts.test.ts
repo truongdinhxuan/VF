@@ -118,7 +118,6 @@ describe('paginated list services', () => {
   const serviceFiles = [
     'users.service.ts',
     'roles.service.ts',
-    'positions.service.ts',
     'areas.service.ts',
     'supply-categories.service.ts',
     'units.service.ts',
@@ -136,7 +135,7 @@ describe('paginated list services', () => {
         'utf8',
       );
       assert.match(source, /count:\s*'exact'/);
-      assert.match(source, /\.order\(pagination\.sortBy/);
+      assert.match(source, /\.order\((?:pagination\.sortBy|sortBy)/);
       assert.match(source, /\.order\('id'/);
       assert.match(source, /\.range\(pagination\.from, pagination\.to\)/);
     });

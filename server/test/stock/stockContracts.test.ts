@@ -11,7 +11,7 @@ const balanceRoutes = read('src/routes/stock-balances/index.ts');
 const transactionRoutes = read('src/routes/stock-transactions/index.ts');
 const adjustmentRoutes = read('src/routes/stock-adjustments/index.ts');
 const adjustmentService = read('src/services/stock-adjustments.service.ts');
-const migration = read('supabase/migrations/202607200004_stock_adjustment_rpc.sql');
+const migration = read('supabase/migrations/202607290001_lookup_master_data_foundation.sql');
 
 describe('Phase 3 stock API contracts', () => {
   it('keeps StockBalances read-only and routes mutations through adjustments', () => {
@@ -26,16 +26,16 @@ describe('Phase 3 stock API contracts', () => {
   });
 
   it('uses only the current stock permission override', () => {
-    assert.equal(canViewStock('Material Control'), true);
-    assert.equal(canMutateStock('Material Control'), false);
-    assert.equal(canMutateStock('data Vật tư'), true);
-    assert.equal(canMutateStock('Tổ trưởng vật tư'), true);
-    assert.equal(canMutateStock('Admin'), false);
+    assert.equal(canViewStock('MATERIAL_CONTROL'), true);
+    assert.equal(canMutateStock('MATERIAL_CONTROL'), true);
+    assert.equal(canMutateStock('DATA_MATERIAL'), true);
+    assert.equal(canMutateStock('MATERIAL_LEADER'), true);
+    assert.equal(canMutateStock('ADMIN'), true);
   });
 
   it('calls one atomic RPC instead of writing balance and transaction separately', () => {
     assert.equal(
-      (adjustmentService.match(/\.rpc\(['"]apply_stock_adjustment['"]/g) ?? []).length,
+      (adjustmentService.match(/\.rpc\(['"]apply_stock_adjustment_v2['"]/g) ?? []).length,
       1,
     );
     assert.doesNotMatch(adjustmentService, /\.from\(['"]stock_balances['"]\)/);
@@ -43,14 +43,14 @@ describe('Phase 3 stock API contracts', () => {
   });
 
   it('locks the balance and records exact before/after values atomically', () => {
-    assert.match(migration, /create or replace function public\.apply_stock_adjustment/i);
+    assert.match(migration, /create or replace function public\.apply_stock_adjustment_v2/i);
     assert.match(migration, /for update/i);
-    assert.match(migration, /update public\.stock_balances[\s\S]*returning \* into v_balance/i);
+    assert.match(migration, /update public\.stock_balances[\s\S]*set quantity = v_after/i);
     assert.match(migration, /insert into public\.stock_transactions/i);
-    assert.match(migration, /v_before_quantity/);
-    assert.match(migration, /v_after_quantity/);
+    assert.match(migration, /v_before/);
+    assert.match(migration, /v_after/);
     assert.match(migration, /Insufficient stock/i);
-    assert.match(migration, /reason is required/i);
+    assert.match(migration, /adjustment_reason_id or reason_note is required/i);
   });
 
   it('restricts the RPC to the service role', () => {

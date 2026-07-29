@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/202607280001_fix_order_issue_source_area.sql'),
+  resolve(
+    process.cwd(),
+    'supabase/migrations/202607290001_lookup_master_data_foundation.sql',
+  ),
   'utf8',
 );
 const orderService = readFileSync(
@@ -31,9 +34,9 @@ describe('atomic order issue migration', () => {
   });
 
   it('only issues from an active location in the order source area', () => {
-    assert.match(migration, /location\.area_id\s*=\s*v_order\.from_area_id/i);
-    assert.match(migration, /location\.is_active\s*=\s*true/i);
-    assert.match(migration, /does not belong to the order source area/i);
+    assert.match(migration, /l\.area_id\s*=\s*v_order\.from_area_id/i);
+    assert.match(migration, /l\.is_active\s*=\s*true/i);
+    assert.match(migration, /outside the source area/i);
   });
 
   it('deducts and records stock against the order source area', () => {

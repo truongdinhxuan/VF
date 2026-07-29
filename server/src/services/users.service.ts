@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { normalizeRoleName } from '../domain/enums';
+import { normalizeRoleCode } from '../domain/enums';
 import type {
   AreaRecord,
-  PositionRecord,
   RoleRecord,
   UserRecord,
 } from '../interfaces/database';
@@ -45,7 +44,7 @@ const userDatabaseError = (
     return userFail(409, 'Email hoặc VinFast ID đã tồn tại');
   }
   if (error?.code === '23503') {
-    return userFail(400, 'role_id, position_id, area_id hoặc managed_by_user_id không hợp lệ');
+    return userFail(400, 'role_id, area_id hoặc managed_by_user_id không hợp lệ');
   }
   return userFail(400, error?.message ?? fallback);
 };
@@ -76,14 +75,12 @@ export const USER_COLUMN_SELECT = USER_COLUMNS.join(', ');
 
 export const USER_EXPANDED_SELECT = `
   ${USER_COLUMN_SELECT},
-  role:roles!users_role_id_fkey(id, role_name),
-  position:positions!users_position_id_fkey(id, position_name),
+  role:roles!users_role_id_fkey(id, code, name, is_active, is_deleted),
   area:areas!users_area_id_fkey(id, code, name, is_active)
 `;
 
 interface UserProfileRecord extends UserRecord {
-  role: Pick<RoleRecord, 'id' | 'role_name'> | null;
-  position: Pick<PositionRecord, 'id' | 'position_name'> | null;
+  role: Pick<RoleRecord, 'id' | 'code' | 'name' | 'is_active' | 'is_deleted'> | null;
   area: Pick<AreaRecord, 'id' | 'code' | 'name' | 'is_active'> | null;
 }
 
@@ -130,10 +127,12 @@ export class UsersService {
   private async assertConfiguredRole(roleId: string): Promise<void> {
     const { data, error } = await this.db
       .from('roles')
-      .select('role_name')
+      .select('code')
       .eq('id', roleId)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
       .single();
-    if (error || !normalizeRoleName(data?.role_name)) {
+    if (error || !normalizeRoleCode(data?.code)) {
       userFail(400, 'role_id không thuộc một trong 5 role hợp lệ');
     }
   }
@@ -144,17 +143,9 @@ export class UsersService {
       .select('id')
       .eq('id', areaId)
       .eq('is_active', true)
+      .eq('is_deleted', false)
       .single();
     if (error || !data) userFail(400, 'area_id không tồn tại hoặc không active');
-  }
-
-  private async assertPosition(positionId: string): Promise<void> {
-    const { data, error } = await this.db
-      .from('positions')
-      .select('id')
-      .eq('id', positionId)
-      .single();
-    if (error || !data) userFail(400, 'position_id không tồn tại');
   }
 
   private async assertManager(managerId: string): Promise<void> {
@@ -163,6 +154,7 @@ export class UsersService {
       .select('id')
       .eq('id', managerId)
       .eq('is_active', true)
+      .eq('is_deleted', false)
       .single();
     if (error || !data) {
       userFail(400, 'managed_by_user_id không tồn tại hoặc không active');
@@ -170,13 +162,12 @@ export class UsersService {
   }
 
   private async validateReferences(
-    body: Pick<CreateUserBody, 'role_id' | 'area_id' | 'position_id' | 'managed_by_user_id'>
-      | Pick<UpdateUserBody, 'role_id' | 'area_id' | 'position_id' | 'managed_by_user_id'>,
+    body: Pick<CreateUserBody, 'role_id' | 'area_id' | 'managed_by_user_id'>
+      | Pick<UpdateUserBody, 'role_id' | 'area_id' | 'managed_by_user_id'>,
   ): Promise<void> {
     const checks: Promise<void>[] = [];
     if (body.role_id !== undefined) checks.push(this.assertConfiguredRole(body.role_id));
     if (body.area_id !== undefined) checks.push(this.assertArea(body.area_id));
-    if (body.position_id) checks.push(this.assertPosition(body.position_id));
     if (body.managed_by_user_id) checks.push(this.assertManager(body.managed_by_user_id));
     await Promise.all(checks);
   }
@@ -190,7 +181,8 @@ export class UsersService {
     const active = parseUserActiveFilter(query.isActive);
     let request = this.db
       .from('users')
-      .select(USER_EXPANDED_SELECT, { count: 'exact' });
+      .select(USER_EXPANDED_SELECT, { count: 'exact' })
+      .eq('is_deleted', false);
     if (pagination.search) {
       const conditions = [
         `email.ilike.*${pagination.search}*`,
@@ -203,7 +195,6 @@ export class UsersService {
       request = request.or(conditions.join(','));
     }
     if (query.roleId) request = request.eq('role_id', query.roleId);
-    if (query.positionId) request = request.eq('position_id', query.positionId);
     if (query.areaId) request = request.eq('area_id', query.areaId);
     if (active !== null) request = request.eq('is_active', active);
     request = request.order(pagination.sortBy, {
@@ -225,6 +216,7 @@ export class UsersService {
       .from('users')
       .select(USER_EXPANDED_SELECT)
       .eq('id', id)
+      .eq('is_deleted', false)
       .single();
     if (error || !data) userDatabaseError(error, 'Không tìm thấy người dùng');
     return data as unknown as UserProfileRecord;
@@ -267,11 +259,11 @@ export class UsersService {
         phone_number: normalizeNullableText(body.phone_number) ?? null,
         avatar_url: normalizeNullableText(body.avatar_url) ?? null,
         role_id: body.role_id,
-        position_id: body.position_id ?? null,
         area_id: body.area_id,
         managed_by_user_id: body.managed_by_user_id ?? null,
         is_verified: false,
         is_active: true,
+        is_deleted: false,
       })
       .select(USER_EXPANDED_SELECT)
       .single();
@@ -303,6 +295,7 @@ export class UsersService {
       .from('users')
       .select(USER_COLUMN_SELECT)
       .eq('id', id)
+      .eq('is_deleted', false)
       .single();
     const currentUser = current as unknown as UserRecord | null;
     if (currentError || !currentUser) {
@@ -329,13 +322,13 @@ export class UsersService {
       payload.avatar_url = normalizeNullableText(body.avatar_url);
     }
     if (body.role_id !== undefined) payload.role_id = body.role_id;
-    if (body.position_id !== undefined) payload.position_id = body.position_id;
     if (body.area_id !== undefined) payload.area_id = body.area_id;
     if (body.managed_by_user_id !== undefined) {
       payload.managed_by_user_id = body.managed_by_user_id;
     }
     if (body.is_active !== undefined) payload.is_active = body.is_active;
     if (body.is_verified !== undefined) payload.is_verified = body.is_verified;
+    if (body.is_deleted !== undefined) payload.is_deleted = body.is_deleted;
 
     if (Object.keys(payload).length === 0) userFail(400, 'Không có dữ liệu để cập nhật');
 
@@ -379,7 +372,7 @@ export class UsersService {
   async deactivate(id: string): Promise<UserProfileRecord> {
     const { data, error } = await this.db
       .from('users')
-      .update({ is_active: false })
+      .update({ is_active: false, is_deleted: true })
       .eq('id', id)
       .select(USER_EXPANDED_SELECT)
       .single();

@@ -14,8 +14,16 @@ import {
 
 const SELECT = `
   id, supply_id, area_id, storage_location_id, order_id, order_item_id,
-  type, quantity, before_quantity, after_quantity, reason, note, created_by, created_at,
-  supply:supplies!stock_transactions_supply_id_fkey(id, code, description),
+  transaction_type_id, reason_id, reason_note,
+  quantity, before_quantity, after_quantity, reason, note, created_by,
+  is_active, is_deleted, created_at, updated_at,
+  transaction_type:stock_transaction_types!stock_transactions_transaction_type_id_fkey(
+    id, code, name, effect, requires_reason
+  ),
+  adjustment_reason:adjustment_reasons!stock_transactions_reason_id_fkey(
+    id, code, name, requires_note
+  ),
+  supply:supplies!stock_transactions_supply_id_fkey(id, code, short_text, description),
   area:areas!stock_transactions_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_transactions_storage_location_id_fkey(id, code, name),
   creator:users!stock_transactions_created_by_fkey(id, first_name, last_name, vinfast_id)
@@ -26,6 +34,18 @@ export class StockTransactionsService {
 
   private get db() {
     return this.fastify.supabaseAdmin;
+  }
+
+  private async resolveTransactionTypeId(code: string): Promise<string> {
+    const { data, error } = await this.db
+      .from('stock_transaction_types')
+      .select('id')
+      .eq('code', code.trim().toUpperCase())
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .single();
+    if (error || !data) stockFail(400, 'Invalid stock transaction type code');
+    return (data as { id: string }).id;
   }
 
   async list(query: StockTransactionListQuery = {}) {
@@ -47,9 +67,12 @@ export class StockTransactionsService {
       stockFail(400, 'date_from must be before or equal to date_to');
     }
 
+    const transactionTypeId = query.transactionTypeId
+      ?? (query.type ? await this.resolveTransactionTypeId(query.type) : undefined);
     let request = this.db
       .from('stock_transactions')
-      .select(SELECT, { count: 'exact' });
+      .select(SELECT, { count: 'exact' })
+      .eq('is_deleted', false);
 
     const supplyId = query.supplyId ?? query.supply_id;
     const areaId = query.areaId ?? query.area_id;
@@ -59,7 +82,9 @@ export class StockTransactionsService {
       request = request.eq('storage_location_id', query.storageLocationId);
     }
     if (query.createdBy) request = request.eq('created_by', query.createdBy);
-    if (query.type) request = request.eq('type', query.type);
+    if (transactionTypeId) {
+      request = request.eq('transaction_type_id', transactionTypeId);
+    }
     if (query.order_id) request = request.eq('order_id', query.order_id);
     if (dateFrom) request = request.gte('created_at', dateFrom);
     if (dateTo) request = request.lte('created_at', dateTo);
@@ -79,10 +104,13 @@ export class StockTransactionsService {
       ].filter((condition): condition is string => Boolean(condition));
       request = request.or(conditions.join(','));
     }
-    request = request.order(pagination.sortBy, {
+    const sortBy = pagination.sortBy === 'type'
+      ? 'transaction_type_id'
+      : pagination.sortBy;
+    request = request.order(sortBy, {
       ascending: pagination.sortOrder === 'asc',
     });
-    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    if (sortBy !== 'id') request = request.order('id', { ascending: true });
 
     const { data, error, count } = await request.range(pagination.from, pagination.to);
     const result = resolvePaginatedQueryResult({ data, error, count }, pagination);

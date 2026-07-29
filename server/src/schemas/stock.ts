@@ -1,5 +1,4 @@
 import type { FastifySchema } from 'fastify';
-import { STOCK_TRANSACTION_TYPES } from '../domain/enums';
 import { STOCK_ADJUSTMENT_TYPES } from '../domain/stockRules';
 import { createListQuerySchema } from './pagination';
 
@@ -10,7 +9,7 @@ export const STOCK_BALANCE_SORT_FIELDS = [
   'created_at', 'updated_at',
 ] as const;
 export const STOCK_TRANSACTION_SORT_FIELDS = [
-  'id', 'type', 'quantity', 'before_quantity', 'after_quantity', 'supply_id',
+  'id', 'type', 'transaction_type_id', 'quantity', 'before_quantity', 'after_quantity', 'supply_id',
   'area_id', 'storage_location_id', 'created_by', 'created_at',
 ] as const;
 
@@ -44,7 +43,8 @@ export const stockTransactionListSchema = createListQuerySchema(
     areaId: uuid,
     storageLocationId: uuid,
     createdBy: uuid,
-    type: { type: 'string', enum: [...STOCK_TRANSACTION_TYPES] },
+    type: { type: 'string', minLength: 1, maxLength: 100 },
+    transactionTypeId: uuid,
     order_id: uuid,
     date_from: { type: 'string', minLength: 10, maxLength: 40 },
     date_to: { type: 'string', minLength: 10, maxLength: 40 },
@@ -61,17 +61,22 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
       'supply_id',
       'area_id',
       'storage_location_id',
-      'type',
       'quantity',
-      'reason',
     ],
     properties: {
       supply_id: uuid,
       area_id: uuid,
       storage_location_id: uuid,
       type: { type: 'string', enum: [...STOCK_ADJUSTMENT_TYPES] },
+      transaction_type_id: uuid,
+      transaction_type_code: {
+        type: 'string',
+        enum: [...STOCK_ADJUSTMENT_TYPES],
+      },
+      adjustment_reason_id: uuid,
       quantity: { type: 'number', exclusiveMinimum: 0 },
       reason: { type: 'string', minLength: 1, maxLength: 2000 },
+      reason_note: { type: 'string', minLength: 1, maxLength: 2000 },
       note: {
         anyOf: [
           { type: 'string', maxLength: 2000 },
@@ -79,5 +84,10 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
         ],
       },
     },
+    anyOf: [
+      { required: ['transaction_type_id'] },
+      { required: ['transaction_type_code'] },
+      { required: ['type'] },
+    ],
   },
 };

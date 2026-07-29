@@ -17,7 +17,6 @@ export const USER_SORT_FIELDS = [
 
 export const userListSchema = createListQuerySchema(USER_SORT_FIELDS, {
   roleId: uuid,
-  positionId: uuid,
   areaId: uuid,
   isActive: optionalBoolean,
 });
@@ -30,7 +29,6 @@ const userProfileProperties = {
   phone_number: nullableText,
   avatar_url: nullableText,
   role_id: uuid,
-  position_id: nullableUuid,
   area_id: uuid,
   managed_by_user_id: nullableUuid,
 } as const;
@@ -39,6 +37,7 @@ const userMutableProperties = {
   ...userProfileProperties,
   is_active: { type: 'boolean' },
   is_verified: { type: 'boolean' },
+  is_deleted: { type: 'boolean' },
 } as const;
 
 export const createUserSchema: FastifySchema = {

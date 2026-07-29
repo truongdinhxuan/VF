@@ -17,6 +17,8 @@ export interface StockBalance {
   area_id: string;
   storage_location_id: string;
   quantity: number;
+  is_active: boolean;
+  is_deleted: boolean;
   created_at: string;
   updated_at: string;
   supply: StockBalanceSupplySummary | null;

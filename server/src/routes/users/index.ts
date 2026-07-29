@@ -5,8 +5,11 @@ import { getUserById } from '../../controllers/users/detail';
 import { userIndex } from '../../controllers/users/list';
 import { userUpdate } from '../../controllers/users/update';
 import { userUpdatePassword } from '../../controllers/users/update-password';
-import { ROLE_NAMES } from '../../domain/enums';
-import { USER_MANAGER_ROLES } from '../../domain/permissions';
+import { ROLE_CODES } from '../../domain/enums';
+import {
+  USER_MANAGER_ROLES,
+  USER_VIEWER_ROLES,
+} from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
   createUserSchema,
@@ -19,13 +22,13 @@ import {
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(USER_MANAGER_ROLES), schema: userListSchema },
+    { preHandler: verifyTokenAndRole(USER_VIEWER_ROLES), schema: userListSchema },
     userIndex,
   );
   fastify.get(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(USER_MANAGER_ROLES),
+      preHandler: verifyTokenAndRole(USER_VIEWER_ROLES),
       schema: userIdParamsSchema,
     },
     getUserById,
@@ -57,7 +60,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id/password',
     {
-      preHandler: verifyTokenAndRole(ROLE_NAMES),
+      preHandler: verifyTokenAndRole(ROLE_CODES),
       schema: updatePasswordSchema,
     },
     userUpdatePassword,

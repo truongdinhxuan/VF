@@ -6,7 +6,7 @@ import {
   listSupplies,
   updateSupply,
 } from '../../controllers/supplies';
-import { ROLE_NAMES } from '../../domain/enums';
+import { ROLE_CODES } from '../../domain/enums';
 import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
@@ -19,12 +19,12 @@ import {
 const supplyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: supplyListQuerySchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: supplyListQuerySchema },
     listSupplies,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: idParamsSchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
     getSupply,
   );
   fastify.post(

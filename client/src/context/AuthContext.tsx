@@ -1,13 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getMyProfile } from "../api/users.service";
-import { resolveRoleName, type RoleName } from "../constants/roles";
+import { resolveRoleCode, type RoleCode } from "../constants/roles";
 import { queryClient } from "../lib/queryClient";
 import type { IUser } from "../types/users";
 
 interface AuthContextType {
   user: IUser | null;
-  role: RoleName | null;
+  role: RoleCode | null;
   loading: boolean;
   loginContext: (token: string) => Promise<void>;
   logoutContext: () => void;
@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
-  const role = resolveRoleName(user?.publicData.role);
+  const role = resolveRoleCode(user?.publicData.role);
 
   return (
     <AuthContext.Provider value={{ user, role, loading, loginContext, logoutContext }}>

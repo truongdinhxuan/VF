@@ -1,12 +1,20 @@
 import type { FastifyInstance } from 'fastify';
-import { normalizeRoleName, ROLE_NAMES } from '../domain/enums';
+import { normalizeRoleCode } from '../domain/enums';
 import type { CreateRoleBody, UpdateRoleBody } from '../interfaces/master-data';
 import type { RoleListQuery } from '../interfaces/master-data';
 import { ROLE_SORT_FIELDS } from '../schemas/master-data';
-import { createPaginatedResult, parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
-import { databaseError, fail } from './master-data.helpers';
+import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
+import {
+  databaseError,
+  fail,
+  normalizeOptionalText,
+  normalizeRequiredText,
+  parseActiveFilter,
+} from './master-data.helpers';
 
-const SELECT = 'id, role_name';
+const SELECT = `
+  id, code, name, description, is_system, is_active, is_deleted, created_at, updated_at
+`;
 
 export class RolesService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -18,21 +26,21 @@ export class RolesService {
   async list(query: RoleListQuery = {}) {
     const pagination = parsePagination(query, {
       allowedSortBy: ROLE_SORT_FIELDS,
-      defaultSortBy: 'role_name',
+      defaultSortBy: 'code',
       defaultSortOrder: 'asc',
     });
+    const active = parseActiveFilter(query.isActive);
     let request = this.db
       .from('roles')
-      .select(SELECT, { count: 'exact' });
+      .select(SELECT, { count: 'exact' })
+      .eq('is_deleted', false)
+      .eq('is_active', active);
     if (pagination.search) {
-      const normalizedSearch = pagination.search.toLocaleLowerCase('vi');
-      const matchingRoles = ROLE_NAMES.filter((roleName) =>
-        roleName.toLocaleLowerCase('vi').includes(normalizedSearch),
-      );
-      if (matchingRoles.length === 0) {
-        return createPaginatedResult([], pagination, 0);
-      }
-      request = request.in('role_name', matchingRoles);
+      request = request.or([
+        `code.ilike.*${pagination.search}*`,
+        `name.ilike.*${pagination.search}*`,
+        `description.ilike.*${pagination.search}*`,
+      ].join(','));
     }
     request = request.order(pagination.sortBy, {
       ascending: pagination.sortOrder === 'asc',
@@ -46,37 +54,84 @@ export class RolesService {
   }
 
   async get(id: string) {
-    const { data, error } = await this.db.from('roles').select(SELECT).eq('id', id).single();
+    const { data, error } = await this.db
+      .from('roles')
+      .select(SELECT)
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single();
     if (error || !data) databaseError(error, 'Không tìm thấy role');
     return data;
   }
 
   async create(body: CreateRoleBody) {
-    const roleName = normalizeRoleName(body.role_name);
-    if (!roleName) fail(400, 'role_name không thuộc danh sách role được cấu hình');
+    const code = normalizeRoleCode(body.code);
+    if (!code) fail(400, 'code không thuộc danh sách role được cấu hình');
     const { data, error } = await this.db
       .from('roles')
-      .insert({ role_name: roleName })
+      .insert({
+        code,
+        name: normalizeRequiredText(body.name, 'name'),
+        description: normalizeOptionalText(body.description, 'description') ?? null,
+        is_system: true,
+        is_active: body.is_active ?? true,
+        is_deleted: false,
+      })
       .select(SELECT)
       .single();
-    if (error || !data) databaseError(error, 'role_name đã tồn tại');
+    if (error || !data) databaseError(error, 'code role đã tồn tại');
     return data;
   }
 
   async update(id: string, body: UpdateRoleBody) {
-    const roleName = normalizeRoleName(body.role_name);
-    if (!roleName) fail(400, 'role_name không thuộc danh sách role được cấu hình');
+    const { data: current, error: currentError } = await this.db
+      .from('roles')
+      .select('id, code, is_system')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single();
+    if (currentError || !current) {
+      return databaseError(currentError, 'Không tìm thấy role');
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (body.code !== undefined) {
+      const code = normalizeRoleCode(body.code);
+      if (!code) fail(400, 'code không thuộc danh sách role được cấu hình');
+      if (current.is_system && code !== current.code) {
+        fail(409, 'Không thể thay đổi code của role hệ thống');
+      }
+      payload.code = code;
+    }
+    if (body.name !== undefined) payload.name = normalizeRequiredText(body.name, 'name');
+    if (body.description !== undefined) {
+      payload.description = normalizeOptionalText(body.description, 'description');
+    }
+    if (body.is_active !== undefined) payload.is_active = body.is_active;
+    if (Object.keys(payload).length === 0) fail(400, 'Không có dữ liệu để cập nhật');
+
     const { data, error } = await this.db
       .from('roles')
-      .update({ role_name: roleName })
+      .update(payload)
       .eq('id', id)
       .select(SELECT)
       .single();
-    if (error || !data) databaseError(error, 'Không thể cập nhật role hoặc role_name đã tồn tại');
+    if (error || !data) databaseError(error, 'Không thể cập nhật role hoặc code đã tồn tại');
     return data;
   }
 
   async remove(id: string) {
+    const { data: role, error: roleError } = await this.db
+      .from('roles')
+      .select('id, is_system')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single();
+    if (roleError || !role) {
+      return databaseError(roleError, 'Không tìm thấy role');
+    }
+    if (role.is_system) fail(409, 'Không thể xóa role hệ thống');
+
     const { count, error: usageError } = await this.db
       .from('users')
       .select('id', { count: 'exact', head: true })
@@ -86,7 +141,7 @@ export class RolesService {
 
     const { data, error } = await this.db
       .from('roles')
-      .delete()
+      .update({ is_active: false, is_deleted: true })
       .eq('id', id)
       .select(SELECT)
       .single();

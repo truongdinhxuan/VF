@@ -16,7 +16,6 @@ const read = (path: string): string =>
 
 const routeFiles = {
   roles: read('src/routes/roles/index.ts'),
-  positions: read('src/routes/positions/index.ts'),
   areas: read('src/routes/areas/index.ts'),
   categories: read('src/routes/supply-categories/index.ts'),
   units: read('src/routes/units/index.ts'),
@@ -35,12 +34,12 @@ describe('master data CRUD contracts', () => {
   });
 
   it('keeps system and catalog mutation permissions separated', () => {
-    assert.equal(canManageSystem('Admin'), true);
-    assert.equal(canManageSystem('data Vật tư'), false);
-    assert.equal(canManageMasterData('Admin'), true);
-    assert.equal(canManageMasterData('data Vật tư'), true);
-    assert.equal(canManageMasterData('Tổ trưởng vật tư'), true);
-    assert.equal(canManageMasterData('Material Control'), false);
+    assert.equal(canManageSystem('ADMIN'), true);
+    assert.equal(canManageSystem('DATA_MATERIAL'), false);
+    assert.equal(canManageMasterData('ADMIN'), true);
+    assert.equal(canManageMasterData('DATA_MATERIAL'), true);
+    assert.equal(canManageMasterData('MATERIAL_LEADER'), true);
+    assert.equal(canManageMasterData('MATERIAL_CONTROL'), false);
   });
 
   it('maps unique constraint failures to a stable HTTP 409 error', () => {
@@ -60,19 +59,15 @@ describe('master data CRUD contracts', () => {
     const supplies = read('src/services/supplies.service.ts');
     const locations = read('src/services/storage-locations.service.ts');
 
-    for (const source of [areas, locations]) {
-      assert.match(source, /update\(\{ is_active: false \}\)/);
-    }
-    for (const source of [categories, units, supplies]) {
+    for (const source of [areas, categories, units, supplies, locations]) {
       assert.match(source, /update\(\{ is_active: false, is_deleted: true \}\)/);
     }
   });
 
-  it('only hard-deletes Role and Position after checking user references', () => {
+  it('protects system roles and removes Position from the application', () => {
     const roles = read('src/services/roles.service.ts');
-    const positions = read('src/services/positions.service.ts');
-    assert.match(roles, /from\('users'\)[\s\S]*?\.eq\('role_id', id\)/);
-    assert.match(positions, /from\('users'\)[\s\S]*?\.eq\('position_id', id\)/);
+    assert.match(roles, /role\.is_system/);
+    assert.doesNotMatch(read('src/interfaces/users.ts'), /position_id/);
   });
 
   it('validates active supply foreign keys and protects used codes/locations', () => {

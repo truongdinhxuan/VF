@@ -13,7 +13,6 @@ const resourceKeys = (resource: string) => ({
 export const queryKeys = {
   users: resourceKeys('users'),
   roles: resourceKeys('roles'),
-  positions: resourceKeys('positions'),
   areas: resourceKeys('areas'),
   supplyCategories: resourceKeys('supply-categories'),
   units: resourceKeys('units'),
@@ -22,4 +21,8 @@ export const queryKeys = {
   stockBalances: resourceKeys('stock-balances'),
   stockTransactions: resourceKeys('stock-transactions'),
   orders: resourceKeys('orders'),
+  orderStatuses: resourceKeys('order-statuses'),
+  stockTransactionTypes: resourceKeys('stock-transaction-types'),
+  adjustmentReasons: resourceKeys('adjustment-reasons'),
+  orderRevisionActions: resourceKeys('order-revision-actions'),
 } as const;

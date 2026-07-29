@@ -1,4 +1,3 @@
-import type { OrderStatus } from '../domain/enums';
 import type { PaginationQuery } from './pagination';
 
 export interface OrderListItemInput {
@@ -53,7 +52,7 @@ export interface CancelOrderBody {
 }
 
 export interface OrderListQuery extends PaginationQuery {
-  status?: OrderStatus;
+  status?: string;
   from_area_id?: string;
   to_area_id?: string;
   date?: string;

@@ -9,10 +9,11 @@ import {
 } from './stock-search';
 
 const SELECT = `
-  id, supply_id, area_id, storage_location_id, quantity, created_at, updated_at,
+  id, supply_id, area_id, storage_location_id, quantity,
+  is_active, is_deleted, created_at, updated_at,
   supply:supplies!stock_balances_supply_id_fkey(
-    id, code, description, min_stock,
-    unit:units!supplies_unit_id_fkey(id, code, symbol)
+    id, code, short_text, description, min_stock,
+    unit:units!supplies_unit_id_fkey(id, code, symbol, name)
   ),
   area:areas!stock_balances_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_balances_storage_location_id_fkey(id, code, name)
@@ -33,7 +34,8 @@ export class StockBalancesService {
     });
     let request = this.db
       .from('stock_balances')
-      .select(SELECT, { count: 'exact' });
+      .select(SELECT, { count: 'exact' })
+      .eq('is_deleted', false);
 
     const supplyId = query.supplyId ?? query.supply_id;
     const areaId = query.areaId ?? query.area_id;

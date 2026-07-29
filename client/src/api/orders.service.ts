@@ -6,6 +6,7 @@ import type {
   IssueOrderInput,
   Order,
   OrderListParams,
+  OrderStatus,
   ReceiveOrderInput,
   RejectOrderInput,
   UpdateOrderInput,
@@ -17,42 +18,54 @@ interface ApiEnvelope<T> {
 }
 
 const get = <T>(response: ApiEnvelope<T>): T => response.data;
+const normalizeOrder = (order: Order): Order => (
+  order.status_lookup?.code
+    ? { ...order, status: order.status_lookup.code as OrderStatus }
+    : order
+);
 
 export const listOrders = async (
   params: OrderListParams = {},
   signal?: AbortSignal,
-): Promise<PaginatedResponse<Order>> =>
-  instance.get<PaginatedResponse<Order>, PaginatedResponse<Order>>('orders', { params, signal });
+): Promise<PaginatedResponse<Order>> => {
+  const response = await instance.get<
+    PaginatedResponse<Order>,
+    PaginatedResponse<Order>
+  >('orders', { params, signal });
+  return { ...response, data: response.data.map(normalizeOrder) };
+};
 
 export const getOrder = async (id: string, signal?: AbortSignal): Promise<Order> =>
-  get(await instance.get<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, { signal }));
+  normalizeOrder(
+    get(await instance.get<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, { signal })),
+  );
 
 export const createOrder = async (input: CreateOrderInput): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>("orders", input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>("orders", input)));
 
 export const updateOrder = async (id: string, input: UpdateOrderInput): Promise<Order> =>
-  get(await instance.patch<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, input));
+  normalizeOrder(get(await instance.patch<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, input)));
 
 export const submitOrder = async (id: string): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/submit`));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/submit`)));
 
 export const approveOrder = async (id: string, input: ApproveOrderInput): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/approve`, input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/approve`, input)));
 
 export const rejectOrder = async (id: string, input: RejectOrderInput): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/reject`, input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/reject`, input)));
 
 export const issueOrder = async (id: string, input: IssueOrderInput): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/issue`, input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/issue`, input)));
 
 export const receiveOrder = async (
   id: string,
   input: ReceiveOrderInput = {},
 ): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/receive`, input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/receive`, input)));
 
 export const completeOrder = async (id: string): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/complete`));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/complete`)));
 
 export const cancelOrder = async (id: string, input: CancelOrderInput = {}): Promise<Order> =>
-  get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/cancel`, input));
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/cancel`, input)));

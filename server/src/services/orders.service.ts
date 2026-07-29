@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { ORDER_STATUSES, type OrderStatus, type RoleName } from '../domain/enums';
+import {
+  ORDER_STATUS,
+  ROLE_CODE,
+  type OrderStatus,
+  type RoleCode,
+} from '../domain/enums';
 import {
   assertApprovedQuantity,
   assertCancelReason,
@@ -32,7 +37,7 @@ import { parsePagination, resolvePaginatedQueryResult } from '../utils/paginatio
 
 export interface OrderActor {
   id: string;
-  role: RoleName;
+  role: RoleCode;
   areaId: string;
 }
 
@@ -66,7 +71,14 @@ interface OrderData {
   id: string;
   requested_by: string;
   from_area_id: string;
-  status: OrderStatus;
+  status_id: string;
+  status_lookup: {
+    id: string;
+    code: OrderStatus;
+    name: string;
+    is_active: boolean;
+    is_deleted: boolean;
+  };
   order_items: OrderItemData[];
   [key: string]: unknown;
 }
@@ -137,6 +149,9 @@ const ORDER_USER_SELECT = 'id, vinfast_id, email, first_name, last_name';
 
 const ORDER_LIST_SELECT = `
   *,
+  status_lookup:order_statuses!orders_status_id_fkey(
+    id, code, name, is_active, is_deleted
+  ),
   from_area:areas!orders_from_area_id_fkey(id, code, name),
   to_area:areas!orders_to_area_id_fkey(id, code, name),
   requester:users!orders_requested_by_fkey(${ORDER_USER_SELECT}),
@@ -151,6 +166,15 @@ const ORDER_DETAIL_SELECT = `
     *,
     supply:supplies!order_items_supply_id_fkey(id, code, description),
     unit:units!order_items_unit_id_fkey(id, code, symbol)
+  ),
+  order_revisions(
+    id, order_id, action_id, old_status_id, new_status_id, reason, created_by, created_at,
+    action:order_revision_actions!order_revisions_action_id_fkey(id, code, name),
+    creator:users!order_revisions_created_by_fkey(
+      ${ORDER_USER_SELECT}
+    ),
+    old_status:order_statuses!order_revisions_old_status_id_fkey(id, code, name),
+    new_status:order_statuses!order_revisions_new_status_id_fkey(id, code, name)
   )
 `;
 
@@ -161,11 +185,33 @@ export class OrderService {
     return this.fastify.supabaseAdmin;
   }
 
+  private statusCode(order: OrderData): OrderStatus {
+    const status = order.status_lookup;
+    if (!status || !status.is_active || status.is_deleted) {
+      serviceError(409, 'Order status lookup is inactive or missing');
+    }
+    return status.code;
+  }
+
+  private async getStatusId(code: string): Promise<string> {
+    const normalized = code.trim().toUpperCase();
+    const { data, error } = await this.db
+      .from('order_statuses')
+      .select('id')
+      .eq('code', normalized)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .single();
+    if (error || !data) serviceError(400, `Invalid order status code: ${normalized}`);
+    return data.id as string;
+  }
+
   private async findOrder(orderId: string): Promise<OrderData> {
     const { data, error } = await this.db
       .from('orders')
       .select(ORDER_DETAIL_SELECT)
       .eq('id', orderId)
+      .eq('is_deleted', false)
       .single();
 
     if (error || !data) databaseError(error, 'Cannot get order');
@@ -184,6 +230,7 @@ export class OrderService {
         storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
       `)
       .eq('area_id', order.from_area_id)
+      .eq('is_deleted', false)
       .eq('storage_location.is_active', true)
       .in('supply_id', supplyIds);
 
@@ -212,6 +259,7 @@ export class OrderService {
   }
 
   private assertPackingOwner(actor: OrderActor, order: OrderData): void {
+    if (actor.role === ROLE_CODE.ADMIN) return;
     if (
       actor.role !== PACKING_ROLE ||
       order.requested_by !== actor.id ||
@@ -275,11 +323,12 @@ export class OrderService {
     if (!body?.from_area_id || !body.to_area_id) {
       serviceError(400, 'from_area_id and to_area_id are required');
     }
-    if (body.from_area_id !== actor.areaId) {
+    if (actor.role !== ROLE_CODE.ADMIN && body.from_area_id !== actor.areaId) {
       serviceError(403, 'from_area_id must equal the packing user area_id');
     }
 
     const items = await this.prepareOrderItems(body.order_list);
+    const draftStatusId = await this.getStatusId(ORDER_STATUS.DRAFT);
     const { data: order, error: orderError } = await this.db
       .from('orders')
       .insert({
@@ -287,7 +336,7 @@ export class OrderService {
         from_area_id: body.from_area_id,
         to_area_id: body.to_area_id,
         requested_by: actor.id,
-        status: 'DRAFT',
+        status_id: draftStatusId,
         note: body.note ?? null,
       })
       .select('*')
@@ -317,7 +366,7 @@ export class OrderService {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
     try {
-      assertOrderActionAllowed(order.status, 'edit');
+      assertOrderActionAllowed(this.statusCode(order), 'edit');
     } catch (error) {
       translateRuleError(error);
     }
@@ -361,25 +410,24 @@ export class OrderService {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
     try {
-      assertOrderActionAllowed(order.status, 'submit');
+      assertOrderActionAllowed(this.statusCode(order), 'submit');
     } catch (error) {
       translateRuleError(error);
     }
     if (!order.order_items.length) serviceError(400, 'Order must contain at least one item');
 
+    const pendingStatusId = await this.getStatusId(ORDER_STATUS.PENDING);
     const { error } = await this.db
       .from('orders')
-      .update({ status: 'PENDING', submitted_at: new Date().toISOString() })
+      .update({ status_id: pendingStatusId, submitted_at: new Date().toISOString() })
       .eq('id', orderId)
-      .eq('status', 'DRAFT');
+      .eq('status_id', order.status_id);
     if (error) databaseError(error, 'Cannot submit order');
     return this.findOrder(orderId);
   }
 
   async list(actor: OrderActor, query: OrderListQuery = {}) {
-    if (query.status && !ORDER_STATUSES.includes(query.status)) {
-      serviceError(400, 'Invalid order status');
-    }
+    const statusId = query.status ? await this.getStatusId(query.status) : null;
     const pagination = parsePagination(query, {
       allowedSortBy: ORDER_SORT_FIELDS,
       defaultSortBy: 'created_at',
@@ -388,9 +436,10 @@ export class OrderService {
 
     let request = this.db
       .from('orders')
-      .select(ORDER_LIST_SELECT, { count: 'exact' });
+      .select(ORDER_LIST_SELECT, { count: 'exact' })
+      .eq('is_deleted', false);
     if (actor.role === PACKING_ROLE) request = request.eq('from_area_id', actor.areaId);
-    if (query.status) request = request.eq('status', query.status);
+    if (statusId) request = request.eq('status_id', statusId);
     if (query.from_area_id) request = request.eq('from_area_id', query.from_area_id);
     if (query.to_area_id) request = request.eq('to_area_id', query.to_area_id);
     if (query.createdBy) request = request.eq('requested_by', query.createdBy);
@@ -420,10 +469,11 @@ export class OrderService {
       if (dateFrom) request = request.gte('created_at', dateFrom);
       if (dateTo) request = request.lte('created_at', dateTo);
     }
-    request = request.order(pagination.sortBy, {
+    const sortBy = pagination.sortBy === 'status' ? 'status_id' : pagination.sortBy;
+    request = request.order(sortBy, {
       ascending: pagination.sortOrder === 'asc',
     });
-    if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
+    if (sortBy !== 'id') request = request.order('id', { ascending: true });
 
     const { data, error, count } = await request.range(pagination.from, pagination.to);
     const result = resolvePaginatedQueryResult({ data, error, count }, pagination);
@@ -442,7 +492,7 @@ export class OrderService {
     if (!canApproveOrder(actor.role)) serviceError(403, 'Role cannot approve orders');
     const order = await this.findOrder(orderId);
     try {
-      assertOrderActionAllowed(order.status, 'approve');
+      assertOrderActionAllowed(this.statusCode(order), 'approve');
     } catch (error) {
       translateRuleError(error);
     }
@@ -476,22 +526,18 @@ export class OrderService {
       }
     });
 
-    const { error: itemError } = await this.db
-      .from('order_items')
-      .upsert(updates, { onConflict: 'id' });
-    if (itemError) databaseError(itemError, 'Cannot approve order items');
-
-    const { error: orderError } = await this.db
-      .from('orders')
-      .update({
-        status: 'APPROVED',
-        approved_by: actor.id,
-        approved_at: new Date().toISOString(),
-        ...(body.note !== undefined ? { note: body.note } : {}),
-      })
-      .eq('id', orderId)
-      .eq('status', 'PENDING');
-    if (orderError) databaseError(orderError, 'Cannot approve order');
+    const { error: orderError } = await this.db.rpc('review_order', {
+      p_order_id: orderId,
+      p_actor_id: actor.id,
+      p_action_code: 'APPROVE',
+      p_items: updates.map((item) => ({
+        order_item_id: item.id,
+        quantity_approved: item.quantity_approved,
+      })),
+      p_reason: null,
+      p_note: body.note ?? null,
+    });
+    if (orderError) rpcError(orderError);
     return this.findOrder(orderId);
   }
 
@@ -499,14 +545,17 @@ export class OrderService {
     if (!canApproveOrder(actor.role)) serviceError(403, 'Role cannot reject orders');
     const order = await this.findOrder(orderId);
     try {
-      assertOrderActionAllowed(order.status, 'reject');
+      assertOrderActionAllowed(this.statusCode(order), 'reject');
       const rejectedReason = assertRejectedReason(body?.rejected_reason);
-      const { error } = await this.db
-        .from('orders')
-        .update({ status: 'REJECTED', rejected_reason: rejectedReason })
-        .eq('id', orderId)
-        .eq('status', 'PENDING');
-      if (error) databaseError(error, 'Cannot reject order');
+      const { error } = await this.db.rpc('review_order', {
+        p_order_id: orderId,
+        p_actor_id: actor.id,
+        p_action_code: 'REJECT',
+        p_items: null,
+        p_reason: rejectedReason,
+        p_note: null,
+      });
+      if (error) rpcError(error);
     } catch (error) {
       translateRuleError(error);
     }
@@ -517,7 +566,7 @@ export class OrderService {
     if (!canIssueOrder(actor.role)) serviceError(403, 'Role cannot issue orders');
     const order = await this.findOrder(orderId);
     try {
-      assertOrderActionAllowed(order.status, 'issue');
+      assertOrderActionAllowed(this.statusCode(order), 'issue');
       if (!Array.isArray(body?.items) || body.items.length === 0) {
         serviceError(400, 'items must contain at least one issue');
       }
@@ -557,20 +606,21 @@ export class OrderService {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
     try {
-      assertOrderActionAllowed(order.status, 'receive');
+      assertOrderActionAllowed(this.statusCode(order), 'receive');
     } catch (error) {
       translateRuleError(error);
     }
 
+    const receivedStatusId = await this.getStatusId(ORDER_STATUS.RECEIVED);
     const { error } = await this.db
       .from('orders')
       .update({
-        status: 'RECEIVED',
+        status_id: receivedStatusId,
         received_at: new Date().toISOString(),
         ...(body?.taken_away_by ? { taken_away_by: body.taken_away_by } : {}),
       })
       .eq('id', orderId)
-      .eq('status', 'ISSUED');
+      .eq('status_id', order.status_id);
     if (error) databaseError(error, 'Cannot receive order');
     return this.findOrder(orderId);
   }
@@ -579,7 +629,7 @@ export class OrderService {
     if (!canIssueOrder(actor.role)) serviceError(403, 'Role cannot complete orders');
     const order = await this.findOrder(orderId);
     try {
-      assertOrderActionAllowed(order.status, 'complete');
+      assertOrderActionAllowed(this.statusCode(order), 'complete');
     } catch (error) {
       translateRuleError(error);
     }
@@ -591,11 +641,12 @@ export class OrderService {
     );
     if (hasPendingIssue) serviceError(409, 'Order still has quantity pending issue');
 
+    const completedStatusId = await this.getStatusId(ORDER_STATUS.COMPLETED);
     const { error } = await this.db
       .from('orders')
-      .update({ status: 'COMPLETED' })
+      .update({ status_id: completedStatusId, completed_at: new Date().toISOString() })
       .eq('id', orderId)
-      .in('status', ['RECEIVED', 'ISSUED']);
+      .eq('status_id', order.status_id);
     if (error) databaseError(error, 'Cannot complete order');
     return this.findOrder(orderId);
   }
@@ -604,13 +655,15 @@ export class OrderService {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
     try {
-      assertOrderActionAllowed(order.status, 'cancel');
-      const cancelReason = assertCancelReason(order.status, body?.cancel_reason);
+      const currentStatus = this.statusCode(order);
+      assertOrderActionAllowed(currentStatus, 'cancel');
+      const cancelReason = assertCancelReason(currentStatus, body?.cancel_reason);
+      const cancelledStatusId = await this.getStatusId(ORDER_STATUS.CANCELLED);
       const { error } = await this.db
         .from('orders')
-        .update({ status: 'CANCELLED', cancel_reason: cancelReason })
+        .update({ status_id: cancelledStatusId, cancel_reason: cancelReason })
         .eq('id', orderId)
-        .in('status', ['DRAFT', 'PENDING']);
+        .eq('status_id', order.status_id);
       if (error) databaseError(error, 'Cannot cancel order');
     } catch (error) {
       translateRuleError(error);

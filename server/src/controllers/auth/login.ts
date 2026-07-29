@@ -19,7 +19,7 @@ export const loginUser = async (request: FastifyRequest, reply: FastifyReply) =>
 
     const publicData = await getUserProfileById(request.server, authData.user.id);
 
-    if (!publicData || !publicData.is_active) {
+    if (!publicData || !publicData.is_active || publicData.is_deleted) {
       return reply.code(403).send({ error: 'Tài khoản không tồn tại hoặc đã bị khóa' });
     }
 

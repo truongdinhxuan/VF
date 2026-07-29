@@ -6,7 +6,7 @@ import {
   listUnits,
   updateUnit,
 } from '../../controllers/units';
-import { ROLE_NAMES } from '../../domain/enums';
+import { ROLE_CODES } from '../../domain/enums';
 import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
@@ -19,12 +19,12 @@ import {
 const unitRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: unitListQuerySchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: unitListQuerySchema },
     listUnits,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: idParamsSchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
     getUnit,
   );
   fastify.post(

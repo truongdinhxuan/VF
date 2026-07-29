@@ -18,6 +18,7 @@ import { OrderStatusBadge } from "../../../components/admin/orders/OrderStatusBa
 import { StockAvailabilityWarning } from "../../../components/admin/orders/StockAvailabilityWarning";
 import { CardSkeleton, SelectSkeleton } from "../../../components/common/skeleton";
 import {
+  ADMIN_ROLE,
   ORDER_APPROVER_ROLES,
   ORDER_ISSUER_ROLES,
   PACKING_ROLE,
@@ -98,9 +99,14 @@ const OrderDetailPage = () => {
   const actorId = user?.publicData.id ?? user?.id;
   const isPackingOwner = Boolean(
     order &&
-    role === PACKING_ROLE &&
-    actorId === order.requested_by &&
-    user?.publicData.area_id === order.from_area_id,
+    (
+      role === ADMIN_ROLE ||
+      (
+        role === PACKING_ROLE &&
+        actorId === order.requested_by &&
+        user?.publicData.area_id === order.from_area_id
+      )
+    ),
   );
   const isApprover = Boolean(role && ORDER_APPROVER_ROLES.includes(role));
   const isIssuer = Boolean(role && ORDER_ISSUER_ROLES.includes(role));
@@ -257,6 +263,9 @@ const OrderDetailPage = () => {
   const requesterName = order.requester
     ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
     : order.requested_by;
+  const reviewRevisions = (order.order_revisions ?? []).filter(
+    (revision) => revision.action?.code === 'APPROVE' || revision.action?.code === 'REJECT',
+  );
 
   return (
     <section className="space-y-5">
@@ -287,6 +296,33 @@ const OrderDetailPage = () => {
           </div>
         ))}
       </div>
+
+      {reviewRevisions.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-bold text-slate-900">Lịch sử duyệt / từ chối</h2>
+          <div className="mt-3 space-y-2">
+            {reviewRevisions.map((revision) => {
+              const actorName = revision.creator
+                ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
+                : revision.created_by;
+              return (
+                <div
+                  key={revision.id}
+                  className="flex flex-col gap-1 rounded-xl bg-slate-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="font-semibold text-slate-800">
+                    {revision.action?.name ?? revision.action?.code} — {actorName}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {formatDate(revision.created_at)}
+                    {revision.reason ? ` — ${revision.reason}` : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {stockShortageItems.length > 0 && (
         <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

@@ -6,8 +6,8 @@ import {
   listAreas,
   updateArea,
 } from '../../controllers/areas';
-import { ROLE_NAMES } from '../../domain/enums';
-import { SYSTEM_MANAGER_ROLES } from '../../domain/permissions';
+import { ROLE_CODES } from '../../domain/enums';
+import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
 import {
   areaListQuerySchema,
@@ -19,27 +19,27 @@ import {
 const areaRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: areaListQuerySchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: areaListQuerySchema },
     listAreas,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_NAMES), schema: idParamsSchema },
+    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
     getArea,
   );
   fastify.post(
     '/',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: areaCreateSchema },
+    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: areaCreateSchema },
     createArea,
   );
   fastify.patch(
     '/:id',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: areaUpdateSchema },
+    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: areaUpdateSchema },
     updateArea,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: idParamsSchema },
+    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: idParamsSchema },
     deleteArea,
   );
 };

@@ -12,6 +12,7 @@ export interface CreateStorageLocationBody {
   code: string;
   area_id: string;
   name?: string | null;
+  description?: string | null;
   is_active?: boolean;
 }
 

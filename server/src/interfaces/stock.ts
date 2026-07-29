@@ -17,7 +17,8 @@ export interface StockTransactionListQuery extends PaginationQuery {
   area_id?: string;
   areaId?: string;
   storageLocationId?: string;
-  type?: StockTransactionType;
+  type?: string;
+  transactionTypeId?: string;
   order_id?: string;
   createdBy?: string;
   date_from?: string;
@@ -35,9 +36,13 @@ export interface CreateStockAdjustmentBody {
   supply_id: string;
   area_id: string;
   storage_location_id: string;
-  type: StockAdjustmentType;
+  type?: StockAdjustmentType;
+  transaction_type_id?: string;
+  transaction_type_code?: StockAdjustmentType;
+  adjustment_reason_id?: string;
   quantity: number;
-  reason: string;
+  reason?: string;
+  reason_note?: string;
   note?: string | null;
 }
 

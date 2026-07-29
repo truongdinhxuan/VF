@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   ORDER_STATUSES,
-  ROLE_NAMES,
+  ROLE_CODES,
   STOCK_TRANSACTION_TYPES,
 } from '../../src/domain/enums';
 import {
@@ -16,10 +16,13 @@ import {
   canViewStock,
 } from '../../src/domain/permissions';
 
-const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/202607200003_backend_foundation.sql'),
+const migration = [
+  '202607200003_backend_foundation.sql',
+  '202607290001_lookup_master_data_foundation.sql',
+].map((file) => readFileSync(
+  resolve(process.cwd(), 'supabase/migrations', file),
   'utf8',
-);
+)).join('\n');
 const databaseInterfaces = readFileSync(
   resolve(process.cwd(), 'src/interfaces/database.ts'),
   'utf8',
@@ -38,13 +41,13 @@ const interfaceProperties = (name: string): string[] => {
 };
 
 describe('Phase 1 backend foundation', () => {
-  it('uses the selected five roles and workbook enums', () => {
-    assert.deepEqual(ROLE_NAMES, [
-      'data Đóng gói',
-      'data Vật tư',
-      'Tổ trưởng vật tư',
-      'Material Control',
-      'Admin',
+  it('uses lookup codes for the selected five roles and workflow values', () => {
+    assert.deepEqual(ROLE_CODES, [
+      'ADMIN',
+      'DATA_PACKING',
+      'DATA_MATERIAL',
+      'MATERIAL_LEADER',
+      'MATERIAL_CONTROL',
     ]);
     assert.deepEqual(ORDER_STATUSES, [
       'DRAFT',
@@ -62,64 +65,74 @@ describe('Phase 1 backend foundation', () => {
       'RECEIVE',
       'ADJUSTMENT_IN',
       'ADJUSTMENT_OUT',
-      'TRANSFER_OUT',
       'TRANSFER_IN',
+      'TRANSFER_OUT',
       'IMPORT',
       'EXPORT',
+      'REVERSAL_IN',
+      'REVERSAL_OUT',
     ]);
   });
 
-  it('keeps Material Control read/approve only and Admin system-only', () => {
-    assert.equal(canViewStock('Material Control'), true);
-    assert.equal(canApproveOrder('Material Control'), true);
-    assert.equal(canMutateStock('Material Control'), false);
-    assert.equal(canIssueOrder('Material Control'), false);
-    assert.equal(canManageUsers('Material Control'), false);
-    assert.equal(canManageSystem('Material Control'), false);
-    assert.equal(canManageUsers('Admin'), true);
-    assert.equal(canManageSystem('Admin'), true);
+  it('keeps Material Control management read-only while allowing stock/review actions', () => {
+    assert.equal(canViewStock('MATERIAL_CONTROL'), true);
+    assert.equal(canApproveOrder('MATERIAL_CONTROL'), true);
+    assert.equal(canMutateStock('MATERIAL_CONTROL'), true);
+    assert.equal(canIssueOrder('MATERIAL_CONTROL'), true);
+    assert.equal(canManageUsers('MATERIAL_CONTROL'), false);
+    assert.equal(canManageSystem('MATERIAL_CONTROL'), false);
+    assert.equal(canManageUsers('ADMIN'), true);
+    assert.equal(canManageSystem('ADMIN'), true);
   });
 
   it('defines exact record fields for all requested foundation models', () => {
-    assert.deepEqual(interfaceProperties('RoleRecord'), ['id', 'role_name']);
-    assert.deepEqual(interfaceProperties('PositionRecord'), ['id', 'position_name']);
-    assert.deepEqual(interfaceProperties('AreaRecord'), ['id', 'code', 'name', 'is_active']);
+    assert.deepEqual(interfaceProperties('RoleRecord'), [
+      'id', 'code', 'name', 'description', 'is_system', 'is_active',
+      'is_deleted', 'created_at', 'updated_at',
+    ]);
+    assert.deepEqual(interfaceProperties('AreaRecord'), [
+      'id', 'code', 'name', 'description', 'is_active', 'is_deleted',
+      'created_at', 'updated_at',
+    ]);
     assert.deepEqual(interfaceProperties('UserRecord'), [
       'id', 'vinfast_id', 'email', 'phone_number', 'avatar_url', 'role_id',
-      'position_id', 'area_id', 'managed_by_user_id', 'is_active', 'is_verified',
+      'area_id', 'managed_by_user_id', 'is_active', 'is_verified', 'is_deleted',
       'created_at', 'updated_at', 'first_name', 'last_name',
     ]);
     assert.deepEqual(interfaceProperties('SupplyCategoryRecord'), [
-      'id', 'code', 'description', 'is_active', 'created_at', 'updated_at',
+      'id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at',
       'is_deleted',
     ]);
     assert.deepEqual(interfaceProperties('UnitRecord'), [
-      'id', 'code', 'symbol', 'is_active', 'updated_at', 'created_at',
+      'id', 'code', 'symbol', 'name', 'description', 'is_active',
+      'updated_at', 'created_at',
       'is_deleted',
     ]);
     assert.deepEqual(interfaceProperties('SupplyRecord'), [
-      'id', 'code', 'description', 'category_id', 'unit_id', 'min_stock',
+      'id', 'code', 'short_text', 'translation_text', 'description',
+      'category_id', 'unit_id', 'min_stock',
       'max_stock', 'safety_stock', 'image_url', 'is_active', 'is_deleted',
       'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StorageLocationRecord'), [
-      'id', 'code', 'area_id', 'name', 'is_active',
+      'id', 'code', 'area_id', 'name', 'description', 'is_active',
+      'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StockBalanceRecord'), [
       'id', 'supply_id', 'area_id', 'storage_location_id', 'quantity',
-      'created_at', 'updated_at',
+      'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StockTransactionRecord'), [
       'id', 'supply_id', 'area_id', 'storage_location_id', 'order_id',
-      'order_item_id', 'type', 'quantity', 'before_quantity', 'after_quantity',
-      'reason', 'note', 'created_by', 'created_at',
+      'order_item_id', 'transaction_type_id', 'quantity', 'before_quantity',
+      'after_quantity', 'reason_id', 'reason_note', 'note', 'created_by',
+      'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
   });
 
   it('enforces all requested unique keys without deleting data', () => {
     for (const indexName of [
-      'roles_role_name_key',
-      'positions_position_name_key',
+      'roles_code_key',
       'areas_code_key',
       'supply_categories_code_key',
       'units_code_key',
@@ -129,7 +142,7 @@ describe('Phase 1 backend foundation', () => {
     ]) {
       assert.match(migration, new RegExp(`unique index if not exists ${indexName}`, 'i'));
     }
-    assert.doesNotMatch(migration, /\b(?:delete|truncate)\s+from\b/i);
+    assert.doesNotMatch(migration, /\btruncate\s+/i);
   });
 
   it('enforces location and area consistency for stock records', () => {
@@ -137,6 +150,31 @@ describe('Phase 1 backend foundation', () => {
     assert.match(migration, /stock_transactions_location_area_fkey/i);
     assert.match(migration, /validate constraint stock_balances_location_area_fkey/i);
     assert.match(migration, /validate constraint stock_transactions_location_area_fkey/i);
+  });
+
+  it('cuts over legacy database enums to lookup foreign keys', () => {
+    assert.match(
+      migration,
+      /alter table public\.roles drop column if exists role_name/i,
+    );
+    assert.match(
+      migration,
+      /alter table public\.orders drop column if exists status/i,
+    );
+    assert.match(
+      migration,
+      /alter table public\.stock_transactions drop column if exists type/i,
+    );
+    for (const typeName of [
+      'role_name',
+      'order_status',
+      'stock_transaction_type',
+    ]) {
+      assert.match(
+        migration,
+        new RegExp(`drop type if exists public\\.${typeName}`, 'i'),
+      );
+    }
   });
 
   it('allows PATCH through CORS for existing and future API routes', () => {

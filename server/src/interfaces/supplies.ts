@@ -12,6 +12,8 @@ export interface SupplyListQuery extends PaginationQuery {
 
 export interface CreateSupplyBody {
   code: string;
+  short_text: string;
+  translation_text?: string | null;
   description?: string | null;
   category_id: string;
   unit_id: string;

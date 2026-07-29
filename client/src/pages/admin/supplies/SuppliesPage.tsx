@@ -46,6 +46,8 @@ const SupplyForm = ({ item, busy, categories, categoriesLoading, categoriesError
   const { register, handleSubmit, formState: { errors } } = useForm<CreateSupplyInput>({
     defaultValues: {
       code: item?.code ?? '',
+      short_text: item?.short_text ?? '',
+      translation_text: item?.translation_text ?? '',
       category_id: item?.category_id ?? '',
       unit_id: item?.unit_id ?? '',
       description: item?.description ?? '',
@@ -61,21 +63,41 @@ const SupplyForm = ({ item, busy, categories, categoriesLoading, categoriesError
   return <form onSubmit={handleSubmit(onSave)} className="space-y-4">
     <div className="grid gap-4 sm:grid-cols-2">
       <label className={labelClassName}><span>Mã vật tư</span><input {...register('code', { required: 'Vui lòng nhập mã vật tư.', setValueAs: (value: string) => value.trim() })} className={inputClassName} /><FieldError message={errors.code?.message} /></label>
+      <label className={labelClassName}>
+        <span>Tên ngắn</span>
+        <input
+          {...register('short_text', {
+            required: 'Vui lòng nhập tên ngắn vật tư.',
+            setValueAs: (value: string) => value.trim(),
+          })}
+          className={inputClassName}
+        />
+        <FieldError message={errors.short_text?.message} />
+      </label>
       <label className={labelClassName}><span>Danh mục</span>
         {categoriesLoading && categories.length === 0 ? <SelectSkeleton label="Đang tải danh mục vật tư" /> : <select {...register('category_id', { required: 'Vui lòng chọn danh mục.' })} disabled={Boolean(categoriesError)} className={inputClassName}>
           <option value="">Chọn danh mục</option>
-          {categories.map((category) => <option key={category.id} value={category.id}>{category.code}{category.description ? ` - ${category.description}` : ''}</option>)}
+          {categories.map((category) => <option key={category.id} value={category.id}>{category.code} - {category.name}</option>)}
         </select>}
         {categoriesError ? <FieldError message={`Không tải được danh mục: ${categoriesError}`} /> : categories.length === 0 && !categoriesLoading ? <FieldError message="Chưa có danh mục active để lựa chọn." /> : <FieldError message={errors.category_id?.message} />}
       </label>
       <label className={labelClassName}><span>Đơn vị tính</span>
         {unitsLoading && units.length === 0 ? <SelectSkeleton label="Đang tải đơn vị tính" /> : <select {...register('unit_id', { required: 'Vui lòng chọn đơn vị tính.' })} disabled={Boolean(unitsError)} className={inputClassName}>
           <option value="">Chọn đơn vị</option>
-          {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} - {unit.symbol}</option>)}
+          {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} - {unit.name} ({unit.symbol})</option>)}
         </select>}
         {unitsError ? <FieldError message={`Không tải được đơn vị: ${unitsError}`} /> : units.length === 0 && !unitsLoading ? <FieldError message="Chưa có đơn vị active để lựa chọn." /> : <FieldError message={errors.unit_id?.message} />}
       </label>
     </div>
+    <label className={labelClassName}>
+      <span>Tên dịch</span>
+      <input
+        {...register('translation_text', {
+          setValueAs: (value: string) => value.trim() || null,
+        })}
+        className={inputClassName}
+      />
+    </label>
     <label className={labelClassName}><span>Mô tả vật tư</span><textarea rows={3} {...register('description', { setValueAs: (value: string) => value.trim() || null })} className={inputClassName} /></label>
     <div className="grid gap-4 sm:grid-cols-3">
       <label className={labelClassName}><span>Min stock</span><input type="number" min="0" step="any" {...register('min_stock', { setValueAs: optionalNumber, min: { value: 0, message: 'Không được âm.' } })} className={inputClassName} /><FieldError message={errors.min_stock?.message} /></label>
@@ -133,8 +155,9 @@ const SuppliesPage = () => {
 
   const columns: Column<Supply>[] = [
     { header: 'Mã', accessor: 'code', sortKey: 'code' },
+    { header: 'Tên ngắn', accessor: 'short_text', sortKey: 'short_text' },
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (item) => item.description || '—' },
-    { header: 'Danh mục', accessor: 'category_id', render: (item) => item.category ? `${item.category.code}${item.category.description ? ` - ${item.category.description}` : ''}` : '—' },
+    { header: 'Danh mục', accessor: 'category_id', render: (item) => item.category ? `${item.category.code} - ${item.category.name}` : '—' },
     { header: 'Đơn vị', accessor: 'unit_id', render: (item) => item.unit?.symbol ?? item.unit?.code ?? '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} /> },
     ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} /> }] : []),

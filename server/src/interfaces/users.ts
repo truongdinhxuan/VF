@@ -7,11 +7,11 @@ export const USER_COLUMNS = [
   'phone_number',
   'avatar_url',
   'role_id',
-  'position_id',
   'area_id',
   'managed_by_user_id',
   'is_active',
   'is_verified',
+  'is_deleted',
   'created_at',
   'updated_at',
   'first_name',
@@ -25,7 +25,6 @@ export interface LoginBody {
 
 export interface UserListQuery extends PaginationQuery {
   roleId?: string;
-  positionId?: string;
   areaId?: string;
   isActive?: string | boolean;
 }
@@ -37,7 +36,6 @@ export interface CreateUserBody extends LoginBody {
   phone_number?: string | null;
   avatar_url?: string | null;
   role_id: string;
-  position_id?: string | null;
   area_id: string;
   managed_by_user_id?: string | null;
 }
@@ -50,9 +48,9 @@ export interface UpdateUserBody {
   phone_number?: string | null;
   avatar_url?: string | null;
   role_id?: string;
-  position_id?: string | null;
   area_id?: string;
   managed_by_user_id?: string | null;
   is_active?: boolean;
   is_verified?: boolean;
+  is_deleted?: boolean;
 }

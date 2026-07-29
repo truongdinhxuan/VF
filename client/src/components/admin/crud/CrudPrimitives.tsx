@@ -288,7 +288,7 @@ export const RowActions = ({
   deleteLabel = 'Deactivate',
 }: {
   onEdit: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   deleteLabel?: string;
 }) => (
   <div className="flex flex-wrap justify-end gap-x-3 gap-y-2">
@@ -300,13 +300,15 @@ export const RowActions = ({
       Sửa
     </button>
 
-    <button
-      type="button"
-      onClick={onDelete}
-      className="whitespace-nowrap rounded-md px-1 py-0.5 font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
-    >
-      {deleteLabel}
-    </button>
+    {onDelete && (
+      <button
+        type="button"
+        onClick={onDelete}
+        className="whitespace-nowrap rounded-md px-1 py-0.5 font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
+      >
+        {deleteLabel}
+      </button>
+    )}
   </div>
 );
 

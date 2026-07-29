@@ -1,18 +1,24 @@
 import type { PaginatedListParams } from './pagination.types';
 
-export const ORDER_STATUSES = [
-  "DRAFT",
-  "PENDING",
-  "APPROVED",
-  "REJECTED",
-  "PARTIAL_ISSUED",
-  "ISSUED",
-  "RECEIVED",
-  "COMPLETED",
-  "CANCELLED",
-] as const;
+import type {
+  OrderRevisionActionLookup,
+  OrderStatusLookup,
+} from './lookups';
 
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
+export const ORDER_STATUS = {
+  DRAFT: 'DRAFT',
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PARTIAL_ISSUED: 'PARTIAL_ISSUED',
+  ISSUED: 'ISSUED',
+  RECEIVED: 'RECEIVED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
+export const ORDER_STATUSES = Object.values(ORDER_STATUS) as OrderStatus[];
 
 export interface OrderAreaSummary {
   id: string;
@@ -43,7 +49,6 @@ export interface OrderUnitSummary {
 export interface OrderItem {
   id: string;
   order_id: string;
-  planning_item_id: string | null;
   supply_id: string;
   unit_id: string;
   quantity_requested: number;
@@ -57,17 +62,33 @@ export interface OrderItem {
   unit?: OrderUnitSummary | null;
 }
 
+export interface OrderRevision {
+  id: string;
+  order_id: string;
+  action_id: string;
+  old_status_id: string | null;
+  new_status_id: string | null;
+  reason: string | null;
+  created_by: string;
+  created_at: string;
+  action?: Pick<OrderRevisionActionLookup, 'id' | 'code' | 'name'> | null;
+  old_status?: Pick<OrderStatusLookup, 'id' | 'code' | 'name'> | null;
+  new_status?: Pick<OrderStatusLookup, 'id' | 'code' | 'name'> | null;
+  creator?: OrderUserSummary | null;
+}
+
 export interface Order {
   id: string;
   code: string;
-  planning_id: string | null;
   from_area_id: string;
   to_area_id: string;
   requested_by: string;
   approved_by: string | null;
   forklift_by: string | null;
   taken_away_by: string | null;
+  status_id: string;
   status: OrderStatus;
+  status_lookup?: OrderStatusLookup | null;
   note: string | null;
   rejected_reason: string | null;
   cancel_reason: string | null;
@@ -75,6 +96,9 @@ export interface Order {
   approved_at: string | null;
   issued_at: string | null;
   received_at: string | null;
+  completed_at: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
   created_at: string;
   updated_at: string;
   from_area?: OrderAreaSummary | null;
@@ -84,6 +108,7 @@ export interface Order {
   forklift?: OrderUserSummary | null;
   taken_away?: OrderUserSummary | null;
   order_items?: OrderItem[];
+  order_revisions?: OrderRevision[];
 }
 
 export interface OrderListParams extends PaginatedListParams {

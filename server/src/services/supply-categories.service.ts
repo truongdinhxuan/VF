@@ -13,7 +13,8 @@ import {
 import { CATEGORY_SORT_FIELDS } from '../schemas/master-data';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
 
-const SELECT = 'id, code, description, is_active, created_at, updated_at, is_deleted';
+const SELECT =
+  'id, code, name, description, is_active, is_deleted, created_at, updated_at';
 
 export class SupplyCategoriesService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -34,10 +35,10 @@ export class SupplyCategoriesService {
       .from('supply_categories')
       .select(SELECT, { count: 'exact' })
       .eq('is_active', active)
-      .or('is_deleted.eq.false,is_deleted.is.null');
+      .eq('is_deleted', false);
     if (pagination.search) {
       request = request.or(
-        `code.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
+        `code.ilike.*${pagination.search}*,name.ilike.*${pagination.search}*,description.ilike.*${pagination.search}*`,
       );
     }
     request = request.order(pagination.sortBy, {
@@ -64,6 +65,7 @@ export class SupplyCategoriesService {
   async create(body: CreateSupplyCategoryBody) {
     const payload = {
       code: normalizeRequiredText(body.code, 'code', 100),
+      name: normalizeRequiredText(body.name, 'name'),
       description: normalizeOptionalText(body.description, 'description') ?? null,
       is_active: body.is_active ?? true,
       is_deleted: false,
@@ -80,6 +82,7 @@ export class SupplyCategoriesService {
   async update(id: string, body: UpdateSupplyCategoryBody) {
     const payload: Record<string, unknown> = {};
     if (body.code !== undefined) payload.code = normalizeRequiredText(body.code, 'code', 100);
+    if (body.name !== undefined) payload.name = normalizeRequiredText(body.name, 'name');
     if (body.description !== undefined) {
       payload.description = normalizeOptionalText(body.description, 'description');
     }
