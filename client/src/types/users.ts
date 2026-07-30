@@ -73,7 +73,7 @@ export type UpdateUserInput = Partial<Omit<CreateUserInput, 'password'>> & {
 };
 
 export interface UpdateUserPasswordInput {
-  currentPassword: string;
+  currentPassword?: string;
   newPassword: string;
   confirmNewPassword: string;
 }

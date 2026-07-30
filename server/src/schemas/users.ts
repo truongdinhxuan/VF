@@ -21,6 +21,18 @@ export const userListSchema = createListQuerySchema(USER_SORT_FIELDS, {
   isActive: optionalBoolean,
 });
 
+export const loginSchema: FastifySchema = {
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['vinfast_id', 'password'],
+    properties: {
+      vinfast_id: { type: 'integer' },
+      password: { type: 'string', minLength: 1, maxLength: 128 },
+    },
+  },
+};
+
 const userProfileProperties = {
   email: { type: 'string', format: 'email', maxLength: 320 },
   first_name: { type: 'string', minLength: 1, maxLength: 255 },
@@ -55,7 +67,7 @@ export const createUserSchema: FastifySchema = {
     ],
     properties: {
       ...userProfileProperties,
-      password: { type: 'string', minLength: 6 },
+      password: { type: 'string', minLength: 9, maxLength: 128 },
     },
   },
 };
@@ -89,11 +101,11 @@ export const updatePasswordSchema: FastifySchema = {
   body: {
     type: 'object',
     additionalProperties: false,
-    required: ['currentPassword', 'newPassword', 'confirmNewPassword'],
+    required: ['newPassword', 'confirmNewPassword'],
     properties: {
-      currentPassword: { type: 'string', minLength: 1 },
-      newPassword: { type: 'string', minLength: 9 },
-      confirmNewPassword: { type: 'string', minLength: 9 },
+      currentPassword: { type: 'string', minLength: 1, maxLength: 128 },
+      newPassword: { type: 'string', minLength: 9, maxLength: 128 },
+      confirmNewPassword: { type: 'string', minLength: 9, maxLength: 128 },
     },
   },
 };

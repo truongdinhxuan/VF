@@ -12,6 +12,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AppTooltip } from "../../common/AppTooltip";
 import { navigationForRole } from "../../../constants/adminNavigation";
 import { useAuth } from "../../../context/AuthContext";
+import { getButtonClassName, IconButton } from "../Button";
 
 interface SidebarProps {
   isSidebarCollapsed: boolean;
@@ -41,6 +42,10 @@ const Sidebar = ({
   const displayName = [profile?.last_name, profile?.first_name]
     .filter(Boolean)
     .join(" ") || profile?.email || "Người dùng";
+  const roleDisplayName =
+    profile?.role && typeof profile.role === "object"
+      ? profile.role.name
+      : role ?? "Guest";
 
   const checkActive = (to: string) => {
     if (to === "/admin/orders") {
@@ -81,7 +86,7 @@ const Sidebar = ({
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(false)}
-                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden"
+                className={`${IconButton} md:hidden`}
                 aria-label="Đóng menu"
               >
                 <FontAwesomeIcon icon={faXmark} className="text-xl" aria-hidden="true" />
@@ -92,7 +97,7 @@ const Sidebar = ({
                 <button
                   type="button"
                   onClick={() => setIsSidebarCollapsed(true)}
-                  className="hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:block"
+                  className={`${IconButton} hidden md:inline-flex`}
                   aria-label="Thu gọn menu"
                 >
                   <FontAwesomeIcon icon={faBars} className="text-xl" aria-hidden="true" />
@@ -145,7 +150,7 @@ const Sidebar = ({
       <div className="w-full shrink-0 border-t border-slate-100 bg-white p-4">
         <div className="relative" ref={profileRef}>
           <AppTooltip
-            content={`${displayName} — ${role ?? "Chưa gán role"}`}
+            content={`${displayName} — ${roleDisplayName}`}
             side="right"
             disabled={!isSidebarCollapsed}
           >
@@ -155,7 +160,12 @@ const Sidebar = ({
                 event.stopPropagation();
                 setIsProfileDropdownOpen(!isProfileDropdownOpen);
               }}
-              className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left hover:border-slate-100 hover:bg-slate-50"
+              className={getButtonClassName({
+                variant: "ghost",
+                size: "sm",
+                block: true,
+                className: "!justify-start rounded-xl text-left",
+              })}
               aria-label={isSidebarCollapsed ? `Mở menu tài khoản của ${displayName}` : undefined}
               aria-expanded={isProfileDropdownOpen}
               aria-haspopup="menu"
@@ -171,7 +181,7 @@ const Sidebar = ({
                   <div className="flex flex-1 flex-col overflow-hidden">
                     <span className="truncate text-sm font-bold text-slate-700">{displayName}</span>
                     <span className="truncate text-[11px] text-slate-400">
-                      {role ?? "Chưa gán role"}
+                      {roleDisplayName}
                     </span>
                   </div>
                   <FontAwesomeIcon icon={faChevronUp} className="shrink-0 text-slate-400" aria-hidden="true" />
@@ -189,7 +199,12 @@ const Sidebar = ({
               >
                 <button
                   type="button"
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600"
+                  className={getButtonClassName({
+                    variant: "ghost",
+                    size: "sm",
+                    block: true,
+                    className: "!justify-start",
+                  })}
                   aria-label={isSidebarCollapsed ? "Cài đặt" : undefined}
                 >
                   <FontAwesomeIcon icon={faGear} aria-hidden="true" />
@@ -204,7 +219,12 @@ const Sidebar = ({
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  className={getButtonClassName({
+                    variant: "textError",
+                    size: "sm",
+                    block: true,
+                    className: "!justify-start",
+                  })}
                   aria-label={isSidebarCollapsed ? "Đăng xuất" : undefined}
                 >
                   <FontAwesomeIcon icon={faRightFromBracket} aria-hidden="true" />

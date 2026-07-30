@@ -19,6 +19,10 @@ const usersService = readFileSync(
   resolve(process.cwd(), 'src/services/users.service.ts'),
   'utf8',
 );
+const internalAuthMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/202607300001_internal_password_auth.sql'),
+  'utf8',
+);
 
 describe('user name and approval migration', () => {
   it('backfills split names before removing full_name', () => {
@@ -49,13 +53,18 @@ describe('verified-account access enforcement', () => {
   });
 
   it('does not return a login token for an unverified account', () => {
-    const approvalCheck = loginController.indexOf('if (!publicData.is_verified)');
-    const tokenResponse = loginController.indexOf('token: authData.session?.access_token');
+    const approvalCheck = usersService.indexOf('if (!profile.is_verified)');
+    const authenticate = loginController.indexOf('.authenticate(');
+    const tokenResponse = loginController.indexOf('reply.jwtSign');
     assert.ok(approvalCheck >= 0);
-    assert.ok(tokenResponse > approvalCheck);
+    assert.ok(authenticate >= 0);
+    assert.ok(tokenResponse > authenticate);
   });
 
   it('creates new managed users as unverified', () => {
-    assert.match(usersService, /is_verified: false/g);
+    assert.match(
+      internalAuthMigration,
+      /is_verified,[\s\S]*is_active,[\s\S]*is_deleted[\s\S]*false,[\s\S]*true,[\s\S]*false/i,
+    );
   });
 });

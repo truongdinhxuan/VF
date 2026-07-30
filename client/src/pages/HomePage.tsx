@@ -1,9 +1,12 @@
+import { Link } from "react-router-dom";
+import { InfoButton } from "../components/admin/Button";
+
 const HomePage = () => {
   return <>
     Lorem ipsum dolor sit amet consectetur adipisicing elit. Quas doloribus quis, doloremque tempora, officiis eum mollitia suscipit praesentium, sapiente possimus beatae porro nam aspernatur similique. Officia sapiente exercitationem perspiciatis assumenda sed ipsa fugit voluptate, in non numquam impedit dolorem repellat possimus est laboriosam temporibus iure repudiandae? Perferendis praesentium a eligendi tenetur deleniti quia similique qui odio esse odit quidem, debitis sequi delectus impedit mollitia numquam rerum repudiandae facilis ipsa in reprehenderit ipsum fugiat. Nihil eaque voluptatibus molestiae eligendi ipsum eius consequuntur. Reprehenderit culpa cumque non tenetur obcaecati nostrum! Rem natus, molestias quasi quas iure cum! Voluptate harum dolore rem nulla itaque eaque fugiat quo excepturi ex voluptas aut facilis, distinctio a pariatur magnam molestias dolor delectus sunt ipsam ab? Sint, exercitationem fuga? Nemo fugiat incidunt tenetur in culpa tempore modi animi? Eveniet hic animi, repudiandae vel dicta vero. Asperiores repudiandae voluptatem impedit maiores. Possimus soluta repellat, mollitia, quos tempore explicabo iusto fugiat error molestias, beatae blanditiis iure. Animi debitis consectetur veritatis! Similique tempore rerum nihil eos id, illo fugiat nobis blanditiis hic? Voluptates minima, modi soluta quam odit ea. Minus, sint dolores rerum quis aut itaque explicabo sapiente maxime provident fugit ut vitae, adipisci quia? Ea cum mollitia dicta quos.
-    <button className="btn btn-border-black">
-      <a href="/auth/login">Click login</a>
-    </button>
+    <Link to="/auth/login" className={InfoButton}>
+      Click login
+    </Link>
   </>
 }
 export default HomePage

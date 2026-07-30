@@ -71,6 +71,7 @@ interface OrderData {
   id: string;
   requested_by: string;
   from_area_id: string;
+  to_area_id: string;
   status_id: string;
   status_lookup: {
     id: string;
@@ -144,6 +145,8 @@ const generateOrderCode = (): string => {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   return `ORD-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
 };
+
+const ORDER_SOURCE_AREA_CODE = 'VTDG';
 
 const ORDER_USER_SELECT = 'id, vinfast_id, email, first_name, last_name';
 
@@ -263,15 +266,47 @@ export class OrderService {
     if (
       actor.role !== PACKING_ROLE ||
       order.requested_by !== actor.id ||
-      order.from_area_id !== actor.areaId
+      order.to_area_id !== actor.areaId
     ) {
       serviceError(403, 'Only the packing owner can modify this order');
     }
   }
 
   private assertOrderVisible(actor: OrderActor, order: OrderData): void {
-    if (actor.role === PACKING_ROLE && order.from_area_id !== actor.areaId) {
+    if (actor.role === PACKING_ROLE && order.to_area_id !== actor.areaId) {
       serviceError(403, 'Order is outside your area scope');
+    }
+  }
+
+  private async getOrderSourceAreaId(): Promise<string> {
+    const { data, error } = await this.db
+      .from('areas')
+      .select('id')
+      .eq('code', ORDER_SOURCE_AREA_CODE)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .single();
+
+    if (error || !data) {
+      serviceError(
+        500,
+        `Order source area ${ORDER_SOURCE_AREA_CODE} is missing or inactive`,
+      );
+    }
+    return data.id;
+  }
+
+  private async assertActiveReceivingArea(areaId: string): Promise<void> {
+    const { data, error } = await this.db
+      .from('areas')
+      .select('id')
+      .eq('id', areaId)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .single();
+
+    if (error || !data) {
+      serviceError(400, 'User receiving area is missing or inactive');
     }
   }
 
@@ -323,8 +358,15 @@ export class OrderService {
     if (!body?.from_area_id || !body.to_area_id) {
       serviceError(400, 'from_area_id and to_area_id are required');
     }
-    if (actor.role !== ROLE_CODE.ADMIN && body.from_area_id !== actor.areaId) {
-      serviceError(403, 'from_area_id must equal the packing user area_id');
+    const [sourceAreaId] = await Promise.all([
+      this.getOrderSourceAreaId(),
+      this.assertActiveReceivingArea(actor.areaId),
+    ]);
+    if (body.from_area_id !== sourceAreaId) {
+      serviceError(400, `from_area_id must reference area code ${ORDER_SOURCE_AREA_CODE}`);
+    }
+    if (body.to_area_id !== actor.areaId) {
+      serviceError(400, 'to_area_id must equal the current user area_id');
     }
 
     const items = await this.prepareOrderItems(body.order_list);
@@ -333,8 +375,8 @@ export class OrderService {
       .from('orders')
       .insert({
         code: generateOrderCode(),
-        from_area_id: body.from_area_id,
-        to_area_id: body.to_area_id,
+        from_area_id: sourceAreaId,
+        to_area_id: actor.areaId,
         requested_by: actor.id,
         status_id: draftStatusId,
         note: body.note ?? null,
@@ -438,7 +480,7 @@ export class OrderService {
       .from('orders')
       .select(ORDER_LIST_SELECT, { count: 'exact' })
       .eq('is_deleted', false);
-    if (actor.role === PACKING_ROLE) request = request.eq('from_area_id', actor.areaId);
+    if (actor.role === PACKING_ROLE) request = request.eq('to_area_id', actor.areaId);
     if (statusId) request = request.eq('status_id', statusId);
     if (query.from_area_id) request = request.eq('from_area_id', query.from_area_id);
     if (query.to_area_id) request = request.eq('to_area_id', query.to_area_id);

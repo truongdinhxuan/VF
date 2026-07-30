@@ -14,6 +14,16 @@ import {
   submitOrder,
   updateOrder,
 } from "../../../api/orders.service";
+import {
+  CyanButton,
+  ErrorButton,
+  InfoButton,
+  SecondaryButton,
+  SuccessButton,
+  TextButton,
+  VioletButton,
+  WarningButton,
+} from "../../../components/admin/Button";
 import { OrderStatusBadge } from "../../../components/admin/orders/OrderStatusBadge";
 import { StockAvailabilityWarning } from "../../../components/admin/orders/StockAvailabilityWarning";
 import { CardSkeleton, SelectSkeleton } from "../../../components/common/skeleton";
@@ -104,7 +114,7 @@ const OrderDetailPage = () => {
       (
         role === PACKING_ROLE &&
         actorId === order.requested_by &&
-        user?.publicData.area_id === order.from_area_id
+        user?.publicData.area_id === order.to_area_id
       )
     ),
   );
@@ -251,7 +261,7 @@ const OrderDetailPage = () => {
     return (
       <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
         <p className="font-semibold text-rose-700">{loadError ?? "Không tìm thấy order."}</p>
-        <Link to="/admin/orders" className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline">Về danh sách</Link>
+        <Link to="/admin/orders" className={`${TextButton} mt-3`}>Về danh sách</Link>
       </div>
     );
   }
@@ -271,7 +281,7 @@ const OrderDetailPage = () => {
     <section className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link to="/admin/orders" className="text-sm font-semibold text-blue-600 hover:underline">← Danh sách order</Link>
+          <Link to="/admin/orders" className={TextButton}>← Danh sách order</Link>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{order.code}</h1>
             <OrderStatusBadge status={order.status} />
@@ -338,14 +348,14 @@ const OrderDetailPage = () => {
             <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canEdit && <button onClick={startEditing} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Sửa items</button>}
-            {canSubmit && <button title="DRAFT → PENDING; không làm thay đổi tồn kho" disabled={mutating} onClick={() => void runMutation(() => submitOrder(id))} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50">Submit → PENDING</button>}
-            {canApprove && <button title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">Approve → APPROVED</button>}
-            {canApprove && <button onClick={() => openPanel("reject")} className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Reject</button>}
-            {canIssue && <button title="Issue mới trừ tồn và tạo StockTransactions" onClick={openIssuePanel} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700">Issue hàng</button>}
-            {canReceive && <button disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50">Xác nhận nhận</button>}
-            {canComplete && <button disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">Complete</button>}
-            {canCancel && <button onClick={() => openPanel("cancel")} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Hủy order</button>}
+            {canEdit && <button type="button" onClick={startEditing} className={SecondaryButton}>Sửa items</button>}
+            {canSubmit && <button type="button" title="DRAFT → PENDING; không làm thay đổi tồn kho" disabled={mutating} onClick={() => void runMutation(() => submitOrder(id))} className={WarningButton}>Submit → PENDING</button>}
+            {canApprove && <button type="button" title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Approve → APPROVED</button>}
+            {canApprove && <button type="button" onClick={() => openPanel("reject")} className={ErrorButton}>Reject</button>}
+            {canIssue && <button type="button" title="Issue mới trừ tồn và tạo StockTransactions" onClick={openIssuePanel} className={VioletButton}>Issue hàng</button>}
+            {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Xác nhận nhận</button>}
+            {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Complete</button>}
+            {canCancel && <button type="button" onClick={() => openPanel("cancel")} className={SecondaryButton}>Hủy order</button>}
           </div>
         </div>
         {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
@@ -458,7 +468,7 @@ const OrderDetailPage = () => {
             </table>
           </div>
         )}
-        {editing && <div className="flex justify-end gap-2 border-t border-slate-200 p-4"><button onClick={() => setEditing(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Bỏ qua</button><button disabled={mutating} onClick={saveItems} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Lưu items</button></div>}
+        {editing && <div className="flex justify-end gap-2 border-t border-slate-200 p-4"><button type="button" onClick={() => setEditing(false)} className={SecondaryButton}>Bỏ qua</button><button type="button" disabled={mutating} onClick={saveItems} className={InfoButton}>Lưu items</button></div>}
       </div>
 
       {(order.note || order.rejected_reason || order.cancel_reason) && (
@@ -479,7 +489,7 @@ const ActionCard = ({ title, note, children }: { title: string; note: string; ch
 );
 
 const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = false }: { disabled: boolean; onCancel: () => void; onConfirm: () => void; confirmLabel: string; danger?: boolean }) => (
-  <div className="mt-4 flex justify-end gap-2"><button disabled={disabled} onClick={onCancel} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Bỏ qua</button><button disabled={disabled} onClick={onConfirm} className={`rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 ${danger ? "bg-rose-600 hover:bg-rose-700" : "bg-blue-600 hover:bg-blue-700"}`}>{confirmLabel}</button></div>
+  <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button></div>
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (

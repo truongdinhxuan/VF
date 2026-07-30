@@ -117,11 +117,10 @@ describe('current users schema contract', () => {
     assert.match(userRoutes, /verifyTokenAndRole\(USER_MANAGER_ROLES\)/);
   });
 
-  it('keeps Auth and public.users email synchronized on profile updates', () => {
-    assert.match(usersService, /auth\.admin\.updateUserById/);
-    assert.match(usersService, /email_confirm:\s*true/);
-    assert.match(usersService, /authEmailChanged/);
-    assert.match(usersService, /email:\s*currentUser\.email/);
+  it('updates profile email without depending on Supabase Auth', () => {
+    assert.match(usersService, /payload\.email/);
+    assert.doesNotMatch(usersService, /auth\.admin|supabase\.auth/);
+    assert.doesNotMatch(usersService, /authEmailChanged|email_confirm/);
   });
 
   it('keeps the legacy Admin seed replay-safe during lookup migration', () => {

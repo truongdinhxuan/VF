@@ -3,6 +3,7 @@ import {
   faChevronRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { getButtonClassName } from '../admin/Button';
 
 interface PaginationProps {
   page: number;
@@ -52,7 +53,7 @@ export const Pagination = ({
         type="button"
         onClick={() => onPageChange(page - 1)}
         disabled={!hasPreviousPage}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className={getButtonClassName({ variant: 'secondary', size: 'sm' })}
       >
         <FontAwesomeIcon icon={faChevronLeft} className="text-xs" /> Previous
       </button>
@@ -60,7 +61,7 @@ export const Pagination = ({
         type="button"
         onClick={() => onPageChange(page + 1)}
         disabled={!hasNextPage}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className={getButtonClassName({ variant: 'secondary', size: 'sm' })}
       >
         Next <FontAwesomeIcon icon={faChevronRight} className="text-xs" />
       </button>

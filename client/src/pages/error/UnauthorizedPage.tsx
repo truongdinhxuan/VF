@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { InfoButton } from "../../components/admin/Button";
 
 const UnauthorizedPage = () => (
   <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -10,7 +11,7 @@ const UnauthorizedPage = () => (
       </p>
       <Link
         to="/admin/dashboard"
-        className="mt-6 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        className={`${InfoButton} mt-6`}
       >
         Về dashboard
       </Link>

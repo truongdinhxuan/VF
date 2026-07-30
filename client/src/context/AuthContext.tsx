@@ -79,7 +79,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     queryClient.clear();
     setUser(null);
   };
-
   const role = resolveRoleCode(user?.publicData.role);
 
   return (

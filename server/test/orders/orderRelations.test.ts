@@ -35,6 +35,10 @@ describe('order relation response contract', () => {
       orderService,
       /\.select\(ORDER_LIST_SELECT,\s*\{\s*count:\s*'exact'\s*\}\)/,
     );
-    assert.doesNotMatch(orderService, /\.from\('areas'\)/);
+    const findOrderBlock =
+      orderService.match(
+        /private async findOrder[\s\S]*?private assertPackingOwner/,
+      )?.[0] ?? '';
+    assert.doesNotMatch(findOrderBlock, /\.from\('areas'\)/);
   });
 });

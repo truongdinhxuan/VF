@@ -1,17 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { normalizeRoleCode, ROLE_CODES, type RoleCode } from '../domain/enums';
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      id: string;
-      email?: string;
-      role: RoleCode;
-      areaId: string;
-    };
-  }
-}
-
 interface RoleRelation {
   code: string;
   is_active: boolean;
@@ -19,6 +8,7 @@ interface RoleRelation {
 }
 
 interface PublicUserAuthData {
+  email: string;
   area_id: string | null;
   is_active: boolean;
   is_verified: boolean;
@@ -43,20 +33,19 @@ export const verifyTokenAndRole = (allowedRoles: readonly RoleCode[] = []) => {
         return reply.code(401).send({ error: 'Vui lòng cung cấp Bearer token hợp lệ' });
       }
 
-      const token = authHeader.slice('Bearer '.length);
-      const { data: authData, error: authError } =
-        await request.server.supabase.auth.getUser(token);
-
-      if (authError || !authData.user) {
+      try {
+        await request.jwtVerify();
+      } catch {
         return reply.code(401).send({ error: 'Token đã hết hạn hoặc không hợp lệ' });
       }
 
+      const userId = request.user.sub;
       const { data, error } = await request.server.supabaseAdmin
         .from('users')
         .select(
-          'area_id, is_active, is_verified, is_deleted, role:roles!users_role_id_fkey(code, is_active, is_deleted)',
+          'email, area_id, is_active, is_verified, is_deleted, role:roles!users_role_id_fkey(code, is_active, is_deleted)',
         )
-        .eq('id', authData.user.id)
+        .eq('id', userId)
         .single();
 
       const publicData = data as PublicUserAuthData | null;
@@ -98,8 +87,9 @@ export const verifyTokenAndRole = (allowedRoles: readonly RoleCode[] = []) => {
       }
 
       request.user = {
-        id: authData.user.id,
-        email: authData.user.email,
+        sub: userId,
+        id: userId,
+        email: publicData.email,
         role,
         areaId: publicData.area_id,
       };

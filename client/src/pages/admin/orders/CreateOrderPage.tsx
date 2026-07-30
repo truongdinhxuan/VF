@@ -6,6 +6,12 @@ import { listAreas } from "../../../api/areas.service";
 import { getApiErrorMessage } from "../../../api/errors";
 import { createOrder } from "../../../api/orders.service";
 import { listSupplies } from "../../../api/supplies.service";
+import {
+  InfoButton,
+  SecondaryButton,
+  TextButton,
+  TextErrorButton,
+} from "../../../components/admin/Button";
 import { SelectSkeleton } from "../../../components/common/skeleton";
 import { useAuth } from "../../../context/AuthContext";
 import { useCrudResource } from "../../../hooks/useCrudResource";
@@ -15,7 +21,6 @@ import type { AreaOption, SupplyOption } from "../../../types/catalog";
 import type { CreateOrderInput } from "../../../types/orders";
 
 interface CreateOrderForm {
-  to_area_id: string;
   note: string;
   order_list: Array<{
     supply_id: string;
@@ -23,6 +28,8 @@ interface CreateOrderForm {
     note: string;
   }>;
 }
+
+const ORDER_SOURCE_AREA_CODE = 'VTDG';
 
 const loadAreas = async (signal: AbortSignal) =>
   (await listAreas(
@@ -34,8 +41,7 @@ const CreateOrderPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const fromAreaId = user?.publicData.area_id ?? "";
-  const fromAreaName = user?.publicData.area?.name;
+  const receivingAreaId = user?.publicData.area_id ?? "";
   const supplyLoader = useCallback((search: string | undefined, signal: AbortSignal) => listSupplies({ page: 1, pageSize: 20, search, isActive: true, isDeleted: false, sortBy: 'code', sortOrder: 'asc' }, signal), []);
   const {
     items: supplies,
@@ -56,6 +62,10 @@ const CreateOrderPage = () => {
   const areas = areaResource.items;
   const areasLoading = areaResource.loading;
   const areasError = areaResource.error;
+  const sourceArea = areas.find((area) => area.code === ORDER_SOURCE_AREA_CODE);
+  const receivingArea =
+    user?.publicData.area ??
+    areas.find((area) => area.id === receivingAreaId);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
@@ -65,7 +75,6 @@ const CreateOrderPage = () => {
     formState: { errors, isSubmitting },
   } = useForm<CreateOrderForm>({
     defaultValues: {
-      to_area_id: "",
       note: "",
       order_list: [{ supply_id: "", quantity_requested: 1, note: "" }],
     },
@@ -74,7 +83,7 @@ const CreateOrderPage = () => {
 
   const onSubmit = async (values: CreateOrderForm) => {
     setSubmitError(null);
-    if (!fromAreaId) {
+    if (!receivingAreaId) {
       setSubmitError("Tài khoản chưa có area_id nên không thể tạo order.");
       return;
     }
@@ -86,13 +95,17 @@ const CreateOrderPage = () => {
       setSubmitError("Danh sách area chưa sẵn sàng. Vui lòng tải lại trang và thử lại.");
       return;
     }
-    if (!areas.some((area) => area.id === values.to_area_id)) {
-      setSubmitError("Area nhận không còn active hoặc không hợp lệ.");
+    if (!sourceArea) {
+      setSubmitError(`Không tìm thấy Area gửi active có code ${ORDER_SOURCE_AREA_CODE}.`);
+      return;
+    }
+    if (!areas.some((area) => area.id === receivingAreaId)) {
+      setSubmitError("Area của tài khoản không còn active hoặc không hợp lệ.");
       return;
     }
     const payload: CreateOrderInput = {
-      from_area_id: fromAreaId,
-      to_area_id: values.to_area_id.trim(),
+      from_area_id: sourceArea.id,
+      to_area_id: receivingAreaId,
       note: values.note.trim() || undefined,
       order_list: values.order_list.map((item) => ({
         supply_id: item.supply_id.trim(),
@@ -113,7 +126,7 @@ const CreateOrderPage = () => {
   return (
     <section className="space-y-5">
       <div>
-        <Link to="/admin/orders" className="text-sm font-semibold text-blue-600 hover:underline">← Danh sách order</Link>
+        <Link to="/admin/orders" className={TextButton}>← Danh sách order</Link>
         <h1 className="mt-3 text-2xl font-bold text-slate-900">Tạo order</h1>
         <p className="mt-1 text-sm text-slate-500">Order được tạo ở trạng thái DRAFT và chưa làm thay đổi tồn kho.</p>
       </div>
@@ -123,38 +136,32 @@ const CreateOrderPage = () => {
           <label className="space-y-1.5 text-sm font-semibold text-slate-700">
             Area gửi
             <input
-              value={fromAreaName ? `${fromAreaName} (${fromAreaId})` : fromAreaId}
+              value={
+                sourceArea
+                  ? `${sourceArea.code} — ${sourceArea.name}`
+                  : areasLoading
+                    ? "Đang tải Area gửi..."
+                    : `${ORDER_SOURCE_AREA_CODE} — Không tìm thấy`
+              }
               readOnly
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-normal text-slate-600"
             />
           </label>
           <label className="space-y-1.5 text-sm font-semibold text-slate-700">
             Area nhận
-            {areasLoading && areas.length === 0 ? (
-              <SelectSkeleton label="Đang tải danh sách area" />
-            ) : (
-              <select
-                {...register("to_area_id", { required: "Area nhận là bắt buộc." })}
-                disabled={Boolean(areasError) || areas.length === 0}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <option value="">
-                  {areasError
-                    ? "Không thể tải areas"
-                    : areas.length === 0
-                      ? "Không có area active"
-                      : "Chọn area nhận"}
-                </option>
-                {areas.map((area) => (
-                  <option key={area.id} value={area.id}>{area.code} — {area.name}</option>
-                ))}
-              </select>
-            )}
+            <input
+              value={
+                receivingArea
+                  ? `${receivingArea.code} — ${receivingArea.name}`
+                  : receivingAreaId
+              }
+              readOnly
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-normal text-slate-600"
+            />
             {areasError && <span className="text-xs font-normal text-rose-600">{areasError}</span>}
             {!areasLoading && !areasError && areas.length === 0 && (
               <span className="text-xs font-normal text-amber-700">Không có area active để chọn.</span>
             )}
-            {errors.to_area_id && <span className="text-xs text-rose-600">{errors.to_area_id.message}</span>}
           </label>
           <label className="space-y-1.5 text-sm font-semibold text-slate-700 md:col-span-2">
             Ghi chú
@@ -175,7 +182,7 @@ const CreateOrderPage = () => {
             <button
               type="button"
               onClick={() => append({ supply_id: "", quantity_requested: 1, note: "" })}
-              className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+              className={SecondaryButton}
             >
               Thêm dòng
             </button>
@@ -250,7 +257,7 @@ const CreateOrderPage = () => {
                   type="button"
                   disabled={fields.length === 1}
                   onClick={() => remove(index)}
-                  className="self-end rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-30"
+                  className={`${TextErrorButton} self-end`}
                 >
                   Xóa
                 </button>
@@ -262,7 +269,7 @@ const CreateOrderPage = () => {
         {submitError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{submitError}</div>}
 
         <div className="flex justify-end gap-3">
-          <Link to="/admin/orders" className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <Link to="/admin/orders" className={SecondaryButton}>
             Hủy
           </Link>
           <button
@@ -274,9 +281,11 @@ const CreateOrderPage = () => {
               Boolean(suppliesError) ||
               Boolean(areasError) ||
               supplies.length === 0 ||
-              areas.length === 0
+              areas.length === 0 ||
+              !sourceArea ||
+              !receivingAreaId
             }
-            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+            className={InfoButton}
           >
             {isSubmitting ? "Đang tạo..." : "Lưu DRAFT"}
           </button>

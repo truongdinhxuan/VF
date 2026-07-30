@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { OrderItem } from "../../../types/orders";
+import { getButtonClassName } from "../Button";
 
 interface StockAvailabilityWarningProps {
   item: OrderItem;
@@ -30,7 +31,11 @@ export const StockAvailabilityWarning = ({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        className={getButtonClassName({
+          variant: "warning",
+          size: "xs",
+          className: "rounded-full font-bold",
+        })}
       >
         <span aria-hidden="true">⚠</span>
         Tồn thấp

@@ -19,7 +19,7 @@ export const USER_COLUMNS = [
 ] as const;
 
 export interface LoginBody {
-  email: string;
+  vinfast_id: number;
   password: string;
 }
 
@@ -29,7 +29,9 @@ export interface UserListQuery extends PaginationQuery {
   isActive?: string | boolean;
 }
 
-export interface CreateUserBody extends LoginBody {
+export interface CreateUserBody {
+  email: string;
+  password: string;
   first_name: string;
   last_name: string;
   vinfast_id: number;

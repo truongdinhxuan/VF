@@ -5,6 +5,7 @@ import { listAreas } from '../../../api/areas.service';
 import { listStorageLocations } from '../../../api/storage-locations.service';
 import { createStockAdjustment, getStockTransaction, listStockTransactions } from '../../../api/stock-transactions.service';
 import { listSupplies } from '../../../api/supplies.service';
+import { TextButton } from '../../../components/admin/Button';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
 import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, inputClassName } from '../../../components/admin/crud/CrudPrimitives';
 import { StockAdjustmentModal } from '../../../components/admin/stock/StockAdjustmentModal';
@@ -101,7 +102,7 @@ const StockTransactionsPage = () => {
     { header: 'Lý do', accessor: 'reason', render: (item) => item.reason || '—' },
     { header: 'Người tạo', accessor: 'created_by', render: (item) => item.creator ? `${item.creator.first_name} ${item.creator.last_name}`.trim() : item.created_by },
     { header: 'Thời gian', accessor: 'created_at', sortKey: 'created_at', render: (item) => dateFormatter.format(new Date(item.created_at)) },
-    { header: 'Chi tiết', accessor: 'detail', render: (item) => <button type="button" onClick={() => void openDetail(item.id)} className="font-semibold text-blue-600 hover:text-blue-800">Xem</button> },
+    { header: 'Chi tiết', accessor: 'detail', render: (item) => <button type="button" onClick={() => void openDetail(item.id)} className={TextButton}>Xem</button> },
   ];
 
   const createAdjustment = (input: CreateStockAdjustmentInput) => resource.runMutation(() => createStockAdjustment(input), 'Đã tạo stock adjustment và transaction audit.', 'Không thể tạo stock adjustment.');

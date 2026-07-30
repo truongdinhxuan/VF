@@ -9,6 +9,9 @@ const read = (path: string): string =>
 const routes = read('src/routes/users/index.ts');
 const service = read('src/services/users.service.ts');
 const schema = read('src/schemas/users.ts');
+const internalAuthMigration = read(
+  'supabase/migrations/202607300001_internal_password_auth.sql',
+);
 
 describe('Phase 4 users CRUD contract', () => {
   it('registers canonical root User CRUD without a duplicate PUT route', () => {
@@ -19,15 +22,11 @@ describe('Phase 4 users CRUD contract', () => {
     assert.doesNotMatch(routes, /fastify\.put\(/);
   });
 
-  it('keeps one Auth-first create flow and cleans Auth up after profile failure', () => {
-    assert.equal((service.match(/auth\.admin\.createUser\(/g) ?? []).length, 1);
-    const authCreate = service.indexOf('auth.admin.createUser');
-    const profileInsert = service.indexOf(".from('users')\n      .insert", authCreate);
-    const authCleanup = service.indexOf('auth.admin.deleteUser', profileInsert);
-    assert.ok(authCreate >= 0);
-    assert.ok(profileInsert > authCreate);
-    assert.ok(authCleanup > profileInsert);
-    assert.match(service, /Không thể tạo profile public\.users/);
+  it('creates the profile and internal credential atomically without Supabase Auth', () => {
+    assert.match(service, /\.rpc\(\s*'create_internal_user'/);
+    assert.match(internalAuthMigration, /insert into public\.users/i);
+    assert.match(internalAuthMigration, /insert into public\.user_credentials/i);
+    assert.doesNotMatch(service, /auth\.admin|supabase\.auth/);
   });
 
   it('expands role and area in list/detail projections without Position', () => {
@@ -49,8 +48,10 @@ describe('Phase 4 users CRUD contract', () => {
       schema.match(/export const createUserSchema[\s\S]*?export const updateUserSchema/)?.[0] ?? '',
       /is_verified:\s*\{ type: 'boolean' \}/,
     );
-    assert.match(service, /is_verified: false/);
-    assert.match(service, /is_active: true/);
+    assert.match(
+      internalAuthMigration,
+      /is_verified,[\s\S]*is_active,[\s\S]*is_deleted[\s\S]*false,[\s\S]*true,[\s\S]*false/i,
+    );
   });
 
   it('deactivates the public profile instead of deleting Auth or profile data', () => {

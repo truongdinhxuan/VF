@@ -19,6 +19,7 @@ import type { PaginationParams } from '../../../types/pagination.types';
 import type { StockBalance, StockBalanceListParams } from '../../../types/stock-balances';
 import type { CreateStockAdjustmentInput } from '../../../types/stock-transactions';
 
+
 const loadAreas = async (signal: AbortSignal) =>
   (await listAreas(
     { page: 1, pageSize: 100, isActive: true, sortBy: 'code', sortOrder: 'asc' },

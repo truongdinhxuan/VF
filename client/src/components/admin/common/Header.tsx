@@ -2,6 +2,7 @@ import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch } from "@fortawesome/free-solid-svg-icons/faSearch";
 import { AppTooltip } from "../../common/AppTooltip";
+import { getButtonClassName, IconButton, TextButton } from "../Button";
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
@@ -34,7 +35,7 @@ const Header = ({
           <button
             type="button"
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="block rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-200 md:hidden"
+            className={`${IconButton} md:hidden`}
             aria-label="Mở menu"
           >
             <i className="hgi-stroke hgi-menu-05 text-2xl" aria-hidden="true"></i>
@@ -63,7 +64,11 @@ const Header = ({
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className={getButtonClassName({
+                  variant: "icon",
+                  size: "xs",
+                  className: "absolute right-2 top-1/2 -translate-y-1/2 text-slate-400",
+                })}
                 aria-label="Xóa tìm kiếm"
               >
                 <i className="hgi-stroke hgi-cancel-01 text-sm" aria-hidden="true"></i>
@@ -80,7 +85,7 @@ const Header = ({
             <button
               type="button"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              className="relative flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800"
+              className={`${IconButton} relative`}
               aria-label="Mở thông báo"
               aria-expanded={isNotificationsOpen}
               aria-haspopup="menu"
@@ -95,7 +100,7 @@ const Header = ({
             <div className="absolute right-0 top-full mt-3 w-[300px] sm:w-[360px] z-50 rounded-2xl border border-slate-100 bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-100 p-4">
                 <h3 className="font-bold text-slate-800">Notifications</h3>
-                <button className="text-xs font-semibold text-blue-600 hover:text-blue-700">Mark all as read</button>
+                <button type="button" className={TextButton}>Mark all as read</button>
               </div>
               <div className="max-h-80 overflow-y-auto p-2">
                 <div className="flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-slate-50 cursor-pointer">

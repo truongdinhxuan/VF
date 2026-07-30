@@ -1,41 +1,41 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { LoginBody } from '../../interfaces/users';
-import { getUserProfileById } from '../../services/users.service';
+import {
+  getUserProfileById,
+  UsersService,
+  UsersServiceError,
+} from '../../services/users.service';
 
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
-  const { email, password } = request.body as LoginBody;
+  const { vinfast_id, password } = request.body as LoginBody;
 
-  if (!email || !password) {
-    return reply.code(400).send({ error: 'Email và mật khẩu là bắt buộc' });
+  if (!Number.isInteger(vinfast_id) || !password) {
+    return reply.code(400).send({
+      error: 'VinFast ID và mật khẩu là bắt buộc',
+    });
   }
 
   try {
-    const { data: authData, error: authError } =
-      await request.server.supabase.auth.signInWithPassword({ email, password });
-
-    if (authError || !authData.user) {
-      return reply.code(401).send({ error: 'Sai email hoặc mật khẩu' });
-    }
-
-    const publicData = await getUserProfileById(request.server, authData.user.id);
-
-    if (!publicData || !publicData.is_active || publicData.is_deleted) {
-      return reply.code(403).send({ error: 'Tài khoản không tồn tại hoặc đã bị khóa' });
-    }
-
-    if (!publicData.is_verified) {
-      return reply.code(403).send({
-        error: 'Tài khoản đang chờ duyệt và chưa được phép truy cập dữ liệu nội bộ',
-        code: 'ACCOUNT_NOT_VERIFIED',
-      });
-    }
+    const publicData = await new UsersService(request.server).authenticate(
+      vinfast_id,
+      password,
+    );
+    const token = await reply.jwtSign({ sub: publicData.id });
 
     return reply.code(200).send({
       message: 'Đăng nhập thành công',
-      token: authData.session?.access_token,
+      token,
       publicData,
     });
   } catch (error) {
+    if (error instanceof UsersServiceError) {
+      return reply.code(error.statusCode).send({
+        error: error.message,
+        ...(error.message.includes('chờ duyệt')
+          ? { code: 'ACCOUNT_NOT_VERIFIED' }
+          : {}),
+      });
+    }
     request.log.error(error);
     return reply.code(500).send({ error: 'Lỗi máy chủ nội bộ' });
   }

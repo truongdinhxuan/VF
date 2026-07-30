@@ -13,6 +13,12 @@ import type {
 import { USER_COLUMNS } from '../interfaces/users';
 import { USER_SORT_FIELDS } from '../schemas/users';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
+import {
+  hashPassword,
+  isStrongPassword,
+  PASSWORD_RULE_MESSAGE,
+  verifyPassword,
+} from '../utils/password';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -222,71 +228,107 @@ export class UsersService {
     return data as unknown as UserProfileRecord;
   }
 
+  async authenticate(
+    vinfastId: number,
+    password: string,
+  ): Promise<UserProfileRecord> {
+    const { data, error } = await this.db
+      .from('users')
+      .select(USER_EXPANDED_SELECT)
+      .eq('vinfast_id', vinfastId)
+      .maybeSingle();
+
+    if (error) {
+      this.fastify.log.error(error);
+      userFail(500, 'Không thể xác thực tài khoản');
+    }
+    if (!data) {
+      await hashPassword(password);
+      return userFail(401, 'VinFast ID hoặc mật khẩu không đúng');
+    }
+
+    const profile = data as unknown as UserProfileRecord;
+    const { data: credential, error: credentialError } = await this.db
+      .from('user_credentials')
+      .select('password_hash')
+      .eq('user_id', profile.id)
+      .maybeSingle();
+
+    if (credentialError) {
+      this.fastify.log.error(credentialError);
+      userFail(500, 'Không thể xác thực tài khoản');
+    }
+    if (!credential) {
+      await hashPassword(password);
+      return userFail(401, 'VinFast ID hoặc mật khẩu không đúng');
+    }
+
+    if (!(await verifyPassword(password, credential.password_hash))) {
+      return userFail(401, 'VinFast ID hoặc mật khẩu không đúng');
+    }
+    if (!profile.is_active || profile.is_deleted) {
+      return userFail(403, 'Tài khoản không tồn tại hoặc đã bị khóa');
+    }
+    if (!profile.is_verified) {
+      return userFail(
+        403,
+        'Tài khoản đang chờ duyệt và chưa được phép truy cập dữ liệu nội bộ',
+      );
+    }
+    if (
+      !profile.area_id ||
+      !profile.role ||
+      !profile.role.is_active ||
+      profile.role.is_deleted ||
+      !normalizeRoleCode(profile.role.code)
+    ) {
+      return userFail(403, 'Người dùng chưa được gán role hoặc area hợp lệ');
+    }
+
+    return profile;
+  }
+
   async create(body: CreateUserBody) {
     const email = normalizeRequiredText(body.email, 'email').toLowerCase();
     const firstName = normalizeRequiredText(body.first_name, 'first_name');
     const lastName = normalizeRequiredText(body.last_name, 'last_name');
 
+    if (!isStrongPassword(body.password)) {
+      return userFail(400, PASSWORD_RULE_MESSAGE);
+    }
     await this.assertUniqueFields(email, body.vinfast_id);
     await this.validateReferences(body);
 
-    const { data: authData, error: authError } =
-      await this.db.auth.admin.createUser({
-        email,
-        password: body.password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          is_verified: false,
-        },
-      });
+    const passwordHash = await hashPassword(body.password);
+    const { data: userId, error: createError } = await this.db.rpc(
+      'create_internal_user',
+      {
+        p_email: email,
+        p_first_name: firstName,
+        p_last_name: lastName,
+        p_vinfast_id: body.vinfast_id,
+        p_phone_number: normalizeNullableText(body.phone_number) ?? null,
+        p_avatar_url: normalizeNullableText(body.avatar_url) ?? null,
+        p_role_id: body.role_id,
+        p_area_id: body.area_id,
+        p_managed_by_user_id: body.managed_by_user_id ?? null,
+        p_password_hash: passwordHash,
+      },
+    );
 
-    if (authError || !authData.user) {
-      const statusCode = /already|exists/i.test(authError?.message ?? '') ? 409 : 400;
-      return userFail(statusCode, authError?.message ?? 'Không thể tạo Supabase Auth user');
-    }
-
-    const userId = authData.user.id;
-    const { data: publicData, error: publicError } = await this.db
-      .from('users')
-      .insert({
-        id: userId,
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        vinfast_id: body.vinfast_id,
-        phone_number: normalizeNullableText(body.phone_number) ?? null,
-        avatar_url: normalizeNullableText(body.avatar_url) ?? null,
-        role_id: body.role_id,
-        area_id: body.area_id,
-        managed_by_user_id: body.managed_by_user_id ?? null,
-        is_verified: false,
-        is_active: true,
-        is_deleted: false,
-      })
-      .select(USER_EXPANDED_SELECT)
-      .single();
-
-    if (publicError || !publicData) {
-      const { error: cleanupError } = await this.db.auth.admin.deleteUser(userId);
-      if (cleanupError) {
-        this.fastify.log.error(cleanupError);
-        userFail(
-          500,
-          `Không thể tạo profile public.users: ${publicError?.message ?? 'unknown error'}. Không thể rollback Auth user: ${cleanupError.message}`,
-        );
-      }
+    if (createError || typeof userId !== 'string') {
       userDatabaseError(
-        publicError,
-        `Không thể tạo profile public.users: ${publicError?.message ?? 'unknown error'}`,
+        createError,
+        'Không thể tạo đồng thời hồ sơ và thông tin đăng nhập',
       );
     }
+
+    const publicData = await this.get(userId);
 
     return {
       id: userId,
       email,
-      publicData: publicData as unknown as UserProfileRecord,
+      publicData,
     };
   }
 
@@ -338,16 +380,6 @@ export class UsersService {
       await this.assertUniqueFields(nextEmail, nextVinfastId, id);
     }
 
-    let authEmailChanged = false;
-    if (nextEmail !== currentUser.email) {
-      const { error: authError } = await this.db.auth.admin.updateUserById(id, {
-        email: nextEmail,
-        email_confirm: true,
-      });
-      if (authError) userFail(400, authError.message);
-      authEmailChanged = true;
-    }
-
     const { data, error } = await this.db
       .from('users')
       .update(payload)
@@ -355,18 +387,74 @@ export class UsersService {
       .select(USER_EXPANDED_SELECT)
       .single();
 
-    if (error || !data) {
-      if (authEmailChanged) {
-        const { error: rollbackError } = await this.db.auth.admin.updateUserById(id, {
-          email: currentUser.email,
-          email_confirm: true,
-        });
-        if (rollbackError) this.fastify.log.error(rollbackError);
-      }
-      userDatabaseError(error, 'Không thể cập nhật người dùng');
-    }
+    if (error || !data) userDatabaseError(error, 'Không thể cập nhật người dùng');
 
     return data as unknown as UserProfileRecord;
+  }
+
+  async updatePassword(
+    id: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    if (!isStrongPassword(newPassword)) {
+      return userFail(400, PASSWORD_RULE_MESSAGE);
+    }
+
+    const { data: credential, error: credentialError } = await this.db
+      .from('user_credentials')
+      .select('password_hash')
+      .eq('user_id', id)
+      .maybeSingle();
+
+    if (credentialError) userFail(500, 'Không thể kiểm tra mật khẩu hiện tại');
+    if (
+      !credential ||
+      !(await verifyPassword(currentPassword, credential.password_hash))
+    ) {
+      return userFail(400, 'Sai mật khẩu hiện tại');
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    const { error } = await this.db
+      .from('user_credentials')
+      .update({
+        password_hash: passwordHash,
+        password_changed_at: new Date().toISOString(),
+      })
+      .eq('user_id', id);
+
+    if (error) userFail(500, 'Không thể cập nhật mật khẩu');
+  }
+
+  async setPassword(id: string, newPassword: string): Promise<void> {
+    if (!isStrongPassword(newPassword)) {
+      return userFail(400, PASSWORD_RULE_MESSAGE);
+    }
+
+    const { data: user, error: userError } = await this.db
+      .from('users')
+      .select('id')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .maybeSingle();
+
+    if (userError) userFail(500, 'Không thể kiểm tra người dùng');
+    if (!user) userFail(404, 'Không tìm thấy người dùng');
+
+    const passwordHash = await hashPassword(newPassword);
+    const { error } = await this.db
+      .from('user_credentials')
+      .upsert(
+        {
+          user_id: id,
+          password_hash: passwordHash,
+          password_changed_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' },
+      );
+
+    if (error) userFail(500, 'Không thể đặt mật khẩu người dùng');
   }
 
   async deactivate(id: string): Promise<UserProfileRecord> {

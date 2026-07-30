@@ -4,8 +4,9 @@ import {useForm} from "react-hook-form"
 import { useAuth } from "../../context/AuthContext";
 import { resolveRoleCode } from "../../constants/roles";
 import { getApiErrorMessage } from "../../api/errors";
+import { getButtonClassName } from "../../components/admin/Button";
 interface ILoginFormInput {
-  email: string;
+  vinfast_id: number;
   password: string;
 }
 
@@ -20,18 +21,18 @@ export const LoginPage = () => {
     formState: { errors, isSubmitting },
   } = useForm<ILoginFormInput>({
     defaultValues: {
-      email: "",
+      vinfast_id: 0,
       password: "",
     },
   });
   // Hàm xử lý sự kiện submit form khi đã qua kiểm tra hợp lệ
   const onSubmit = async (data: ILoginFormInput) => {
-    const { email, password } = data;
+    const { vinfast_id, password } = data;
     
-    if (!email || !password) return;
+    if (!Number.isInteger(vinfast_id) || !password) return;
 
     try {
-      const response = await login({ email, password });
+      const response = await login({ vinfast_id, password });
       
       if (response.token) {
         // loginContext lưu token vào local storage
@@ -60,29 +61,29 @@ export const LoginPage = () => {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Nhập Email */}
+          {/* Nhập VinFast ID */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-              Email Address
+              VinFast ID
             </label>
             <input
-              type="email"
-              placeholder="Nhập email"
+              type="number"
+              inputMode="numeric"
+              placeholder="Nhập VinFast ID"
               className={`w-full rounded-xl border px-4 py-3 text-sm focus:bg-white focus:outline-none focus:ring-2
-                ${errors.email 
+                ${errors.vinfast_id
                   ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" 
                   : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"}`}
-              {...register("email", {
-                required: "Email là trường bắt buộc nhập",
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: "Email không đúng định dạng"
-                }
+              {...register("vinfast_id", {
+                valueAsNumber: true,
+                required: "VinFast ID là trường bắt buộc",
+                validate: (value) =>
+                  Number.isInteger(value) || "VinFast ID phải là số nguyên",
               })}
             />
-            {errors.email && (
+            {errors.vinfast_id && (
               <p className="mt-1.5 text-xs text-red-500 font-medium">
-                {errors.email.message}
+                {errors.vinfast_id.message}
               </p>
             )}
           </div>
@@ -102,8 +103,8 @@ export const LoginPage = () => {
               {...register("password", {
                 required: "Mật khẩu là trường bắt buộc nhập",
                 minLength: {
-                  value: 6,
-                  message: "Mật khẩu phải chứa ít nhất 6 ký tự"
+                  value: 9,
+                  message: "Mật khẩu phải chứa ít nhất 9 ký tự"
                 }
               })}
             />
@@ -118,7 +119,12 @@ export const LoginPage = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed"
+            className={getButtonClassName({
+              variant: "info",
+              size: "lg",
+              block: true,
+              className: "rounded-xl active:scale-[0.98]",
+            })}
           >
             {/* After ? = true After : false */}
             {isSubmitting ? "Đang xử lý..." : "Đăng Nhập"}

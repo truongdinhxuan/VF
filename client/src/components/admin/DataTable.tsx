@@ -2,6 +2,7 @@ import type React from 'react';
 import type { PaginationMeta, SortOrder } from '../../types/pagination.types';
 import { Pagination } from '../common/Pagination';
 import { TableSkeleton } from '../common/skeleton';
+import { getButtonClassName } from './Button';
 
 export interface Column<T> {
   header: string;
@@ -111,7 +112,13 @@ export const DataTable = <T extends object>({
                             sortBy === column.sortKey && sortOrder === 'asc' ? 'desc' : 'asc',
                           );
                         }}
-                        className={sortable ? 'inline-flex items-center gap-1 hover:text-blue-600' : ''}
+                        className={getButtonClassName({
+                          variant: 'ghost',
+                          size: 'xs',
+                          className: sortable
+                            ? '-mx-2 uppercase tracking-wider'
+                            : '-mx-2 cursor-default uppercase tracking-wider hover:bg-transparent',
+                        })}
                       >
                         {column.header}
                         {sortBy === column.sortKey ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : null}

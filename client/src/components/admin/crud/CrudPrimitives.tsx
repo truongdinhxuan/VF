@@ -4,7 +4,14 @@ import {useEffect} from 'react';
 import type { CrudFeedback } from '../../../hooks/useCrudResource';
 import { AnimatePresence, motion } from 'motion/react';
 import { AppTooltip } from '../../common/AppTooltip';
-
+import {
+  ErrorButton,
+  getButtonClassName,
+  InfoButton,
+  SecondaryButton,
+  TextButton,
+  TextErrorButton,
+} from '../Button';
 export const inputClassName =
   'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition ' +
   'focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
@@ -49,7 +56,7 @@ export const CrudPageHeader = ({
       <button
         type="button"
         onClick={onCreate}
-        className="w-full shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
+        className={InfoButton}
       >
         {createLabel}
       </button>
@@ -104,7 +111,11 @@ export const CrudFeedbackToast = ({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-md px-1 text-lg font-bold leading-none opacity-70 hover:opacity-100"
+              className={getButtonClassName({
+                variant: 'icon',
+                size: 'xs',
+                className: 'shrink-0 text-lg font-bold leading-none opacity-70 hover:opacity-100',
+              })}
               aria-label="Đóng thông báo"
             >
               <span aria-hidden="true">×</span>
@@ -135,7 +146,7 @@ export const ErrorState = ({
     <button
       type="button"
       onClick={onRetry}
-      className="mt-3 rounded-lg px-3 py-2 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className={`${TextButton} mt-3`}
     >
       Thử lại
     </button>
@@ -187,7 +198,11 @@ export const CrudModal = ({
               type="button"
               disabled={busy}
               onClick={onClose}
-              className="shrink-0 rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className={getButtonClassName({
+                variant: 'icon',
+                size: 'sm',
+                className: 'shrink-0 text-xl text-slate-400',
+              })}
               aria-label="Đóng cửa sổ"
             >
               <span aria-hidden="true">×</span>
@@ -252,7 +267,7 @@ export const ConfirmDialog = ({
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            className={`${SecondaryButton} w-full sm:w-auto`}
           >
             Bỏ qua
           </button>
@@ -261,7 +276,7 @@ export const ConfirmDialog = ({
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className="w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            className={`${ErrorButton} w-full sm:w-auto`}
           >
             {busy ? 'Đang xử lý...' : confirmLabel}
           </button>
@@ -295,7 +310,7 @@ export const RowActions = ({
     <button
       type="button"
       onClick={onEdit}
-      className="whitespace-nowrap rounded-md px-1 py-0.5 font-semibold text-blue-600 transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className={TextButton}
     >
       Sửa
     </button>
@@ -304,7 +319,7 @@ export const RowActions = ({
       <button
         type="button"
         onClick={onDelete}
-        className="whitespace-nowrap rounded-md px-1 py-0.5 font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
+        className={TextErrorButton}
       >
         {deleteLabel}
       </button>
@@ -326,7 +341,7 @@ export const FormActions = ({
       type="button"
       disabled={busy}
       onClick={onCancel}
-      className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+      className={`${SecondaryButton} w-full sm:w-auto`}
     >
       Bỏ qua
     </button>
@@ -334,7 +349,7 @@ export const FormActions = ({
     <button
       type="submit"
       disabled={busy}
-      className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+      className={`${InfoButton} w-full sm:w-auto`}
     >
       {busy ? 'Đang lưu...' : submitLabel}
     </button>

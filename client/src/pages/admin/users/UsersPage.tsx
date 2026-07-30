@@ -4,6 +4,7 @@ import { listAreas } from '../../../api/areas.service';
 import { listRoles } from '../../../api/roles.service';
 import { createUser, deactivateUser, getUsers, updateUser } from '../../../api/users.service';
 import { DataTable, type Column } from '../../../components/admin/DataTable';
+import { TextButton } from '../../../components/admin/Button';
 import {
   ConfirmDialog,
   CrudFeedbackToast,
@@ -138,7 +139,14 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
           <>
             <label className={labelClassName}>
               <span>Mật khẩu ban đầu</span>
-              <input type="password" autoComplete="new-password" {...register('password', { required: 'Vui lòng nhập mật khẩu.', minLength: { value: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự.' } })} className={inputClassName} />
+              <input type="password" autoComplete="new-password" {...register('password', {
+                required: 'Vui lòng nhập mật khẩu.',
+                minLength: { value: 9, message: 'Mật khẩu phải có ít nhất 9 ký tự.' },
+                maxLength: { value: 128, message: 'Mật khẩu không được vượt quá 128 ký tự.' },
+                validate: (value) =>
+                  (/[A-Z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value))
+                  || 'Mật khẩu cần có chữ hoa, số và ký tự đặc biệt.',
+              })} className={inputClassName} />
               <FieldError message={errors.password?.message} />
             </label>
             <label className={labelClassName}>
@@ -273,7 +281,7 @@ const UsersPage = () => {
       : () => createUser({ ...commonInput, password: values.password } satisfies CreateUserInput);
     const ok = await resource.runMutation(
       action,
-      editing ? 'Đã cập nhật người dùng.' : 'Đã tạo Auth user và profile người dùng.',
+      editing ? 'Đã cập nhật người dùng.' : 'Đã tạo tài khoản nội bộ. Tài khoản đang chờ duyệt.',
       editing ? 'Không thể cập nhật người dùng.' : 'Không thể tạo người dùng.',
     );
     if (ok) setFormOpen(false);
@@ -290,7 +298,7 @@ const UsersPage = () => {
     ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => user.is_active ? (
       <RowActions onEdit={() => { setEditing(user); setFormOpen(true); }} onDelete={() => setDeactivateTarget(user)} />
     ) : (
-      <div className="flex justify-end"><button type="button" onClick={() => { setEditing(user); setFormOpen(true); }} className="font-semibold text-blue-600 hover:text-blue-800">Sửa / kích hoạt</button></div>
+      <div className="flex justify-end"><button type="button" onClick={() => { setEditing(user); setFormOpen(true); }} className={TextButton}>Sửa / kích hoạt</button></div>
     ) }] : []),
   ];
 
