@@ -18,10 +18,14 @@ describe('order relation response contract', () => {
     assert.match(orderService, /taken_away:users!orders_taken_away_by_fkey/);
   });
 
-  it('loads order item supply and unit relations for detail responses', () => {
+  it('loads order item supply, Provider and unit relations for detail responses', () => {
     assert.match(
       orderService,
       /order_items\([\s\S]*supply:supplies!order_items_supply_id_fkey/,
+    );
+    assert.match(
+      orderService,
+      /order_items\([\s\S]*provider:providers!order_items_provider_id_fkey/,
     );
     assert.match(
       orderService,

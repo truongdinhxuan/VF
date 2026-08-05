@@ -6,6 +6,7 @@ import type {
   UpdateSupplyInput,
 } from '../types/supplies';
 import type { PaginatedResponse } from '../types/pagination.types';
+import type { Provider } from '../types/providers';
 import instance from './http';
 import { unwrapData } from './response';
 
@@ -18,8 +19,19 @@ export const listSupplies = async (
     signal,
   });
 
-export const getSupply = async (id: string): Promise<Supply> =>
-  unwrapData(await instance.get<ApiEnvelope<Supply>, ApiEnvelope<Supply>>(`supplies/${id}`));
+export const getSupply = async (id: string, signal?: AbortSignal): Promise<Supply> =>
+  unwrapData(await instance.get<ApiEnvelope<Supply>, ApiEnvelope<Supply>>(`supplies/${id}`, { signal }));
+
+export const getSupplyProviders = async (
+  id: string,
+  signal?: AbortSignal,
+): Promise<Provider[]> =>
+  unwrapData(
+    await instance.get<ApiEnvelope<Provider[]>, ApiEnvelope<Provider[]>>(
+      `supplies/${id}/providers`,
+      { params: { isActive: true, isDeleted: false }, signal },
+    ),
+  );
 
 export const createSupply = async (input: CreateSupplyInput): Promise<Supply> =>
   unwrapData(await instance.post<ApiEnvelope<Supply>, ApiEnvelope<Supply>>('supplies', input));

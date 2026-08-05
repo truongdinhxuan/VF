@@ -62,6 +62,19 @@ export const MASTER_DATA_MANAGER_ROLES: readonly RoleCode[] = [
   MATERIAL_LEAD_ROLE,
   ADMIN_ROLE,
 ];
+export const PROVIDER_MANAGER_ROLES: readonly RoleCode[] = [
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+export const PROVIDER_VIEWER_ROLES: readonly RoleCode[] = PROVIDER_MANAGER_ROLES;
+export const AREA_VIEWER_ROLES: readonly RoleCode[] = [
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
 
 const extractRoleCode = (value: unknown): string | null => {
   if (typeof value === 'string') return value;

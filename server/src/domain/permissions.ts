@@ -45,6 +45,21 @@ export const MASTER_DATA_MANAGER_ROLES: readonly RoleCode[] = [
   ADMIN_ROLE,
 ];
 
+export const PROVIDER_VIEWER_ROLES: readonly RoleCode[] = [
+  PACKING_ROLE,
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+
+export const PROVIDER_MANAGER_ROLES: readonly RoleCode[] = [
+  MATERIAL_DATA_ROLE,
+  MATERIAL_LEAD_ROLE,
+  MATERIAL_CONTROL_ROLE,
+  ADMIN_ROLE,
+];
+
 export const canCreateOrder = (role: RoleCode): boolean =>
   role === PACKING_ROLE || role === ADMIN_ROLE;
 
@@ -68,3 +83,9 @@ export const canManageSystem = (role: RoleCode): boolean =>
 
 export const canManageMasterData = (role: RoleCode): boolean =>
   MASTER_DATA_MANAGER_ROLES.includes(role);
+
+export const canViewProviders = (role: RoleCode): boolean =>
+  PROVIDER_VIEWER_ROLES.includes(role);
+
+export const canManageProviders = (role: RoleCode): boolean =>
+  PROVIDER_MANAGER_ROLES.includes(role);

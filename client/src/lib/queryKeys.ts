@@ -17,6 +17,12 @@ export const queryKeys = {
   supplyCategories: resourceKeys('supply-categories'),
   units: resourceKeys('units'),
   supplies: resourceKeys('supplies'),
+  providers: resourceKeys('providers'),
+  supplyProviders: {
+    all: ['supply-providers'] as const,
+    lists: ['supply-providers', 'list'] as const,
+    list: (supplyId: string) => ['supply-providers', 'list', supplyId] as const,
+  },
   storageLocations: resourceKeys('storage-locations'),
   stockBalances: resourceKeys('stock-balances'),
   stockTransactions: resourceKeys('stock-transactions'),

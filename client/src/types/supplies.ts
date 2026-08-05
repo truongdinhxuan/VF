@@ -1,4 +1,5 @@
 import type { PaginatedListParams } from './pagination.types';
+import type { Provider } from './providers';
 
 export interface SupplyCategorySummary {
   id: string;
@@ -32,6 +33,7 @@ export interface Supply {
   updated_at: string;
   category?: SupplyCategorySummary | null;
   unit?: UnitSummary | null;
+  providers: Provider[];
 }
 
 export interface SupplyListParams extends PaginatedListParams {
@@ -53,9 +55,12 @@ export interface CreateSupplyInput {
   safety_stock?: number | null;
   image_url?: string | null;
   is_active?: boolean;
+  provider_ids: string[];
 }
 
-export type UpdateSupplyInput = Partial<CreateSupplyInput>;
+export type UpdateSupplyInput = Partial<Omit<CreateSupplyInput, 'provider_ids'>> & {
+  provider_ids: string[];
+};
 export type SupplyOption = Pick<
   Supply,
   | 'id'
@@ -63,6 +68,7 @@ export type SupplyOption = Pick<
   | 'short_text'
   | 'description'
   | 'unit_id'
+  | 'unit'
   | 'is_active'
   | 'is_deleted'
 >;

@@ -4,7 +4,8 @@ import {useForm} from "react-hook-form"
 import { useAuth } from "../../context/AuthContext";
 import { resolveRoleCode } from "../../constants/roles";
 import { getApiErrorMessage } from "../../api/errors";
-import { getButtonClassName } from "../../components/admin/Button";
+import { getButtonClassName } from "../../components/common/Button";
+import { getRoleHomePath } from "../../constants/workspaces";
 interface ILoginFormInput {
   vinfast_id: number;
   password: string;
@@ -41,7 +42,7 @@ export const LoginPage = () => {
 
       // Phân luồng điều hướng dựa theo Role
       const userRole = resolveRoleCode(response.publicData?.role);
-      navigate(userRole ? "/admin/dashboard" : "/403-unauthorized");
+      navigate(getRoleHomePath(userRole));
       
     } catch (error) {
       console.error("Lỗi đăng nhập:", error);

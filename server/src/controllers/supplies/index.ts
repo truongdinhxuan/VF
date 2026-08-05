@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   CreateSupplyBody,
   SupplyListQuery,
+  SupplyProviderListQuery,
   UpdateSupplyBody,
 } from '../../interfaces/supplies';
 import { MasterDataServiceError } from '../../services/master-data.helpers';
@@ -25,6 +26,15 @@ export const getSupply = (request: FastifyRequest, reply: FastifyReply) =>
       (request.params as { id: string }).id,
     );
   });
+
+export const listSupplyProviders = (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => respondWithData(request, reply, () =>
+  new SuppliesService(request.server).listProviders(
+    (request.params as { id: string }).id,
+    request.query as SupplyProviderListQuery,
+  ));
 
 export const createSupply = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(

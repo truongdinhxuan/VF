@@ -19,12 +19,24 @@ import {
   PACKING_ROLE,
 } from '../../domain/permissions';
 import { verifyTokenAndRole } from '../../middleware/auth';
-import { orderListSchema } from '../../schemas/orders';
+import {
+  orderCreateSchema,
+  orderListSchema,
+  orderPatchSchema,
+} from '../../schemas/orders';
 
 const orderRoutes: FastifyPluginAsync = async (fastify) => {
   const ownerRoles = [PACKING_ROLE, ROLE_CODE.ADMIN];
-  fastify.post('/', { preHandler: verifyTokenAndRole(ownerRoles) }, createOrder);
-  fastify.patch('/:id', { preHandler: verifyTokenAndRole(ownerRoles) }, patchOrder);
+  fastify.post(
+    '/',
+    { preHandler: verifyTokenAndRole(ownerRoles), schema: orderCreateSchema },
+    createOrder,
+  );
+  fastify.patch(
+    '/:id',
+    { preHandler: verifyTokenAndRole(ownerRoles), schema: orderPatchSchema },
+    patchOrder,
+  );
   fastify.post(
     '/:id/submit',
     { preHandler: verifyTokenAndRole(ownerRoles) },

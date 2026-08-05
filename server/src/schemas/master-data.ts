@@ -32,6 +32,9 @@ export const SUPPLY_SORT_FIELDS = [
 export const STORAGE_LOCATION_SORT_FIELDS = [
   'id', 'code', 'name', 'area_id', 'description', 'is_active', 'created_at', 'updated_at',
 ] as const;
+export const PROVIDER_SORT_FIELDS = [
+  'code', 'name', 'created_at', 'updated_at', 'is_active',
+] as const;
 
 const objectBody = (
   properties: Record<string, unknown>,
@@ -158,18 +161,35 @@ const supplyProperties = {
   safety_stock: nullableNumber,
   image_url: nullableText,
   is_active: active,
+  provider_ids: {
+    type: 'array',
+    minItems: 1,
+    items: uuid,
+  },
 } as const;
 
 export const supplyCreateSchema: FastifySchema = {
   body: objectBody(
     supplyProperties,
-    ['code', 'short_text', 'category_id', 'unit_id'],
+    ['code', 'short_text', 'category_id', 'unit_id', 'provider_ids'],
   ),
 };
 
 export const supplyUpdateSchema: FastifySchema = {
   ...idParamsSchema,
-  body: objectBody(supplyProperties),
+  body: objectBody(supplyProperties, ['provider_ids']),
+};
+
+export const supplyProviderListQuerySchema: FastifySchema = {
+  ...idParamsSchema,
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      isActive: optionalBoolean,
+      isDeleted: optionalBoolean,
+    },
+  },
 };
 
 export const supplyListQuerySchema = createListQuerySchema(SUPPLY_SORT_FIELDS, {
@@ -209,3 +229,27 @@ export const storageLocationListQuerySchema = createListQuerySchema(
     isActive: optionalBoolean,
   },
 );
+
+const providerProperties = {
+  code: { type: 'string', minLength: 1, maxLength: 100 },
+  name: { type: 'string', minLength: 1, maxLength: 255 },
+  description: nullableText,
+  is_active: active,
+} as const;
+
+export const providerListQuerySchema = createListQuerySchema(
+  PROVIDER_SORT_FIELDS,
+  {
+    isActive: optionalBoolean,
+    isDeleted: optionalBoolean,
+  },
+);
+
+export const providerCreateSchema: FastifySchema = {
+  body: objectBody(providerProperties, ['code', 'name']),
+};
+
+export const providerUpdateSchema: FastifySchema = {
+  ...idParamsSchema,
+  body: objectBody(providerProperties),
+};

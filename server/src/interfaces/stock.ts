@@ -4,6 +4,8 @@ import type { PaginationQuery } from './pagination';
 export interface StockBalanceListQuery extends PaginationQuery {
   supply_id?: string;
   supplyId?: string;
+  provider_id?: string;
+  providerId?: string;
   area_id?: string;
   areaId?: string;
   storage_location_id?: string;
@@ -14,6 +16,8 @@ export interface StockBalanceListQuery extends PaginationQuery {
 export interface StockTransactionListQuery extends PaginationQuery {
   supply_id?: string;
   supplyId?: string;
+  provider_id?: string;
+  providerId?: string;
   area_id?: string;
   areaId?: string;
   storageLocationId?: string;
@@ -34,6 +38,7 @@ export type StockAdjustmentType = Extract<
 
 export interface CreateStockAdjustmentBody {
   supply_id: string;
+  provider_id: string;
   area_id: string;
   storage_location_id: string;
   type?: StockAdjustmentType;

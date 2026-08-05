@@ -19,6 +19,9 @@ import {
 const migration = [
   '202607200003_backend_foundation.sql',
   '202607290001_lookup_master_data_foundation.sql',
+  '202608050001_provider_foundation.sql',
+  '202608050002_supply_provider_rpc.sql',
+  '202608050003_provider_stock_order_runtime.sql',
 ].map((file) => readFileSync(
   resolve(process.cwd(), 'supabase/migrations', file),
   'utf8',
@@ -114,16 +117,29 @@ describe('Phase 1 backend foundation', () => {
       'max_stock', 'safety_stock', 'image_url', 'is_active', 'is_deleted',
       'created_at', 'updated_at',
     ]);
+    assert.deepEqual(interfaceProperties('ProviderRecord'), [
+      'id', 'code', 'name', 'description', 'is_active', 'is_deleted',
+      'created_at', 'updated_at',
+    ]);
+    assert.deepEqual(interfaceProperties('SupplyProviderRecord'), [
+      'id', 'supply_id', 'provider_id', 'is_active', 'is_deleted',
+      'created_at', 'updated_at',
+    ]);
     assert.deepEqual(interfaceProperties('StorageLocationRecord'), [
       'id', 'code', 'area_id', 'name', 'description', 'is_active',
       'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StockBalanceRecord'), [
-      'id', 'supply_id', 'area_id', 'storage_location_id', 'quantity',
+      'id', 'supply_id', 'provider_id', 'area_id', 'storage_location_id', 'quantity',
+      'is_active', 'is_deleted', 'created_at', 'updated_at',
+    ]);
+    assert.deepEqual(interfaceProperties('OrderItemRecord'), [
+      'id', 'order_id', 'supply_id', 'provider_id', 'unit_id',
+      'quantity_requested', 'quantity_approved', 'quantity_issued', 'note',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StockTransactionRecord'), [
-      'id', 'supply_id', 'area_id', 'storage_location_id', 'order_id',
+      'id', 'supply_id', 'provider_id', 'area_id', 'storage_location_id', 'order_id',
       'order_item_id', 'transaction_type_id', 'quantity', 'before_quantity',
       'after_quantity', 'reason_id', 'reason_note', 'note', 'created_by',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
@@ -138,10 +154,17 @@ describe('Phase 1 backend foundation', () => {
       'units_code_key',
       'supplies_code_key',
       'storage_locations_area_code_key',
-      'stock_balances_supply_area_location_key',
     ]) {
       assert.match(migration, new RegExp(`unique index if not exists ${indexName}`, 'i'));
     }
+    assert.match(
+      migration,
+      /constraint stock_balances_supply_provider_area_location_key[\s\S]*unique \(supply_id, provider_id, area_id, storage_location_id\)/i,
+    );
+    assert.match(
+      migration,
+      /drop constraint if exists stock_balances_supply_area_location_key/i,
+    );
     assert.doesNotMatch(migration, /\btruncate\s+/i);
   });
 

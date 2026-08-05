@@ -1,4 +1,5 @@
 import type { PaginatedListParams } from './pagination.types';
+import type { Provider } from './providers';
 
 import type {
   OrderRevisionActionLookup,
@@ -50,6 +51,7 @@ export interface OrderItem {
   id: string;
   order_id: string;
   supply_id: string;
+  provider_id: string;
   unit_id: string;
   quantity_requested: number;
   quantity_approved: number | null;
@@ -59,6 +61,7 @@ export interface OrderItem {
   has_stock_shortage: boolean;
   note: string | null;
   supply?: OrderSupplySummary | null;
+  provider?: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
   unit?: OrderUnitSummary | null;
 }
 
@@ -121,6 +124,7 @@ export interface OrderListParams extends PaginatedListParams {
 
 export interface OrderItemInput {
   supply_id: string;
+  provider_id: string;
   quantity_requested: number;
   unit_id?: string;
   note?: string;

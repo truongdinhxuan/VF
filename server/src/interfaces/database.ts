@@ -86,6 +86,27 @@ export interface SupplyRecord {
   updated_at: string;
 }
 
+export interface ProviderRecord {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplyProviderRecord {
+  id: string;
+  supply_id: string;
+  provider_id: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface StorageLocationRecord {
   id: string;
   code: string;
@@ -101,6 +122,7 @@ export interface StorageLocationRecord {
 export interface StockBalanceRecord {
   id: string;
   supply_id: string;
+  provider_id: string;
   area_id: string;
   storage_location_id: string;
   quantity: number;
@@ -138,6 +160,7 @@ export interface OrderItemRecord {
   id: string;
   order_id: string;
   supply_id: string;
+  provider_id: string;
   unit_id: string;
   quantity_requested: number;
   quantity_approved: number | null;
@@ -152,6 +175,7 @@ export interface OrderItemRecord {
 export interface StockTransactionRecord {
   id: string;
   supply_id: string;
+  provider_id: string;
   area_id: string;
   storage_location_id: string;
   order_id: string | null;
@@ -243,6 +267,8 @@ export interface DatabaseRecordMap {
   supply_categories: SupplyCategoryRecord;
   units: UnitRecord;
   supplies: SupplyRecord;
+  providers: ProviderRecord;
+  supply_providers: SupplyProviderRecord;
   storage_locations: StorageLocationRecord;
   stock_balances: StockBalanceRecord;
   orders: OrderRecord;

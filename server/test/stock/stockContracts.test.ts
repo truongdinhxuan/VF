@@ -11,7 +11,7 @@ const balanceRoutes = read('src/routes/stock-balances/index.ts');
 const transactionRoutes = read('src/routes/stock-transactions/index.ts');
 const adjustmentRoutes = read('src/routes/stock-adjustments/index.ts');
 const adjustmentService = read('src/services/stock-adjustments.service.ts');
-const migration = read('supabase/migrations/202607290001_lookup_master_data_foundation.sql');
+const migration = read('supabase/migrations/202608050001_provider_foundation.sql');
 
 describe('Phase 3 stock API contracts', () => {
   it('keeps StockBalances read-only and routes mutations through adjustments', () => {
@@ -35,7 +35,7 @@ describe('Phase 3 stock API contracts', () => {
 
   it('calls one atomic RPC instead of writing balance and transaction separately', () => {
     assert.equal(
-      (adjustmentService.match(/\.rpc\(['"]apply_stock_adjustment_v2['"]/g) ?? []).length,
+      (adjustmentService.match(/\.rpc\(['"]apply_stock_adjustment_v3['"]/g) ?? []).length,
       1,
     );
     assert.doesNotMatch(adjustmentService, /\.from\(['"]stock_balances['"]\)/);
@@ -43,7 +43,7 @@ describe('Phase 3 stock API contracts', () => {
   });
 
   it('locks the balance and records exact before/after values atomically', () => {
-    assert.match(migration, /create or replace function public\.apply_stock_adjustment_v2/i);
+    assert.match(migration, /create or replace function public\.apply_stock_adjustment_v3/i);
     assert.match(migration, /for update/i);
     assert.match(migration, /update public\.stock_balances[\s\S]*set quantity = v_after/i);
     assert.match(migration, /insert into public\.stock_transactions/i);

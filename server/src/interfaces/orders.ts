@@ -2,6 +2,7 @@ import type { PaginationQuery } from './pagination';
 
 export interface OrderListItemInput {
   supply_id: string;
+  provider_id: string;
   quantity_requested: number;
   unit_id?: string;
   note?: string;

@@ -52,6 +52,7 @@ interface OrderItemData {
   id: string;
   order_id: string;
   supply_id: string;
+  provider_id: string;
   unit_id: string;
   quantity_requested: number | string;
   quantity_approved: number | string | null;
@@ -64,7 +65,13 @@ interface OrderItemData {
 
 interface StockBalanceAvailabilityRow {
   supply_id: string;
+  provider_id: string;
   quantity: number | string;
+}
+
+interface SupplyProviderLookup {
+  supply_id: string;
+  provider_id: string;
 }
 
 interface OrderData {
@@ -168,6 +175,9 @@ const ORDER_DETAIL_SELECT = `
   order_items(
     *,
     supply:supplies!order_items_supply_id_fkey(id, code, description),
+    provider:providers!order_items_provider_id_fkey(
+      id, code, name, description
+    ),
     unit:units!order_items_unit_id_fkey(id, code, symbol)
   ),
   order_revisions(
@@ -229,6 +239,7 @@ export class OrderService {
       .from('stock_balances')
       .select(`
         supply_id,
+        provider_id,
         quantity,
         storage_location:storage_locations!stock_balances_storage_location_id_fkey!inner(id)
       `)
@@ -239,13 +250,14 @@ export class OrderService {
 
     if (error) databaseError(error, 'Cannot calculate order stock availability');
 
-    const availableBySupply = new Map<string, number>();
+    const availableBySupplyProvider = new Map<string, number>();
     for (const balance of (data ?? []) as StockBalanceAvailabilityRow[]) {
       const quantity = Number(balance.quantity);
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
-      availableBySupply.set(
-        balance.supply_id,
-        (availableBySupply.get(balance.supply_id) ?? 0) + quantity,
+      const key = `${balance.supply_id}:${balance.provider_id}`;
+      availableBySupplyProvider.set(
+        key,
+        (availableBySupplyProvider.get(key) ?? 0) + quantity,
       );
     }
 
@@ -255,7 +267,9 @@ export class OrderService {
         ...item,
         ...calculateStockAvailability(
           Number(item.quantity_requested),
-          availableBySupply.get(item.supply_id) ?? 0,
+          availableBySupplyProvider.get(
+            `${item.supply_id}:${item.provider_id}`,
+          ) ?? 0,
         ),
       })),
     };
@@ -319,6 +333,7 @@ export class OrderService {
 
     for (const item of orderList) {
       if (!item?.supply_id) serviceError(400, 'supply_id is required');
+      if (!item?.provider_id) serviceError(400, 'provider_id is required');
       try {
         assertPositiveQuantity(item.quantity_requested, 'quantity_requested');
       } catch (error) {
@@ -327,14 +342,40 @@ export class OrderService {
     }
 
     const supplyIds = [...new Set(orderList.map((item) => item.supply_id))];
-    const { data, error } = await this.db
-      .from('supplies')
-      .select('id, unit_id, is_active, is_deleted')
-      .in('id', supplyIds);
+    const providerIds = [...new Set(orderList.map((item) => item.provider_id))];
+    const [suppliesResult, providersResult] = await Promise.all([
+      this.db
+        .from('supplies')
+        .select('id, unit_id, is_active, is_deleted')
+        .in('id', supplyIds),
+      this.db
+        .from('supply_providers')
+        .select(`
+          supply_id,
+          provider_id,
+          provider:providers!supply_providers_provider_id_fkey!inner(id)
+        `)
+        .in('supply_id', supplyIds)
+        .in('provider_id', providerIds)
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .eq('provider.is_active', true)
+        .eq('provider.is_deleted', false),
+    ]);
 
-    if (error) databaseError(error, 'Cannot validate supplies');
+    if (suppliesResult.error) {
+      databaseError(suppliesResult.error, 'Cannot validate supplies');
+    }
+    if (providersResult.error) {
+      databaseError(providersResult.error, 'Cannot validate Supply Providers');
+    }
     const supplyMap = new Map(
-      ((data ?? []) as SupplyLookup[]).map((supply) => [supply.id, supply]),
+      ((suppliesResult.data ?? []) as SupplyLookup[])
+        .map((supply) => [supply.id, supply]),
+    );
+    const linkedProviders = new Set(
+      ((providersResult.data ?? []) as SupplyProviderLookup[])
+        .map((relation) => `${relation.supply_id}:${relation.provider_id}`),
     );
 
     return orderList.map((item) => {
@@ -344,6 +385,12 @@ export class OrderService {
       }
       if (!supply.is_active || supply.is_deleted) {
         serviceError(400, `Supply ${item.supply_id} does not exist or is inactive`);
+      }
+      if (!linkedProviders.has(`${item.supply_id}:${item.provider_id}`)) {
+        serviceError(
+          400,
+          `Provider ${item.provider_id} is inactive or is not linked to Supply ${item.supply_id}`,
+        );
       }
       return {
         ...item,
@@ -371,37 +418,26 @@ export class OrderService {
 
     const items = await this.prepareOrderItems(body.order_list);
     const draftStatusId = await this.getStatusId(ORDER_STATUS.DRAFT);
-    const { data: order, error: orderError } = await this.db
-      .from('orders')
-      .insert({
-        code: generateOrderCode(),
-        from_area_id: sourceAreaId,
-        to_area_id: actor.areaId,
-        requested_by: actor.id,
-        status_id: draftStatusId,
-        note: body.note ?? null,
-      })
-      .select('*')
-      .single();
-
-    if (orderError || !order) databaseError(orderError, 'Cannot create order');
-
-    const { error: itemError } = await this.db.from('order_items').insert(
-      items.map((item) => ({
-        order_id: order.id,
-        supply_id: item.supply_id,
-        unit_id: item.unit_id,
-        quantity_requested: item.quantity_requested,
-        note: item.note ?? null,
-      })),
+    const { data: orderId, error } = await this.db.rpc(
+      'create_order_with_items',
+      {
+        p_code: generateOrderCode(),
+        p_from_area_id: sourceAreaId,
+        p_to_area_id: actor.areaId,
+        p_requested_by: actor.id,
+        p_status_id: draftStatusId,
+        p_note: body.note ?? null,
+        p_items: items.map((item) => ({
+          supply_id: item.supply_id,
+          provider_id: item.provider_id,
+          unit_id: item.unit_id,
+          quantity_requested: item.quantity_requested,
+          note: item.note ?? null,
+        })),
+      },
     );
-
-    if (itemError) {
-      await this.db.from('orders').delete().eq('id', order.id);
-      databaseError(itemError, 'Cannot create order items');
-    }
-
-    return this.findOrder(order.id);
+    if (error || !orderId) databaseError(error, 'Cannot create Order and OrderItems');
+    return this.findOrder(orderId as string);
   }
 
   async patch(actor: OrderActor, orderId: string, body: PatchOrderBody) {
@@ -419,22 +455,20 @@ export class OrderService {
 
     if (body.order_list !== undefined) {
       const items = await this.prepareOrderItems(body.order_list);
-      const { error: deleteError } = await this.db
-        .from('order_items')
-        .delete()
-        .eq('order_id', orderId);
-      if (deleteError) databaseError(deleteError, 'Cannot replace order items');
-
-      const { error: insertError } = await this.db.from('order_items').insert(
-        items.map((item) => ({
-          order_id: orderId,
-          supply_id: item.supply_id,
-          unit_id: item.unit_id,
-          quantity_requested: item.quantity_requested,
-          note: item.note ?? null,
-        })),
+      const { error } = await this.db.rpc(
+        'replace_order_items_with_providers',
+        {
+          p_order_id: orderId,
+          p_items: items.map((item) => ({
+            supply_id: item.supply_id,
+            provider_id: item.provider_id,
+            unit_id: item.unit_id,
+            quantity_requested: item.quantity_requested,
+            note: item.note ?? null,
+          })),
+        },
       );
-      if (insertError) databaseError(insertError, 'Cannot replace order items');
+      if (error) databaseError(error, 'Cannot replace order items');
     }
 
     if (body.note !== undefined) {
@@ -553,6 +587,7 @@ export class OrderService {
           id: item.id,
           order_id: item.order_id,
           supply_id: item.supply_id,
+          provider_id: item.provider_id,
           unit_id: item.unit_id,
           quantity_requested: Number(item.quantity_requested),
           quantity_approved: assertApprovedQuantity(

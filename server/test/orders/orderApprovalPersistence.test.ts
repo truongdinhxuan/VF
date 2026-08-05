@@ -26,6 +26,7 @@ describe('order approval item persistence', () => {
       'id',
       'order_id',
       'supply_id',
+      'provider_id',
       'unit_id',
       'quantity_requested',
       'quantity_approved',

@@ -13,7 +13,7 @@ import {
 } from './stock-search';
 
 const SELECT = `
-  id, supply_id, area_id, storage_location_id, order_id, order_item_id,
+  id, supply_id, provider_id, area_id, storage_location_id, order_id, order_item_id,
   transaction_type_id, reason_id, reason_note,
   quantity, before_quantity, after_quantity, reason, note, created_by,
   is_active, is_deleted, created_at, updated_at,
@@ -24,6 +24,9 @@ const SELECT = `
     id, code, name, requires_note
   ),
   supply:supplies!stock_transactions_supply_id_fkey(id, code, short_text, description),
+  provider:providers!stock_transactions_provider_id_fkey(
+    id, code, name, description
+  ),
   area:areas!stock_transactions_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_transactions_storage_location_id_fkey(id, code, name),
   creator:users!stock_transactions_created_by_fkey(id, first_name, last_name, vinfast_id)
@@ -75,8 +78,10 @@ export class StockTransactionsService {
       .eq('is_deleted', false);
 
     const supplyId = query.supplyId ?? query.supply_id;
+    const providerId = query.providerId ?? query.provider_id;
     const areaId = query.areaId ?? query.area_id;
     if (supplyId) request = request.eq('supply_id', supplyId);
+    if (providerId) request = request.eq('provider_id', providerId);
     if (areaId) request = request.eq('area_id', areaId);
     if (query.storageLocationId) {
       request = request.eq('storage_location_id', query.storageLocationId);

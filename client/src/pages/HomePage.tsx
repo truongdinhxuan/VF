@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { InfoButton } from "../components/admin/Button";
+import { InfoButton } from "../components/common/Button";
 
 const HomePage = () => {
   return <>

@@ -4,6 +4,7 @@ import {
   deleteSupply,
   getSupply,
   listSupplies,
+  listSupplyProviders,
   updateSupply,
 } from '../../controllers/supplies';
 import { ROLE_CODES } from '../../domain/enums';
@@ -13,6 +14,7 @@ import {
   idParamsSchema,
   supplyCreateSchema,
   supplyListQuerySchema,
+  supplyProviderListQuerySchema,
   supplyUpdateSchema,
 } from '../../schemas/master-data';
 
@@ -21,6 +23,14 @@ const supplyRoutes: FastifyPluginAsync = async (fastify) => {
     '/',
     { preHandler: verifyTokenAndRole(ROLE_CODES), schema: supplyListQuerySchema },
     listSupplies,
+  );
+  fastify.get(
+    '/:id/providers',
+    {
+      preHandler: verifyTokenAndRole(ROLE_CODES),
+      schema: supplyProviderListQuerySchema,
+    },
+    listSupplyProviders,
   );
   fastify.get(
     '/:id',

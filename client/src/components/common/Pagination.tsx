@@ -3,7 +3,7 @@ import {
   faChevronRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { getButtonClassName } from '../admin/Button';
+import { getButtonClassName } from './Button';
 
 interface PaginationProps {
   page: number;

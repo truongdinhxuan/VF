@@ -26,7 +26,12 @@ const routeFiles = {
 describe('master data CRUD contracts', () => {
   it('registers exactly one CRUD surface for every requested module', () => {
     for (const [feature, source] of Object.entries(routeFiles)) {
-      assert.equal((source.match(/fastify\.get\(/g) ?? []).length, 2, `${feature} GET routes`);
+      const expectedGetRoutes = feature === 'supplies' ? 3 : 2;
+      assert.equal(
+        (source.match(/fastify\.get\(/g) ?? []).length,
+        expectedGetRoutes,
+        `${feature} GET routes`,
+      );
       assert.equal((source.match(/fastify\.post\(/g) ?? []).length, 1, `${feature} POST route`);
       assert.equal((source.match(/fastify\.patch\(/g) ?? []).length, 1, `${feature} PATCH route`);
       assert.equal((source.match(/fastify\.delete\(/g) ?? []).length, 1, `${feature} DELETE route`);

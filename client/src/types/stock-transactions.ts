@@ -1,6 +1,7 @@
 import type { Area } from './areas';
 import type { StorageLocation } from './storage-locations';
 import type { PaginatedListParams } from './pagination.types';
+import type { Provider } from './providers';
 import type {
   AdjustmentReasonLookup,
   StockTransactionTypeLookup,
@@ -28,6 +29,7 @@ export type StockAdjustmentType = Extract<
 export interface StockTransaction {
   id: string;
   supply_id: string;
+  provider_id: string;
   area_id: string;
   storage_location_id: string;
   order_id: string | null;
@@ -48,6 +50,7 @@ export interface StockTransaction {
   transaction_type?: StockTransactionTypeLookup | null;
   adjustment_reason?: AdjustmentReasonLookup | null;
   supply?: { id: string; code: string; description: string | null } | null;
+  provider?: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
   area?: Pick<Area, 'id' | 'code' | 'name'> | null;
   storage_location?: Pick<StorageLocation, 'id' | 'code' | 'name'> | null;
   creator?: {
@@ -60,6 +63,7 @@ export interface StockTransaction {
 
 export interface StockTransactionListParams extends PaginatedListParams {
   supplyId?: string;
+  providerId?: string;
   areaId?: string;
   storageLocationId?: string;
   type?: StockTransactionType;
@@ -71,6 +75,7 @@ export interface StockTransactionListParams extends PaginatedListParams {
 
 export interface CreateStockAdjustmentInput {
   supply_id: string;
+  provider_id: string;
   area_id: string;
   storage_location_id: string;
   type?: StockAdjustmentType;
@@ -87,6 +92,7 @@ export interface StockAdjustmentResult {
   balance: {
     id: string;
     supply_id: string;
+    provider_id: string;
     area_id: string;
     storage_location_id: string;
     quantity: number;

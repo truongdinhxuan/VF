@@ -9,11 +9,14 @@ import {
 } from './stock-search';
 
 const SELECT = `
-  id, supply_id, area_id, storage_location_id, quantity,
+  id, supply_id, provider_id, area_id, storage_location_id, quantity,
   is_active, is_deleted, created_at, updated_at,
   supply:supplies!stock_balances_supply_id_fkey(
     id, code, short_text, description, min_stock,
     unit:units!supplies_unit_id_fkey(id, code, symbol, name)
+  ),
+  provider:providers!stock_balances_provider_id_fkey(
+    id, code, name, description
   ),
   area:areas!stock_balances_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_balances_storage_location_id_fkey(id, code, name)
@@ -38,9 +41,11 @@ export class StockBalancesService {
       .eq('is_deleted', false);
 
     const supplyId = query.supplyId ?? query.supply_id;
+    const providerId = query.providerId ?? query.provider_id;
     const areaId = query.areaId ?? query.area_id;
     const storageLocationId = query.storageLocationId ?? query.storage_location_id;
     if (supplyId) request = request.eq('supply_id', supplyId);
+    if (providerId) request = request.eq('provider_id', providerId);
     if (areaId) request = request.eq('area_id', areaId);
     if (storageLocationId) {
       request = request.eq('storage_location_id', storageLocationId);

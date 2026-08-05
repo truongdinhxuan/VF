@@ -7,8 +7,8 @@ const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const orderService = read('src/services/orders.service.ts');
-const createOrderPage = read('../client/src/pages/admin/orders/CreateOrderPage.tsx');
-const orderDetailPage = read('../client/src/pages/admin/orders/OrderDetailPage.tsx');
+const createOrderPage = read('../client/src/pages/orders/CreateOrderPage.tsx');
+const orderDetailPage = read('../client/src/pages/orders/OrderDetailPage.tsx');
 
 describe('order source and receiving area flow', () => {
   it('resolves the active VTDG area as the order source without a hard-coded UUID', () => {

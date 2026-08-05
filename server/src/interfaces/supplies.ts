@@ -10,6 +10,11 @@ export interface SupplyListQuery extends PaginationQuery {
   isDeleted?: string | boolean;
 }
 
+export interface SupplyProviderListQuery {
+  isActive?: string | boolean;
+  isDeleted?: string | boolean;
+}
+
 export interface CreateSupplyBody {
   code: string;
   short_text: string;
@@ -22,6 +27,10 @@ export interface CreateSupplyBody {
   safety_stock?: number | null;
   image_url?: string | null;
   is_active?: boolean;
+  provider_ids: string[];
 }
 
-export type UpdateSupplyBody = Partial<CreateSupplyBody>;
+export interface UpdateSupplyBody
+  extends Partial<Omit<CreateSupplyBody, 'provider_ids'>> {
+  provider_ids: string[];
+}
