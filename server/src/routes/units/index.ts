@@ -6,9 +6,8 @@ import {
   listUnits,
   updateUnit,
 } from '../../controllers/units';
-import { ROLE_CODES } from '../../domain/enums';
-import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   unitListQuerySchema,
   idParamsSchema,
@@ -17,29 +16,30 @@ import {
 } from '../../schemas/master-data';
 
 const unitRoutes: FastifyPluginAsync = async (fastify) => {
+  const catalogReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)];
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: unitListQuerySchema },
+    { preHandler: catalogReadPermission, schema: unitListQuerySchema },
     listUnits,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
+    { preHandler: catalogReadPermission, schema: idParamsSchema },
     getUnit,
   );
   fastify.post(
     '/',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: unitCreateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)], schema: unitCreateSchema },
     createUnit,
   );
   fastify.patch(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: unitUpdateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)], schema: unitUpdateSchema },
     updateUnit,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: idParamsSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)], schema: idParamsSchema },
     deleteUnit,
   );
 };

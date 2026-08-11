@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { ROLE_CODE } from '../domain/enums';
 import {
   hashPassword,
   isStrongPassword,
@@ -8,6 +7,15 @@ import {
 
 interface AdminRoleRelation {
   code: string;
+  is_system: boolean;
+  is_active: boolean;
+  is_deleted: boolean;
+}
+
+interface AdminUserRoleRelation {
+  is_active: boolean;
+  is_deleted: boolean;
+  role: AdminRoleRelation | AdminRoleRelation[] | null;
 }
 
 interface BootstrapAdmin {
@@ -16,7 +24,7 @@ interface BootstrapAdmin {
   is_active: boolean;
   is_verified: boolean;
   is_deleted: boolean;
-  role: AdminRoleRelation | AdminRoleRelation[] | null;
+  user_roles: AdminUserRoleRelation[];
 }
 
 const requiredEnvironment = (name: string): string => {
@@ -49,7 +57,15 @@ const main = async () => {
   const { data, error } = await db
     .from('users')
     .select(
-      'id, vinfast_id, is_active, is_verified, is_deleted, role:roles!users_role_id_fkey(code)',
+      `
+        id, vinfast_id, is_active, is_verified, is_deleted,
+        user_roles:user_roles!user_roles_user_id_fkey(
+          is_active, is_deleted,
+          role:roles!user_roles_role_id_fkey(
+            code, is_system, is_active, is_deleted
+          )
+        )
+      `,
     )
     .eq('vinfast_id', vinfastId)
     .single();
@@ -59,9 +75,17 @@ const main = async () => {
   }
 
   const admin = data as unknown as BootstrapAdmin;
-  const role = Array.isArray(admin.role) ? admin.role[0] : admin.role;
-  if (role?.code !== ROLE_CODE.ADMIN) {
-    throw new Error('The selected user does not have the ADMIN role');
+  const hasSystemAdminRole = admin.user_roles.some((mapping) => {
+    const role = Array.isArray(mapping.role) ? mapping.role[0] : mapping.role;
+    return mapping.is_active
+      && !mapping.is_deleted
+      && role?.code === 'ADMIN'
+      && role.is_system === true
+      && role.is_active
+      && !role.is_deleted;
+  });
+  if (!hasSystemAdminRole) {
+    throw new Error('The selected user does not have the active system ADMIN role');
   }
   if (!admin.is_active || !admin.is_verified || admin.is_deleted) {
     throw new Error(

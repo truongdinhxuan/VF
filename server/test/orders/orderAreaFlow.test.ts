@@ -27,12 +27,12 @@ describe('order source and receiving area flow', () => {
     assert.match(createOrderPage, /to_area_id: receivingAreaId/);
   });
 
-  it('scopes DATA_PACKING ownership and visibility by the receiving area', () => {
+  it('scopes order creators without approval permission by the receiving area', () => {
     assert.match(orderService, /order\.to_area_id !== actor\.areaId/);
-    assert.match(
-      orderService,
-      /actor\.role === PACKING_ROLE\) request = request\.eq\('to_area_id', actor\.areaId\)/,
-    );
+    assert.match(orderService, /const isOwnerScoped = hasPermission\(/);
+    assert.match(orderService, /PERMISSION_CODE\.SUPPLY_ORDER_CREATE/);
+    assert.match(orderService, /!hasPermission\(actor, PERMISSION_CODE\.SUPPLY_ORDER_APPROVE\)/);
+    assert.match(orderService, /request = request\.eq\('to_area_id', actor\.areaId\)/);
     assert.match(
       orderDetailPage,
       /user\?\.publicData\.area_id === order\.to_area_id/,

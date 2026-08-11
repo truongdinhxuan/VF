@@ -46,12 +46,12 @@ describe('internal VinFast ID authentication', () => {
     );
   });
 
-  it('lets ADMIN assign credentials while self-service requires the current password', () => {
+  it('lets users with admin.user.update assign credentials while self-service requires the current password', () => {
     const controller = read('src/controllers/users/update-password.ts');
     const service = read('src/services/users.service.ts');
     const schema = read('src/schemas/users.ts');
 
-    assert.match(controller, /request\.user\.role === ROLE_CODE\.ADMIN/);
+    assert.match(controller, /hasPermission\([\s\S]*PERMISSION_CODE\.ADMIN_USER_UPDATE/);
     assert.match(controller, /if \(isSelf\)/);
     assert.match(controller, /if \(!currentPassword\)/);
     assert.match(controller, /service\.setPassword/);

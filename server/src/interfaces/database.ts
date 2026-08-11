@@ -1,15 +1,44 @@
-import type {
-  OrderStatus,
-  RoleCode,
-  StockTransactionType,
-} from '../domain/enums';
+import type { OrderStatus, StockTransactionType } from '../domain/enums';
 
 export interface RoleRecord {
   id: string;
-  code: RoleCode;
+  code: string;
   name: string;
   description: string | null;
   is_system: boolean;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PermissionRecord {
+  id: string;
+  code: string;
+  name: string;
+  module: string;
+  description: string | null;
+  is_system: boolean;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RolePermissionRecord {
+  id: string;
+  role_id: string;
+  permission_id: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserRoleRecord {
+  id: string;
+  user_id: string;
+  role_id: string;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -263,6 +292,9 @@ export interface OrderRevisionRecord {
 export interface DatabaseRecordMap {
   users: UserRecord;
   roles: RoleRecord;
+  permissions: PermissionRecord;
+  role_permissions: RolePermissionRecord;
+  user_roles: UserRoleRecord;
   areas: AreaRecord;
   supply_categories: SupplyCategoryRecord;
   units: UnitRecord;

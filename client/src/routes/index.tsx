@@ -14,10 +14,10 @@ const RoleWorkspaceRedirect = ({
 }: {
   relativePath?: string;
 }) => {
-  const { role, loading } = useAuth();
+  const { user, role, loading } = useAuth();
 
   if (loading) return <PageSkeleton />;
-  if (!role) return <Navigate to="/auth/login" replace />;
+  if (!user) return <Navigate to="/auth/login" replace />;
   return (
     <Navigate
       to={

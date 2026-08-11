@@ -6,40 +6,72 @@ import {
   listRoles,
   updateRole,
 } from '../../controllers/roles';
-import { ROLE_CODES } from '../../domain/enums';
-import { SYSTEM_MANAGER_ROLES } from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { getRolePermissions, replaceRolePermissions } from '../../controllers/rbac';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   idParamsSchema,
   roleListQuerySchema,
   roleCreateSchema,
   roleUpdateSchema,
 } from '../../schemas/master-data';
+import { replaceRolePermissionsSchema, rolePermissionParamsSchema } from '../../schemas/rbac';
 
 const roleRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: roleListQuerySchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_READ)],
+      schema: roleListQuerySchema,
+    },
     listRoles,
   );
   fastify.get(
+    '/:id/permissions',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_READ)],
+      schema: rolePermissionParamsSchema,
+    },
+    getRolePermissions,
+  );
+  fastify.put(
+    '/:id/permissions',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_ASSIGN_PERMISSION)],
+      schema: replaceRolePermissionsSchema,
+    },
+    replaceRolePermissions,
+  );
+  fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_READ)],
+      schema: idParamsSchema,
+    },
     getRole,
   );
   fastify.post(
     '/',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: roleCreateSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_CREATE)],
+      schema: roleCreateSchema,
+    },
     createRole,
   );
   fastify.patch(
     '/:id',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: roleUpdateSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_UPDATE)],
+      schema: roleUpdateSchema,
+    },
     updateRole,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES), schema: idParamsSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_UPDATE)],
+      schema: idParamsSchema,
+    },
     deleteRole,
   );
 };

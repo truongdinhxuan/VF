@@ -1,5 +1,4 @@
 import type { FastifySchema } from 'fastify';
-import { ROLE_CODES } from '../domain/enums';
 import { createListQuerySchema } from './pagination';
 
 const uuid = { type: 'string', format: 'uuid' } as const;
@@ -78,7 +77,12 @@ export const unitListQuerySchema = createListQuerySchema(UNIT_SORT_FIELDS, {
 export const roleCreateSchema: FastifySchema = {
   body: objectBody(
     {
-      code: { type: 'string', enum: [...ROLE_CODES] },
+      code: {
+        type: 'string',
+        minLength: 2,
+        maxLength: 100,
+        pattern: '^[A-Za-z][A-Za-z0-9_]*$',
+      },
       name: { type: 'string', minLength: 1, maxLength: 255 },
       description: nullableText,
       is_active: active,
@@ -90,7 +94,12 @@ export const roleCreateSchema: FastifySchema = {
 export const roleUpdateSchema: FastifySchema = {
   ...idParamsSchema,
   body: objectBody({
-    code: { type: 'string', enum: [...ROLE_CODES] },
+    code: {
+      type: 'string',
+      minLength: 2,
+      maxLength: 100,
+      pattern: '^[A-Za-z][A-Za-z0-9_]*$',
+    },
     name: { type: 'string', minLength: 1, maxLength: 255 },
     description: nullableText,
     is_active: active,

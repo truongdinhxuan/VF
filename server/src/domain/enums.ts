@@ -1,22 +1,3 @@
-export const ROLE_CODE = {
-  ADMIN: 'ADMIN',
-  DATA_PACKING: 'DATA_PACKING',
-  DATA_MATERIAL: 'DATA_MATERIAL',
-  MATERIAL_LEADER: 'MATERIAL_LEADER',
-  MATERIAL_CONTROL: 'MATERIAL_CONTROL',
-} as const;
-
-export type RoleCode = (typeof ROLE_CODE)[keyof typeof ROLE_CODE];
-
-export const ROLE_CODES = Object.values(ROLE_CODE) as RoleCode[];
-
-export const normalizeRoleCode = (value: unknown): RoleCode | null => {
-  if (typeof value !== 'string') return null;
-
-  const trimmed = value.trim();
-  return ROLE_CODES.includes(trimmed as RoleCode) ? trimmed as RoleCode : null;
-};
-
 export const ORDER_STATUS = {
   DRAFT: 'DRAFT',
   PENDING: 'PENDING',

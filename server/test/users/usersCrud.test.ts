@@ -12,20 +12,24 @@ const schema = read('src/schemas/users.ts');
 const internalAuthMigration = read(
   'supabase/migrations/202607300001_internal_password_auth.sql',
 );
+const rbacPhase3Migration = read(
+  'supabase/migrations/202608110002_complete_permission_model_and_rpc_authorization.sql',
+);
 
 describe('Phase 4 users CRUD contract', () => {
   it('registers canonical root User CRUD without a duplicate PUT route', () => {
-    assert.equal((routes.match(/fastify\.get\(/g) ?? []).length, 2);
+    assert.equal((routes.match(/fastify\.get\(/g) ?? []).length, 3);
     assert.equal((routes.match(/fastify\.post\(/g) ?? []).length, 1);
     assert.equal((routes.match(/fastify\.patch\(/g) ?? []).length, 2);
     assert.equal((routes.match(/fastify\.delete\(/g) ?? []).length, 1);
-    assert.doesNotMatch(routes, /fastify\.put\(/);
+    assert.equal((routes.match(/fastify\.put\(/g) ?? []).length, 1);
   });
 
   it('creates the profile and internal credential atomically without Supabase Auth', () => {
-    assert.match(service, /\.rpc\(\s*'create_internal_user'/);
+    assert.match(service, /\.rpc\(\s*'create_internal_user_with_roles'/);
     assert.match(internalAuthMigration, /insert into public\.users/i);
     assert.match(internalAuthMigration, /insert into public\.user_credentials/i);
+    assert.match(rbacPhase3Migration, /perform public\.replace_user_roles/);
     assert.doesNotMatch(service, /auth\.admin|supabase\.auth/);
   });
 
@@ -38,7 +42,7 @@ describe('Phase 4 users CRUD contract', () => {
   it('validates unique email/VinFast ID and every requested foreign key', () => {
     assert.match(service, /Email đã tồn tại/);
     assert.match(service, /VinFast ID đã tồn tại/);
-    assert.match(service, /assertConfiguredRole/);
+    assert.match(service, /assertConfiguredRoles/);
     assert.match(service, /assertArea/);
     assert.match(service, /assertManager/);
   });

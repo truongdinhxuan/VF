@@ -24,8 +24,9 @@ const actorFrom = (request: FastifyRequest): OrderActor => {
   if (!request.user) throw new OrderServiceError(401, 'Unauthorized');
   return {
     id: request.user.id,
-    role: request.user.role,
     areaId: request.user.areaId,
+    permissions: request.user.permissions,
+    isSystemAdmin: request.user.isSystemAdmin,
   };
 };
 

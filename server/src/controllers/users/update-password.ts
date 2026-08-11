@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ROLE_CODE } from '../../domain/enums';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { hasPermission } from '../../services/authorization.service';
 import {
   UsersService,
   UsersServiceError,
@@ -19,8 +20,11 @@ export const userUpdatePassword = async (
     const { id } = request.params as { id: string };
 
     const isSelf = request.user.id === id;
-    const isAdmin = request.user.role === ROLE_CODE.ADMIN;
-    if (!isSelf && !isAdmin) {
+    const canUpdateUsers = hasPermission(
+      request.user,
+      PERMISSION_CODE.ADMIN_USER_UPDATE,
+    );
+    if (!isSelf && !canUpdateUsers) {
       return reply.code(403).send({
         error: 'Bạn không có quyền đặt mật khẩu cho người dùng này',
       });

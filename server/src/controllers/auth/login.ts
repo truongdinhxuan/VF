@@ -5,6 +5,7 @@ import {
   UsersService,
   UsersServiceError,
 } from '../../services/users.service';
+import { getEffectivePermissions } from '../../services/authorization.service';
 
 export const loginUser = async (request: FastifyRequest, reply: FastifyReply) => {
   const { vinfast_id, password } = request.body as LoginBody;
@@ -20,12 +21,16 @@ export const loginUser = async (request: FastifyRequest, reply: FastifyReply) =>
       vinfast_id,
       password,
     );
+    const access = await getEffectivePermissions(request.server, publicData.id);
     const token = await reply.jwtSign({ sub: publicData.id });
 
     return reply.code(200).send({
       message: 'Đăng nhập thành công',
       token,
       publicData,
+      roleIds: access.roleIds,
+      permissions: access.permissions,
+      isSystemAdmin: access.isSystemAdmin,
     });
   } catch (error) {
     if (error instanceof UsersServiceError) {
@@ -59,6 +64,9 @@ export const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
       id: userId,
       email: request.user?.email,
       publicData,
+      roleIds: request.user.roleIds,
+      permissions: request.user.permissions,
+      isSystemAdmin: request.user.isSystemAdmin,
     });
   } catch (error) {
     request.log.error(error);

@@ -37,7 +37,7 @@ export interface CreateUserBody {
   vinfast_id: number;
   phone_number?: string | null;
   avatar_url?: string | null;
-  role_id: string;
+  role_ids: string[];
   area_id: string;
   managed_by_user_id?: string | null;
 }
@@ -49,7 +49,6 @@ export interface UpdateUserBody {
   vinfast_id?: number;
   phone_number?: string | null;
   avatar_url?: string | null;
-  role_id?: string;
   area_id?: string;
   managed_by_user_id?: string | null;
   is_active?: boolean;

@@ -11,6 +11,9 @@ import type {
 } from '../types/users';
 import type { PaginatedResponse } from '../types/pagination.types';
 import instance from './http';
+import type { Role } from '../types/roles';
+import type { ApiEnvelope } from '../types/api';
+import { unwrapData } from './response';
 
 export const getMyProfile = async (): Promise<IUser> => instance.get('auth/me');
 
@@ -45,3 +48,11 @@ export const updateUserPassword = async (
   input: UpdateUserPasswordInput,
 ): Promise<UserMessageResponse> =>
   instance.patch<UserMessageResponse, UserMessageResponse>(`users/${id}/password`, input);
+
+export const getUserRoles = async (id: string): Promise<Role[]> =>
+  unwrapData(await instance.get<ApiEnvelope<Role[]>, ApiEnvelope<Role[]>>(`users/${id}/roles`));
+
+export const replaceUserRoles = async (id: string, roleIds: string[]): Promise<Role[]> =>
+  unwrapData(await instance.put<ApiEnvelope<Role[]>, ApiEnvelope<Role[]>>(
+    `users/${id}/roles`, { role_ids: roleIds },
+  ));

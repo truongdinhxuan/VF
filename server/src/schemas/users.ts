@@ -40,7 +40,6 @@ const userProfileProperties = {
   vinfast_id: { type: 'integer' },
   phone_number: nullableText,
   avatar_url: nullableText,
-  role_id: uuid,
   area_id: uuid,
   managed_by_user_id: nullableUuid,
 } as const;
@@ -62,11 +61,12 @@ export const createUserSchema: FastifySchema = {
       'first_name',
       'last_name',
       'vinfast_id',
-      'role_id',
+      'role_ids',
       'area_id',
     ],
     properties: {
       ...userProfileProperties,
+      role_ids: { type: 'array', minItems: 1, uniqueItems: true, items: uuid },
       password: { type: 'string', minLength: 9, maxLength: 128 },
     },
   },

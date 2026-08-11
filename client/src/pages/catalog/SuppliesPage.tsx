@@ -8,7 +8,7 @@ import { DataTable, type Column } from '../../components/common/DataTable';
 import { MultiSelect } from '../../components/common/MultiSelect';
 import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge } from '../../components/crud/CrudPrimitives';
 import { SelectSkeleton } from '../../components/common/skeleton';
-import { MASTER_DATA_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -146,8 +146,11 @@ const SupplyForm = ({ item, busy, categories, categoriesLoading, categoriesError
 };
 
 const SuppliesPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const hasActions = canUpdate || canDelete;
   const loader = useCallback((query: SupplyQuery, signal: AbortSignal) => listSupplies(query, signal), []);
   const resource = usePaginatedResource<Supply, SupplyQuery>({
     loader,
@@ -206,11 +209,11 @@ const SuppliesPage = () => {
     { header: 'Đơn vị', accessor: 'unit_id', render: (item) => item.unit?.symbol ?? item.unit?.code ?? '—' },
     { header: 'Providers', accessor: 'providers', render: (item) => item.providers.length > 0 ? item.providers.map((provider) => `${provider.code} - ${provider.name}`).join(', ') : '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} /> },
-    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: Supply) => <RowActions onEdit={canUpdate ? () => { setEditing(item); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(item) : undefined} /> }] : []),
   ];
 
   return <div className="space-y-6">
-    <CrudPageHeader title="Supplies" description="Danh mục vật tư dùng cho tồn kho và order." createLabel="Thêm vật tư" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+    <CrudPageHeader title="Supplies" description="Danh mục vật tư dùng cho tồn kho và order." createLabel="Thêm vật tư" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}
@@ -234,8 +237,8 @@ const SuppliesPage = () => {
       </>}
       emptyText="Không có vật tư phù hợp."
     />}
-    {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa vật tư' : 'Tạo vật tư'} busy={resource.mutating} onClose={() => setFormOpen(false)}><SupplyForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} categories={categories.items} categoriesLoading={categories.loading} categoriesError={categories.error} units={units.items} unitsLoading={units.loading} unitsError={units.error} providers={providers.items} providersLoading={providers.loading} providersError={providers.error} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-    {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động vật tư?" message={`Vật tư “${deleteTarget.code}” sẽ được soft delete/deactivate theo rule backend.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateSupply(deleteTarget.id), 'Đã deactivate vật tư.', 'Không thể deactivate vật tư.', { removeCurrentItem: resource.query.isActive === true || resource.query.isDeleted === false }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+    {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa vật tư' : 'Tạo vật tư'} busy={resource.mutating} onClose={() => setFormOpen(false)}><SupplyForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} categories={categories.items} categoriesLoading={categories.loading} categoriesError={categories.error} units={units.items} unitsLoading={units.loading} unitsError={units.error} providers={providers.items} providersLoading={providers.loading} providersError={providers.error} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+    {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động vật tư?" message={`Vật tư “${deleteTarget.code}” sẽ được soft delete/deactivate theo rule backend.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateSupply(deleteTarget.id), 'Đã deactivate vật tư.', 'Không thể deactivate vật tư.', { removeCurrentItem: resource.query.isActive === true || resource.query.isDeleted === false }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
   </div>;
 };
 

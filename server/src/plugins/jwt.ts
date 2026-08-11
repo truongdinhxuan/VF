@@ -1,6 +1,6 @@
 import jwt from '@fastify/jwt';
 import fp from 'fastify-plugin';
-import type { RoleCode } from '../domain/enums';
+import type { PermissionCode } from '../domain/permission-codes';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -11,8 +11,10 @@ declare module '@fastify/jwt' {
       sub: string;
       id: string;
       email?: string;
-      role: RoleCode;
       areaId: string;
+      roleIds: string[];
+      permissions: PermissionCode[];
+      isSystemAdmin: boolean;
     };
   }
 }

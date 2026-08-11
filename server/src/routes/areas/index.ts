@@ -6,9 +6,8 @@ import {
   listAreas,
   updateArea,
 } from '../../controllers/areas';
-import { ROLE_CODES } from '../../domain/enums';
-import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   areaListQuerySchema,
   areaCreateSchema,
@@ -17,29 +16,30 @@ import {
 } from '../../schemas/master-data';
 
 const areaRoutes: FastifyPluginAsync = async (fastify) => {
+  const catalogReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)];
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: areaListQuerySchema },
+    { preHandler: catalogReadPermission, schema: areaListQuerySchema },
     listAreas,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
+    { preHandler: catalogReadPermission, schema: idParamsSchema },
     getArea,
   );
   fastify.post(
     '/',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: areaCreateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)], schema: areaCreateSchema },
     createArea,
   );
   fastify.patch(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: areaUpdateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)], schema: areaUpdateSchema },
     updateArea,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: idParamsSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)], schema: idParamsSchema },
     deleteArea,
   );
 };

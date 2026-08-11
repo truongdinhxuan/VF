@@ -15,7 +15,7 @@ import {
   RowActions,
   StatusBadge,
 } from '../../components/crud/CrudPrimitives';
-import { MASTER_DATA_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
@@ -92,8 +92,10 @@ const UnitForm = ({ item, busy, onCancel, onSave }: {
 };
 
 const UnitsPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
   const loader = useCallback((query: UnitQuery, signal: AbortSignal) => listUnits(query, signal), []);
   const resource = usePaginatedResource<Unit, UnitQuery>({
     loader,
@@ -129,22 +131,22 @@ const UnitsPage = () => {
     { header: 'Ký hiệu', accessor: 'symbol', sortKey: 'symbol' },
     { header: 'Tên', accessor: 'name', sortKey: 'name' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
-    ...(canMutate ? [{
+    ...((canUpdate || canDelete) ? [{
       header: 'Thao tác',
       accessor: 'actions',
-      render: (item: Unit) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} />,
+      render: (item: Unit) => <RowActions onEdit={canUpdate ? () => { setEditing(item); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(item) : undefined} />,
     }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Units" description="Quản lý đơn vị tính dùng cho vật tư." createLabel="Thêm đơn vị" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Units" description="Quản lý đơn vị tính dùng cho vật tư." createLabel="Thêm đơn vị" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
         <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc ký hiệu..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có đơn vị phù hợp." />
       )}
-      {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa đơn vị' : 'Tạo đơn vị'} busy={resource.mutating} onClose={() => setFormOpen(false)}><UnitForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-      {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động đơn vị?" message={`Đơn vị “${deleteTarget.symbol}” sẽ được chuyển sang inactive nếu chưa bị ràng buộc.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUnit(deleteTarget.id), 'Đã deactivate đơn vị.', 'Không thể deactivate đơn vị.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+      {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa đơn vị' : 'Tạo đơn vị'} busy={resource.mutating} onClose={() => setFormOpen(false)}><UnitForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+      {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động đơn vị?" message={`Đơn vị “${deleteTarget.symbol}” sẽ được chuyển sang inactive nếu chưa bị ràng buộc.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUnit(deleteTarget.id), 'Đã deactivate đơn vị.', 'Không thể deactivate đơn vị.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>
   );
 };

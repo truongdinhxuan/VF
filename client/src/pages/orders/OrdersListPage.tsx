@@ -5,7 +5,7 @@ import { InfoButton, TextButton } from '../../components/common/Button';
 import { Pagination } from '../../components/common/Pagination';
 import { TableSkeleton } from '../../components/common/skeleton';
 import { OrderStatusBadge } from '../../components/orders/OrderStatusBadge';
-import { ORDER_CREATOR_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -19,7 +19,7 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', { dateSty
 const controlClassName = 'rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
 const OrdersListPage = () => {
-  const { role } = useAuth();
+  const { role, hasPermission } = useAuth();
   const ordersPath = getWorkspacePath(role, 'orders');
   const createOrderPath = getWorkspacePath(role, 'orders/create');
   const loader = useCallback((query: OrderQuery, signal: AbortSignal) => listOrders(query, signal), []);
@@ -42,7 +42,7 @@ const OrdersListPage = () => {
   return <section className="space-y-5">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Order management</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Orders</h1><p className="mt-1 text-sm text-slate-500">Tạo, gửi, duyệt và cấp hàng theo đúng trạng thái của order.</p></div>
-      {role !== null && ORDER_CREATOR_ROLES.includes(role) && <Link to={createOrderPath} className={InfoButton}>Tạo order</Link>}
+      {hasPermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE) && <Link to={createOrderPath} className={InfoButton}>Tạo order</Link>}
     </div>
 
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">

@@ -1,24 +1,29 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { listLookup } from '../../controllers/lookups';
-import { ROLE_CODES } from '../../domain/enums';
-import {
-  STOCK_VIEWER_ROLES,
-  SYSTEM_MANAGER_ROLES,
-} from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import { lookupListSchema } from '../../schemas/lookups';
 
 const lookupRoutes: FastifyPluginAsync = async (fastify) => {
   const allLoggedIn = {
-    preHandler: verifyTokenAndRole(ROLE_CODES),
+    preHandler: [
+      verifyToken,
+      requirePermission({
+        anyOf: [
+          PERMISSION_CODE.SUPPLY_ORDER_CREATE,
+          PERMISSION_CODE.SUPPLY_ORDER_APPROVE,
+          PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
+        ],
+      }),
+    ],
     schema: lookupListSchema,
   };
   const stockUsers = {
-    preHandler: verifyTokenAndRole(STOCK_VIEWER_ROLES),
+    preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_STOCK_READ)],
     schema: lookupListSchema,
   };
   const systemManagers = {
-    preHandler: verifyTokenAndRole(SYSTEM_MANAGER_ROLES),
+    preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_ROLE_READ)],
     schema: lookupListSchema,
   };
 

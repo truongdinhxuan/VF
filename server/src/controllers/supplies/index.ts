@@ -5,6 +5,8 @@ import type {
   SupplyProviderListQuery,
   UpdateSupplyBody,
 } from '../../interfaces/supplies';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { hasPermission } from '../../services/authorization.service';
 import { MasterDataServiceError } from '../../services/master-data.helpers';
 import { SuppliesService } from '../../services/supplies.service';
 import { respondWithData } from '../master-data-response';
@@ -13,7 +15,7 @@ export const listSupplies = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(request, reply, () => {
     if (!request.user) throw new MasterDataServiceError(401, 'Unauthorized');
     return new SuppliesService(request.server).list(
-      request.user.role,
+      hasPermission(request.user, PERMISSION_CODE.SUPPLY_STOCK_READ),
       request.query as SupplyListQuery,
     );
   });
@@ -22,7 +24,7 @@ export const getSupply = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(request, reply, () => {
     if (!request.user) throw new MasterDataServiceError(401, 'Unauthorized');
     return new SuppliesService(request.server).get(
-      request.user.role,
+      hasPermission(request.user, PERMISSION_CODE.SUPPLY_STOCK_READ),
       (request.params as { id: string }).id,
     );
   });

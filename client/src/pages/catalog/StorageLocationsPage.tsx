@@ -5,7 +5,7 @@ import { createStorageLocation, deactivateStorageLocation, listStorageLocations,
 import { DataTable, type Column } from '../../components/common/DataTable';
 import { ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge } from '../../components/crud/CrudPrimitives';
 import { SelectSkeleton } from '../../components/common/skeleton';
-import { MASTER_DATA_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -71,8 +71,11 @@ const StorageLocationForm = ({ item, areas, areasLoading, areasError, busy, onCa
 };
 
 const StorageLocationsPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const hasActions = canUpdate || canDelete;
   const loader = useCallback((query: StorageLocationQuery, signal: AbortSignal) => listStorageLocations(query, signal), []);
   const resource = usePaginatedResource<StorageLocation, StorageLocationQuery>({
     loader,
@@ -114,11 +117,11 @@ const StorageLocationsPage = () => {
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (item) => item.description || '—' },
     { header: 'Khu vực', accessor: 'area_id', render: (item) => item.area ? `${item.area.code} - ${item.area.name}` : '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
-    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (item: StorageLocation) => <RowActions onEdit={canUpdate ? () => { setEditing(item); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(item) : undefined} /> }] : []),
   ];
 
   return <div className="space-y-6">
-    <CrudPageHeader title="Storage locations" description="Quản lý vị trí lưu kho theo khu vực." createLabel="Thêm vị trí kho" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+    <CrudPageHeader title="Storage locations" description="Quản lý vị trí lưu kho theo khu vực." createLabel="Thêm vị trí kho" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable
       columns={columns}
@@ -140,8 +143,8 @@ const StorageLocationsPage = () => {
       </>}
       emptyText="Không có vị trí kho phù hợp."
     />}
-    {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa vị trí kho' : 'Tạo vị trí kho'} busy={resource.mutating} onClose={() => setFormOpen(false)}><StorageLocationForm key={editing?.id ?? 'create'} item={editing} areas={areas.items} areasLoading={areas.loading} areasError={areas.error} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-    {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động vị trí kho?" message={`Vị trí “${deleteTarget.code}” sẽ được chuyển sang inactive nếu không vi phạm ràng buộc dữ liệu.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateStorageLocation(deleteTarget.id), 'Đã deactivate vị trí kho.', 'Không thể deactivate vị trí kho.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+    {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa vị trí kho' : 'Tạo vị trí kho'} busy={resource.mutating} onClose={() => setFormOpen(false)}><StorageLocationForm key={editing?.id ?? 'create'} item={editing} areas={areas.items} areasLoading={areas.loading} areasError={areas.error} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+    {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động vị trí kho?" message={`Vị trí “${deleteTarget.code}” sẽ được chuyển sang inactive nếu không vi phạm ràng buộc dữ liệu.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateStorageLocation(deleteTarget.id), 'Đã deactivate vị trí kho.', 'Không thể deactivate vị trí kho.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
   </div>;
 };
 

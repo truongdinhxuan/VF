@@ -5,12 +5,9 @@ import { getUserById } from '../../controllers/users/detail';
 import { userIndex } from '../../controllers/users/list';
 import { userUpdate } from '../../controllers/users/update';
 import { userUpdatePassword } from '../../controllers/users/update-password';
-import { ROLE_CODES } from '../../domain/enums';
-import {
-  USER_MANAGER_ROLES,
-  USER_VIEWER_ROLES,
-} from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { getUserRoles, replaceUserRoles } from '../../controllers/rbac';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   createUserSchema,
   updatePasswordSchema,
@@ -18,17 +15,37 @@ import {
   userListSchema,
   userIdParamsSchema,
 } from '../../schemas/users';
+import { replaceUserRolesSchema, userRoleParamsSchema } from '../../schemas/rbac';
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(USER_VIEWER_ROLES), schema: userListSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_READ)],
+      schema: userListSchema,
+    },
     userIndex,
+  );
+  fastify.get(
+    '/:id/roles',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_READ)],
+      schema: userRoleParamsSchema,
+    },
+    getUserRoles,
+  );
+  fastify.put(
+    '/:id/roles',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_ASSIGN_ROLE)],
+      schema: replaceUserRolesSchema,
+    },
+    replaceUserRoles,
   );
   fastify.get(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(USER_VIEWER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_READ)],
       schema: userIdParamsSchema,
     },
     getUserById,
@@ -36,7 +53,9 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     '/',
     {
-      preHandler: verifyTokenAndRole(USER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission({
+        allOf: [PERMISSION_CODE.ADMIN_USER_CREATE, PERMISSION_CODE.ADMIN_USER_ASSIGN_ROLE],
+      })],
       schema: createUserSchema,
     },
     createUser,
@@ -44,7 +63,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(USER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_UPDATE)],
       schema: updateUserSchema,
     },
     userUpdate,
@@ -52,7 +71,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(USER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.ADMIN_USER_UPDATE)],
       schema: userIdParamsSchema,
     },
     deactivateUser,
@@ -60,7 +79,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id/password',
     {
-      preHandler: verifyTokenAndRole(ROLE_CODES),
+      preHandler: verifyToken,
       schema: updatePasswordSchema,
     },
     userUpdatePassword,

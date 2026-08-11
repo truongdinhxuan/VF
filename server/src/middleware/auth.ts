@@ -1,101 +1,106 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { normalizeRoleCode, ROLE_CODES, type RoleCode } from '../domain/enums';
+import type { PermissionCode } from '../domain/permission-codes';
+import {
+  AuthorizationError,
+  getEffectivePermissions,
+  hasPermission,
+} from '../services/authorization.service';
 
-interface RoleRelation {
-  code: string;
-  is_active: boolean;
-  is_deleted: boolean;
+export interface PermissionRequirement {
+  allOf?: readonly PermissionCode[];
+  anyOf?: readonly PermissionCode[];
 }
 
-interface PublicUserAuthData {
-  email: string;
-  area_id: string | null;
-  is_active: boolean;
-  is_verified: boolean;
-  is_deleted: boolean;
-  role: RoleRelation | RoleRelation[] | null;
-}
+const sendAuthorizationError = (
+  reply: FastifyReply,
+  error: AuthorizationError,
+) => reply.code(error.statusCode).send({ error: error.message });
 
-const extractRoleCode = (relation: PublicUserAuthData['role']): string | null => {
-  if (Array.isArray(relation)) {
-    return relation[0]?.code ?? null;
+export const verifyToken = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  if (request.method === 'OPTIONS') return;
+
+  const authHeader = request.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return reply.code(401).send({ error: 'Vui lòng cung cấp Bearer token hợp lệ' });
   }
-  return relation?.code ?? null;
+
+  try {
+    await request.jwtVerify();
+  } catch {
+    return reply.code(401).send({ error: 'Token đã hết hạn hoặc không hợp lệ' });
+  }
+
+  try {
+    const access = await getEffectivePermissions(request.server, request.user.sub);
+    request.user = {
+      sub: access.userId,
+      id: access.userId,
+      email: access.email,
+      areaId: access.areaId,
+      roleIds: access.roleIds,
+      permissions: access.permissions,
+      isSystemAdmin: access.isSystemAdmin,
+    };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return sendAuthorizationError(reply, error);
+    }
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Lỗi máy chủ trong quá trình xác thực' });
+  }
 };
 
-export const verifyTokenAndRole = (allowedRoles: readonly RoleCode[] = []) => {
-  return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (request.method === 'OPTIONS') return;
+export const permissionRequirementSatisfied = (
+  access: Pick<FastifyRequest['user'], 'permissions' | 'isSystemAdmin'>,
+  requirement: PermissionCode | PermissionRequirement,
+): boolean => {
+  if (access.isSystemAdmin) return true;
+  if (typeof requirement === 'string') return hasPermission(access, requirement);
 
-    try {
-      const authHeader = request.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) {
-        return reply.code(401).send({ error: 'Vui lòng cung cấp Bearer token hợp lệ' });
-      }
+  const allOf = requirement.allOf ?? [];
+  const anyOf = requirement.anyOf ?? [];
+  if (allOf.length === 0 && anyOf.length === 0) return false;
 
-      try {
-        await request.jwtVerify();
-      } catch {
-        return reply.code(401).send({ error: 'Token đã hết hạn hoặc không hợp lệ' });
-      }
+  const hasAll = allOf.every((permission) => hasPermission(access, permission));
+  const hasAny = anyOf.length === 0
+    || anyOf.some((permission) => hasPermission(access, permission));
+  return hasAll && hasAny;
+};
 
-      const userId = request.user.sub;
-      const { data, error } = await request.server.supabaseAdmin
-        .from('users')
-        .select(
-          'email, area_id, is_active, is_verified, is_deleted, role:roles!users_role_id_fkey(code, is_active, is_deleted)',
-        )
-        .eq('id', userId)
-        .single();
+export const requirePermission = (
+  requirement: PermissionCode | PermissionRequirement,
+) => async (request: FastifyRequest, reply: FastifyReply) => {
+  if (request.method === 'OPTIONS') return;
+  if (!request.user?.id) {
+    return reply.code(401).send({ error: 'Unauthorized' });
+  }
+  if (!permissionRequirementSatisfied(request.user, requirement)) {
+    return reply.code(403).send({
+      error: 'Bạn không có permission để truy cập chức năng này',
+    });
+  }
+};
 
-      const publicData = data as PublicUserAuthData | null;
-      const roleRelation = Array.isArray(publicData?.role)
-        ? publicData.role[0] ?? null
-        : publicData?.role ?? null;
-      const roleCode = normalizeRoleCode(extractRoleCode(publicData?.role ?? null));
-
-      if (error || !publicData || !publicData.is_active || publicData.is_deleted) {
-        return reply.code(403).send({
-          error: 'Hồ sơ người dùng không tồn tại hoặc đã bị khóa',
-        });
-      }
-
-      if (!publicData.is_verified) {
-        return reply.code(403).send({
-          error: 'Tài khoản chưa được duyệt để truy cập dữ liệu nội bộ',
-          code: 'ACCOUNT_NOT_VERIFIED',
-        });
-      }
-
-      if (
-        !roleCode ||
-        !ROLE_CODES.includes(roleCode) ||
-        !roleRelation?.is_active ||
-        roleRelation.is_deleted ||
-        !publicData.area_id
-      ) {
-        return reply.code(403).send({
-          error: 'Người dùng chưa được gán role hoặc area hợp lệ',
-        });
-      }
-
-      const role = roleCode;
-      if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-        return reply.code(403).send({
-          error: 'Bạn không có quyền truy cập chức năng này',
-        });
-      }
-
-      request.user = {
-        sub: userId,
-        id: userId,
-        email: publicData.email,
-        role,
-        areaId: publicData.area_id,
-      };
-    } catch (error) {
-      request.log.error(error);
-      return reply.code(500).send({ error: 'Lỗi máy chủ trong quá trình xác thực' });
-    }
-  };
+/**
+ * Reserved for workbook endpoints whose API contract is system-ADMIN-only but
+ * has no dedicated permission code in PermissionsCatalog. It relies on the
+ * already-resolved exact ADMIN code + is_system flag and never checks a role
+ * display name in the route.
+ */
+export const requireSystemAdmin = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  if (request.method === 'OPTIONS') return;
+  if (!request.user?.id) {
+    return reply.code(401).send({ error: 'Unauthorized' });
+  }
+  if (!request.user.isSystemAdmin) {
+    return reply.code(403).send({
+      error: 'Chức năng này chỉ dành cho system ADMIN',
+    });
+  }
 };

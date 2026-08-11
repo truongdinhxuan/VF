@@ -1,10 +1,9 @@
-import type { RoleCode } from '../constants/roles';
 import type { Area } from './areas';
 import type { PaginatedListParams } from './pagination.types';
 
 export interface RoleSummary {
   id: string;
-  code: RoleCode;
+  code: string;
   name: string;
   is_active: boolean;
   is_deleted: boolean;
@@ -31,7 +30,8 @@ export interface UserRecord {
 }
 
 export interface UserProfile extends UserRecord {
-  role: RoleSummary | RoleCode | string | null;
+  role: RoleSummary | string | null;
+  roles?: RoleSummary[];
   area: AreaSummary | null;
 }
 
@@ -40,6 +40,9 @@ export interface IUser {
   id?: string;
   email?: string;
   publicData: UserProfile;
+  roleIds?: string[];
+  permissions?: string[];
+  isSystemAdmin?: boolean;
 }
 
 export interface UserListParams extends PaginatedListParams {
@@ -61,12 +64,12 @@ export interface CreateUserInput {
   vinfast_id: number;
   phone_number?: string | null;
   avatar_url?: string | null;
-  role_id: string;
+  role_ids: string[];
   area_id: string;
   managed_by_user_id?: string | null;
 }
 
-export type UpdateUserInput = Partial<Omit<CreateUserInput, 'password'>> & {
+export type UpdateUserInput = Partial<Omit<CreateUserInput, 'password' | 'role_ids'>> & {
   is_active?: boolean;
   is_verified?: boolean;
   is_deleted?: boolean;

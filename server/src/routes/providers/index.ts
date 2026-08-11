@@ -6,11 +6,8 @@ import {
   listProviders,
   updateProvider,
 } from '../../controllers/providers';
-import {
-  PROVIDER_MANAGER_ROLES,
-  PROVIDER_VIEWER_ROLES,
-} from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   idParamsSchema,
   providerCreateSchema,
@@ -19,10 +16,11 @@ import {
 } from '../../schemas/master-data';
 
 const providerRoutes: FastifyPluginAsync = async (fastify) => {
+  const providerReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)];
   fastify.get(
     '/',
     {
-      preHandler: verifyTokenAndRole(PROVIDER_VIEWER_ROLES),
+      preHandler: providerReadPermission,
       schema: providerListQuerySchema,
     },
     listProviders,
@@ -30,7 +28,7 @@ const providerRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(PROVIDER_VIEWER_ROLES),
+      preHandler: providerReadPermission,
       schema: idParamsSchema,
     },
     getProvider,
@@ -38,7 +36,7 @@ const providerRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     '/',
     {
-      preHandler: verifyTokenAndRole(PROVIDER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)],
       schema: providerCreateSchema,
     },
     createProvider,
@@ -46,7 +44,7 @@ const providerRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(PROVIDER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)],
       schema: providerUpdateSchema,
     },
     updateProvider,
@@ -54,7 +52,7 @@ const providerRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id/deactivate',
     {
-      preHandler: verifyTokenAndRole(PROVIDER_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)],
       schema: idParamsSchema,
     },
     deactivateProvider,

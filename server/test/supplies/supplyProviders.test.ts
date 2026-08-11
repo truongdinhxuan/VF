@@ -106,13 +106,15 @@ describe('Supply Provider read contract', () => {
     assert.match(service, /items: result\.items\.map\(normalizeSupplyProviders\)/);
   });
 
-  it('registers GET /supplies/:id/providers for all authenticated roles', () => {
+  it('registers GET /supplies/:id/providers with Supply read permissions', () => {
     const route = read('src/routes/supplies/index.ts');
     assert.match(route, /'\/:id\/providers'/);
     assert.match(
       route,
-      /'\/:id\/providers'[\s\S]*verifyTokenAndRole\(ROLE_CODES\)/,
+      /'\/:id\/providers'[\s\S]*preHandler: catalogReadPermission/,
     );
+    assert.match(route, /PERMISSION_CODE\.SUPPLY_CATALOG_READ/);
+    assert.doesNotMatch(route, /verifyTokenAndRole/);
     assert.doesNotMatch(route, /supply-providers/);
   });
 });

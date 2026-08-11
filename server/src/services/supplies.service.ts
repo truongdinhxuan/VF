@@ -1,8 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type {} from '../plugins/dbContext';
-import type { RoleCode } from '../domain/enums';
 import type { ProviderRecord } from '../interfaces/database';
-import { PACKING_ROLE } from '../domain/permissions';
 import type {
   CreateSupplyBody,
   SupplyListQuery,
@@ -94,8 +92,8 @@ export class SuppliesService {
     return this.fastify.supabaseAdmin;
   }
 
-  private selectFor(role: RoleCode): string {
-    return role === PACKING_ROLE ? PACKING_SELECT : FULL_SELECT;
+  private selectFor(canReadStock: boolean): string {
+    return canReadStock ? FULL_SELECT : PACKING_SELECT;
   }
 
   private async assertActiveReference(
@@ -164,7 +162,7 @@ export class SuppliesService {
     return normalizeSupplyProviders(data);
   }
 
-  async list(role: RoleCode, query: SupplyListQuery) {
+  async list(canReadStock: boolean, query: SupplyListQuery) {
     const isActive = parseActiveFilter(query.isActive ?? query.is_active);
     const isDeleted = parseActiveFilter(query.isDeleted, false);
     const categoryId = assertFilterId(query.categoryId ?? query.category_id, 'categoryId');
@@ -178,7 +176,7 @@ export class SuppliesService {
 
     let request = this.db
       .from('supplies')
-      .select(this.selectFor(role), { count: 'exact' })
+      .select(this.selectFor(canReadStock), { count: 'exact' })
       .eq('is_active', isActive)
       .eq('is_deleted', isDeleted);
 
@@ -206,10 +204,10 @@ export class SuppliesService {
     throw new Error('Unreachable pagination state');
   }
 
-  async get(role: RoleCode, id: string) {
+  async get(canReadStock: boolean, id: string) {
     const { data, error } = await this.db
       .from('supplies')
-      .select(this.selectFor(role))
+      .select(this.selectFor(canReadStock))
       .eq('id', id)
       .single();
     if (error || !data) databaseError(error, 'Không tìm thấy vật tư');

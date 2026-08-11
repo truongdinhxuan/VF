@@ -1,9 +1,8 @@
-import type { RoleCode } from '../constants/roles';
 import type { PaginatedListParams } from './pagination.types';
 
 export interface Role {
   id: string;
-  code: RoleCode;
+  code: string;
   name: string;
   description: string | null;
   is_system: boolean;
@@ -18,7 +17,7 @@ export interface RoleListParams extends PaginatedListParams {
 }
 
 export interface CreateRoleInput {
-  code: RoleCode;
+  code: string;
   name: string;
   description?: string | null;
   is_active?: boolean;

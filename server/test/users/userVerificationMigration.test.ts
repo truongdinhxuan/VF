@@ -11,6 +11,10 @@ const authMiddleware = readFileSync(
   resolve(process.cwd(), 'src/middleware/auth.ts'),
   'utf8',
 );
+const authorizationService = readFileSync(
+  resolve(process.cwd(), 'src/services/authorization.service.ts'),
+  'utf8',
+);
 const loginController = readFileSync(
   resolve(process.cwd(), 'src/controllers/auth/login.ts'),
   'utf8',
@@ -46,10 +50,11 @@ describe('user name and approval migration', () => {
 
 describe('verified-account access enforcement', () => {
   it('checks is_verified in the shared internal-data guard', () => {
-    assert.match(authMiddleware, /is_verified/);
-    assert.match(authMiddleware, /is_deleted/);
-    assert.match(authMiddleware, /if \(!publicData\.is_verified\)/i);
-    assert.match(authMiddleware, /ACCOUNT_NOT_VERIFIED/);
+    assert.match(authMiddleware, /getEffectivePermissions/);
+    assert.match(authorizationService, /is_verified/);
+    assert.match(authorizationService, /is_deleted/);
+    assert.match(authorizationService, /if \(!user\.is_verified\)/i);
+    assert.match(authorizationService, /if \(!user\.is_active \|\| user\.is_deleted\)/i);
   });
 
   it('does not return a login token for an unverified account', () => {

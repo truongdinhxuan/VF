@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import {
-  canManageMasterData,
-  canManageSystem,
-} from '../../src/domain/permissions';
+import { PERMISSION_CODE } from '../../src/domain/permission-codes';
 import {
   databaseError,
   MasterDataServiceError,
@@ -26,25 +23,34 @@ const routeFiles = {
 describe('master data CRUD contracts', () => {
   it('registers exactly one CRUD surface for every requested module', () => {
     for (const [feature, source] of Object.entries(routeFiles)) {
-      const expectedGetRoutes = feature === 'supplies' ? 3 : 2;
+      const expectedGetRoutes = feature === 'supplies' || feature === 'roles' ? 3 : 2;
       assert.equal(
         (source.match(/fastify\.get\(/g) ?? []).length,
         expectedGetRoutes,
         `${feature} GET routes`,
       );
       assert.equal((source.match(/fastify\.post\(/g) ?? []).length, 1, `${feature} POST route`);
+      assert.equal((source.match(/fastify\.put\(/g) ?? []).length, feature === 'roles' ? 1 : 0, `${feature} PUT route`);
       assert.equal((source.match(/fastify\.patch\(/g) ?? []).length, 1, `${feature} PATCH route`);
       assert.equal((source.match(/fastify\.delete\(/g) ?? []).length, 1, `${feature} DELETE route`);
     }
   });
 
-  it('keeps system and catalog mutation permissions separated', () => {
-    assert.equal(canManageSystem('ADMIN'), true);
-    assert.equal(canManageSystem('DATA_MATERIAL'), false);
-    assert.equal(canManageMasterData('ADMIN'), true);
-    assert.equal(canManageMasterData('DATA_MATERIAL'), true);
-    assert.equal(canManageMasterData('MATERIAL_LEADER'), true);
-    assert.equal(canManageMasterData('MATERIAL_CONTROL'), false);
+  it('guards catalog mutations by permission code instead of role name', () => {
+    for (const source of [
+      routeFiles.areas,
+      routeFiles.categories,
+      routeFiles.units,
+      routeFiles.supplies,
+      routeFiles.locations,
+    ]) {
+      assert.match(source, /PERMISSION_CODE\.SUPPLY_CATALOG_CREATE/);
+      assert.match(source, /PERMISSION_CODE\.SUPPLY_CATALOG_UPDATE/);
+      assert.match(source, /PERMISSION_CODE\.SUPPLY_CATALOG_DELETE/);
+      assert.doesNotMatch(source, /PERMISSION_CODE\.SUPPLY_STOCK_ADJUST/);
+      assert.doesNotMatch(source, /verifyTokenAndRole/);
+    }
+    assert.equal(PERMISSION_CODE.SUPPLY_CATALOG_CREATE, 'supply.catalog.create');
   });
 
   it('maps unique constraint failures to a stable HTTP 409 error', () => {

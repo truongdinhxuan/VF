@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
   ORDER_STATUS,
-  ROLE_CODE,
   type OrderStatus,
-  type RoleCode,
 } from '../domain/enums';
+import {
+  PERMISSION_CODE,
+  type PermissionCode,
+} from '../domain/permission-codes';
 import {
   assertApprovedQuantity,
   assertCancelReason,
@@ -15,12 +17,7 @@ import {
   calculateStockAvailability,
   OrderRuleError,
 } from '../domain/orderRules';
-import {
-  canApproveOrder,
-  canCreateOrder,
-  canIssueOrder,
-  PACKING_ROLE,
-} from '../domain/permissions';
+import { hasPermission } from './authorization.service';
 import type {
   ApproveOrderBody,
   CancelOrderBody,
@@ -37,8 +34,9 @@ import { parsePagination, resolvePaginatedQueryResult } from '../utils/paginatio
 
 export interface OrderActor {
   id: string;
-  role: RoleCode;
   areaId: string;
+  permissions: PermissionCode[];
+  isSystemAdmin: boolean;
 }
 
 interface SupplyLookup {
@@ -276,9 +274,9 @@ export class OrderService {
   }
 
   private assertPackingOwner(actor: OrderActor, order: OrderData): void {
-    if (actor.role === ROLE_CODE.ADMIN) return;
+    if (actor.isSystemAdmin) return;
     if (
-      actor.role !== PACKING_ROLE ||
+      !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CREATE) ||
       order.requested_by !== actor.id ||
       order.to_area_id !== actor.areaId
     ) {
@@ -287,7 +285,11 @@ export class OrderService {
   }
 
   private assertOrderVisible(actor: OrderActor, order: OrderData): void {
-    if (actor.role === PACKING_ROLE && order.to_area_id !== actor.areaId) {
+    const isOwnerScoped = hasPermission(
+      actor,
+      PERMISSION_CODE.SUPPLY_ORDER_CREATE,
+    ) && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
+    if (!actor.isSystemAdmin && isOwnerScoped && order.to_area_id !== actor.areaId) {
       serviceError(403, 'Order is outside your area scope');
     }
   }
@@ -401,7 +403,9 @@ export class OrderService {
   }
 
   async create(actor: OrderActor, body: CreateOrderBody) {
-    if (!canCreateOrder(actor.role)) serviceError(403, 'Role cannot create orders');
+    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CREATE)) {
+      serviceError(403, 'Missing supply.order.create permission');
+    }
     if (!body?.from_area_id || !body.to_area_id) {
       serviceError(400, 'from_area_id and to_area_id are required');
     }
@@ -514,7 +518,13 @@ export class OrderService {
       .from('orders')
       .select(ORDER_LIST_SELECT, { count: 'exact' })
       .eq('is_deleted', false);
-    if (actor.role === PACKING_ROLE) request = request.eq('to_area_id', actor.areaId);
+    const isOwnerScoped = hasPermission(
+      actor,
+      PERMISSION_CODE.SUPPLY_ORDER_CREATE,
+    ) && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
+    if (!actor.isSystemAdmin && isOwnerScoped) {
+      request = request.eq('to_area_id', actor.areaId);
+    }
     if (statusId) request = request.eq('status_id', statusId);
     if (query.from_area_id) request = request.eq('from_area_id', query.from_area_id);
     if (query.to_area_id) request = request.eq('to_area_id', query.to_area_id);
@@ -565,7 +575,9 @@ export class OrderService {
   }
 
   async approve(actor: OrderActor, orderId: string, body: ApproveOrderBody) {
-    if (!canApproveOrder(actor.role)) serviceError(403, 'Role cannot approve orders');
+    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE)) {
+      serviceError(403, 'Missing supply.order.approve permission');
+    }
     const order = await this.findOrder(orderId);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'approve');
@@ -619,7 +631,9 @@ export class OrderService {
   }
 
   async reject(actor: OrderActor, orderId: string, body: RejectOrderBody) {
-    if (!canApproveOrder(actor.role)) serviceError(403, 'Role cannot reject orders');
+    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE)) {
+      serviceError(403, 'Missing supply.order.approve permission');
+    }
     const order = await this.findOrder(orderId);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'reject');
@@ -640,7 +654,9 @@ export class OrderService {
   }
 
   async issue(actor: OrderActor, orderId: string, body: IssueOrderBody) {
-    if (!canIssueOrder(actor.role)) serviceError(403, 'Role cannot issue orders');
+    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ISSUE)) {
+      serviceError(403, 'Missing supply.order.issue permission');
+    }
     const order = await this.findOrder(orderId);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'issue');
@@ -703,7 +719,9 @@ export class OrderService {
   }
 
   async complete(actor: OrderActor, orderId: string) {
-    if (!canIssueOrder(actor.role)) serviceError(403, 'Role cannot complete orders');
+    if (!hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ISSUE)) {
+      serviceError(403, 'Missing supply.order.issue permission');
+    }
     const order = await this.findOrder(orderId);
     try {
       assertOrderActionAllowed(this.statusCode(order), 'complete');

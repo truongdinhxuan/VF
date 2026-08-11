@@ -302,18 +302,20 @@ export const RowActions = ({
   onDelete,
   deleteLabel = 'Deactivate',
 }: {
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   deleteLabel?: string;
 }) => (
   <div className="flex flex-wrap justify-end gap-x-3 gap-y-2">
-    <button
-      type="button"
-      onClick={onEdit}
-      className={TextButton}
-    >
+    {onEdit && (
+      <button
+        type="button"
+        onClick={onEdit}
+        className={TextButton}
+      >
       Sửa
-    </button>
+      </button>
+    )}
 
     {onDelete && (
       <button

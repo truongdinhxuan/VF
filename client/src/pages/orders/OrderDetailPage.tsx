@@ -27,12 +27,7 @@ import {
 import { CardSkeleton, SelectSkeleton } from "../../components/common/skeleton";
 import { OrderStatusBadge } from "../../components/orders/OrderStatusBadge";
 import { StockAvailabilityWarning } from "../../components/orders/StockAvailabilityWarning";
-import {
-  ADMIN_ROLE,
-  ORDER_APPROVER_ROLES,
-  ORDER_ISSUER_ROLES,
-  PACKING_ROLE,
-} from "../../constants/roles";
+import { PERMISSION_CODE } from "../../constants/permissions";
 import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
 import { useServerLookup } from "../../hooks/useServerLookup";
@@ -53,7 +48,7 @@ const itemRemaining = (item: OrderItem) =>
 
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { user, role } = useAuth();
+  const { user, role, hasPermission, isSystemAdmin } = useAuth();
   const ordersPath = getWorkspacePath(role, "orders");
   const queryClient = useQueryClient();
   const orderQuery = useQuery({
@@ -112,16 +107,16 @@ const OrderDetailPage = () => {
   const isPackingOwner = Boolean(
     order &&
     (
-      role === ADMIN_ROLE ||
+      isSystemAdmin ||
       (
-        role === PACKING_ROLE &&
+        hasPermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE) &&
         actorId === order.requested_by &&
         user?.publicData.area_id === order.to_area_id
       )
     ),
   );
-  const isApprover = Boolean(role && ORDER_APPROVER_ROLES.includes(role));
-  const isIssuer = Boolean(role && ORDER_ISSUER_ROLES.includes(role));
+  const isApprover = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
+  const isIssuer = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_ISSUE);
   const canEdit = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));
   const canSubmit = Boolean(order && isPackingOwner && order.status === "DRAFT");
   const canCancel = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));

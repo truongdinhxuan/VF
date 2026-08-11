@@ -11,6 +11,7 @@ export const createUser = (request: FastifyRequest, reply: FastifyReply) =>
       message: 'Tạo tài khoản nội bộ thành công. Tài khoản đang chờ duyệt.',
       data: await new UsersService(request.server).create(
         request.body as CreateUserBody,
+        request.user.id,
       ),
     }),
     201,

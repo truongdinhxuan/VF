@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { normalizeRoleCode } from '../domain/enums';
 import type {
   AreaRecord,
   RoleRecord,
@@ -19,6 +18,10 @@ import {
   PASSWORD_RULE_MESSAGE,
   verifyPassword,
 } from '../utils/password';
+import {
+  AuthorizationError,
+  getEffectivePermissions,
+} from './authorization.service';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -82,13 +85,45 @@ export const USER_COLUMN_SELECT = USER_COLUMNS.join(', ');
 export const USER_EXPANDED_SELECT = `
   ${USER_COLUMN_SELECT},
   role:roles!users_role_id_fkey(id, code, name, is_active, is_deleted),
-  area:areas!users_area_id_fkey(id, code, name, is_active)
+  area:areas!users_area_id_fkey(id, code, name, is_active),
+  role_mappings:user_roles!user_roles_user_id_fkey(
+    role_id, is_active, is_deleted,
+    role:roles!user_roles_role_id_fkey(id, code, name, is_active, is_deleted)
+  )
+`;
+
+const USER_EXPANDED_SELECT_FILTERED_BY_ROLE = `
+  ${USER_EXPANDED_SELECT},
+  role_filter:user_roles!user_roles_user_id_fkey!inner(role_id, is_active, is_deleted)
 `;
 
 interface UserProfileRecord extends UserRecord {
   role: Pick<RoleRecord, 'id' | 'code' | 'name' | 'is_active' | 'is_deleted'> | null;
   area: Pick<AreaRecord, 'id' | 'code' | 'name' | 'is_active'> | null;
+  roles?: Array<Pick<RoleRecord, 'id' | 'code' | 'name' | 'is_active' | 'is_deleted'>>;
 }
+
+interface RawUserProfileRecord extends UserProfileRecord {
+  role_mappings?: Array<{
+    role_id: string;
+    is_active: boolean;
+    is_deleted: boolean;
+    role: UserProfileRecord['role'];
+  }>;
+  role_filter?: unknown;
+}
+
+const normalizeUserProfile = (value: RawUserProfileRecord): UserProfileRecord => {
+  const { role_mappings: mappings = [], role_filter: _roleFilter, ...profile } = value;
+  return {
+    ...profile,
+    roles: mappings
+      .filter((mapping) => mapping.is_active && !mapping.is_deleted)
+      .map((mapping) => mapping.role)
+      .filter((role): role is NonNullable<UserProfileRecord['role']> =>
+        role !== null && role.is_active && !role.is_deleted),
+  };
+};
 
 export class UsersService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -130,16 +165,17 @@ export class UsersService {
     if ((vinfastResult.count ?? 0) > 0) userFail(409, 'VinFast ID đã tồn tại');
   }
 
-  private async assertConfiguredRole(roleId: string): Promise<void> {
-    const { data, error } = await this.db
+  private async assertConfiguredRoles(roleIds: string[]): Promise<void> {
+    const uniqueRoleIds = [...new Set(roleIds)];
+    if (uniqueRoleIds.length === 0) userFail(400, 'Người dùng phải có ít nhất một role');
+    const { count, error } = await this.db
       .from('roles')
-      .select('code')
-      .eq('id', roleId)
+      .select('id', { count: 'exact', head: true })
+      .in('id', uniqueRoleIds)
       .eq('is_active', true)
-      .eq('is_deleted', false)
-      .single();
-    if (error || !normalizeRoleCode(data?.code)) {
-      userFail(400, 'role_id không thuộc một trong 5 role hợp lệ');
+      .eq('is_deleted', false);
+    if (error || count !== uniqueRoleIds.length) {
+      userFail(400, 'Một hoặc nhiều role không tồn tại, inactive hoặc đã bị xóa');
     }
   }
 
@@ -168,11 +204,10 @@ export class UsersService {
   }
 
   private async validateReferences(
-    body: Pick<CreateUserBody, 'role_id' | 'area_id' | 'managed_by_user_id'>
-      | Pick<UpdateUserBody, 'role_id' | 'area_id' | 'managed_by_user_id'>,
+    body: Pick<CreateUserBody, 'area_id' | 'managed_by_user_id'>
+      | Pick<UpdateUserBody, 'area_id' | 'managed_by_user_id'>,
   ): Promise<void> {
     const checks: Promise<void>[] = [];
-    if (body.role_id !== undefined) checks.push(this.assertConfiguredRole(body.role_id));
     if (body.area_id !== undefined) checks.push(this.assertArea(body.area_id));
     if (body.managed_by_user_id) checks.push(this.assertManager(body.managed_by_user_id));
     await Promise.all(checks);
@@ -187,7 +222,7 @@ export class UsersService {
     const active = parseUserActiveFilter(query.isActive);
     let request = this.db
       .from('users')
-      .select(USER_EXPANDED_SELECT, { count: 'exact' })
+      .select(query.roleId ? USER_EXPANDED_SELECT_FILTERED_BY_ROLE : USER_EXPANDED_SELECT, { count: 'exact' })
       .eq('is_deleted', false);
     if (pagination.search) {
       const conditions = [
@@ -200,7 +235,12 @@ export class UsersService {
       }
       request = request.or(conditions.join(','));
     }
-    if (query.roleId) request = request.eq('role_id', query.roleId);
+    if (query.roleId) {
+      request = request
+        .eq('role_filter.role_id', query.roleId)
+        .eq('role_filter.is_active', true)
+        .eq('role_filter.is_deleted', false);
+    }
     if (query.areaId) request = request.eq('area_id', query.areaId);
     if (active !== null) request = request.eq('is_active', active);
     request = request.order(pagination.sortBy, {
@@ -209,7 +249,11 @@ export class UsersService {
     if (pagination.sortBy !== 'id') request = request.order('id', { ascending: true });
     const { data, error, count } = await request.range(pagination.from, pagination.to);
     const result = resolvePaginatedQueryResult(
-      { data: (data ?? null) as unknown as UserProfileRecord[] | null, error, count },
+      {
+        data: data ? (data as unknown as RawUserProfileRecord[]).map(normalizeUserProfile) : null,
+        error,
+        count,
+      },
       pagination,
     );
     if (result) return result;
@@ -225,7 +269,7 @@ export class UsersService {
       .eq('is_deleted', false)
       .single();
     if (error || !data) userDatabaseError(error, 'Không tìm thấy người dùng');
-    return data as unknown as UserProfileRecord;
+    return normalizeUserProfile(data as unknown as RawUserProfileRecord);
   }
 
   async authenticate(
@@ -247,7 +291,7 @@ export class UsersService {
       return userFail(401, 'VinFast ID hoặc mật khẩu không đúng');
     }
 
-    const profile = data as unknown as UserProfileRecord;
+    const profile = normalizeUserProfile(data as unknown as RawUserProfileRecord);
     const { data: credential, error: credentialError } = await this.db
       .from('user_credentials')
       .select('password_hash')
@@ -279,16 +323,24 @@ export class UsersService {
       !profile.area_id ||
       !profile.role ||
       !profile.role.is_active ||
-      profile.role.is_deleted ||
-      !normalizeRoleCode(profile.role.code)
+      profile.role.is_deleted
     ) {
       return userFail(403, 'Người dùng chưa được gán role hoặc area hợp lệ');
+    }
+
+    try {
+      await getEffectivePermissions(this.fastify, profile.id);
+    } catch (accessError) {
+      if (accessError instanceof AuthorizationError) {
+        return userFail(accessError.statusCode, accessError.message);
+      }
+      throw accessError;
     }
 
     return profile;
   }
 
-  async create(body: CreateUserBody) {
+  async create(body: CreateUserBody, actorId: string) {
     const email = normalizeRequiredText(body.email, 'email').toLowerCase();
     const firstName = normalizeRequiredText(body.first_name, 'first_name');
     const lastName = normalizeRequiredText(body.last_name, 'last_name');
@@ -297,11 +349,15 @@ export class UsersService {
       return userFail(400, PASSWORD_RULE_MESSAGE);
     }
     await this.assertUniqueFields(email, body.vinfast_id);
-    await this.validateReferences(body);
+    await this.assertConfiguredRoles(body.role_ids);
+    await this.validateReferences({
+      area_id: body.area_id,
+      managed_by_user_id: body.managed_by_user_id,
+    });
 
     const passwordHash = await hashPassword(body.password);
     const { data: userId, error: createError } = await this.db.rpc(
-      'create_internal_user',
+      'create_internal_user_with_roles',
       {
         p_email: email,
         p_first_name: firstName,
@@ -309,10 +365,11 @@ export class UsersService {
         p_vinfast_id: body.vinfast_id,
         p_phone_number: normalizeNullableText(body.phone_number) ?? null,
         p_avatar_url: normalizeNullableText(body.avatar_url) ?? null,
-        p_role_id: body.role_id,
+        p_role_ids: [...new Set(body.role_ids)],
         p_area_id: body.area_id,
         p_managed_by_user_id: body.managed_by_user_id ?? null,
         p_password_hash: passwordHash,
+        p_actor_id: actorId,
       },
     );
 
@@ -332,7 +389,7 @@ export class UsersService {
     };
   }
 
-  async update(id: string, body: UpdateUserBody): Promise<UserProfileRecord> {
+  async update(id: string, body: UpdateUserBody, _actorId?: string): Promise<UserProfileRecord> {
     const { data: current, error: currentError } = await this.db
       .from('users')
       .select(USER_COLUMN_SELECT)
@@ -363,7 +420,6 @@ export class UsersService {
     if (body.avatar_url !== undefined) {
       payload.avatar_url = normalizeNullableText(body.avatar_url);
     }
-    if (body.role_id !== undefined) payload.role_id = body.role_id;
     if (body.area_id !== undefined) payload.area_id = body.area_id;
     if (body.managed_by_user_id !== undefined) {
       payload.managed_by_user_id = body.managed_by_user_id;
@@ -389,7 +445,7 @@ export class UsersService {
 
     if (error || !data) userDatabaseError(error, 'Không thể cập nhật người dùng');
 
-    return data as unknown as UserProfileRecord;
+    return normalizeUserProfile(data as unknown as RawUserProfileRecord);
   }
 
   async updatePassword(
@@ -465,7 +521,7 @@ export class UsersService {
       .select(USER_EXPANDED_SELECT)
       .single();
     if (error || !data) userDatabaseError(error, 'Không tìm thấy người dùng');
-    return data as unknown as UserProfileRecord;
+    return normalizeUserProfile(data as unknown as RawUserProfileRecord);
   }
 }
 

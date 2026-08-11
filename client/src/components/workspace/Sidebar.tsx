@@ -11,7 +11,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { AppTooltip } from "../common/AppTooltip";
 import { getButtonClassName, IconButton } from "../common/Button";
-import { navigationForRole } from "../../constants/workspaceNavigation";
+import { buildWorkspaceNavigation } from "../../constants/workspaceNavigation";
 import {
   getRoleHomePath,
   getWorkspacePath,
@@ -40,11 +40,21 @@ const Sidebar = ({
   profileRef,
 }: SidebarProps) => {
   const navigate = useNavigate();
-  const { user, role, logoutContext } = useAuth();
-  const navigation = navigationForRole(role);
+  const {
+    user, role, hasPermission, hasAnyPermission, hasAllPermissions, logoutContext,
+  } = useAuth();
+  const navigation = buildWorkspaceNavigation(
+    role,
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+  );
   const homePath = getRoleHomePath(role);
   const ordersPath = getWorkspacePath(role, "orders");
   const createOrderPath = getWorkspacePath(role, "orders/create");
+  const milkrunTripsPath = getWorkspacePath(role, "milkrun/trips");
+  const createMilkrunTripPath = getWorkspacePath(role, "milkrun/trips/create");
+  const myMilkrunTripsPath = getWorkspacePath(role, "milkrun/trips/my");
   const profile = user?.publicData;
   const displayName = [profile?.last_name, profile?.first_name]
     .filter(Boolean)
@@ -57,6 +67,13 @@ const Sidebar = ({
   const checkActive = (to: string) => {
     if (to === ordersPath) {
       return pathname === to || (pathname.startsWith(`${to}/`) && pathname !== createOrderPath);
+    }
+    if (to === milkrunTripsPath) {
+      return pathname === to || (
+        pathname.startsWith(`${to}/`)
+        && pathname !== createMilkrunTripPath
+        && pathname !== myMilkrunTripsPath
+      );
     }
     return pathname === to || pathname.startsWith(`${to}/`);
   };
@@ -119,36 +136,45 @@ const Sidebar = ({
         className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto overscroll-contain px-6 pb-6 [scrollbar-gutter:stable]"
         aria-label="Admin navigation"
       >
-        {navigation.map((group) => (
-          <div key={group.label} className="space-y-1.5">
+        {navigation.map((catalog) => (
+          <div key={catalog.label} className="space-y-3">
             {!isSidebarCollapsed ? (
               <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                {group.label}
+                {catalog.label}
               </p>
             ) : (
               <div className="mb-2 flex justify-center text-slate-300">
                 <FontAwesomeIcon icon={faEllipsis} aria-hidden="true" />
               </div>
             )}
-            {group.items.map((item) => (
-              <AppTooltip
-                key={item.to}
-                content={item.label}
-                side="right"
-                disabled={!isSidebarCollapsed}
-              >
-                <Link
-                  to={item.to}
-                  onClick={() => setIsMobileSidebarOpen(false)}
-                  className={`sidebar-link w-full ${checkActive(item.to) ? "active" : ""}`}
-                  aria-label={isSidebarCollapsed ? item.label : undefined}
-                >
-                  <FontAwesomeIcon icon={item.icon} className="w-5 shrink-0 text-lg" aria-hidden="true" />
-                  <span className="sidebar-text min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm">
-                    {item.label}
-                  </span>
-                </Link>
-              </AppTooltip>
+            {catalog.groups.map((group) => (
+              <div key={`${catalog.label}-${group.label}`} className="space-y-1.5">
+                {!isSidebarCollapsed && (
+                  <p className="sidebar-text px-3 pt-1 text-[10px] font-semibold text-slate-400">
+                    {group.label}
+                  </p>
+                )}
+                {group.items.map((item) => (
+                  <AppTooltip
+                    key={`${catalog.label}-${group.label}-${item.label}`}
+                    content={item.label}
+                    side="right"
+                    disabled={!isSidebarCollapsed}
+                  >
+                    <Link
+                      to={item.to}
+                      onClick={() => setIsMobileSidebarOpen(false)}
+                      className={`sidebar-link w-full ${checkActive(item.to) ? "active" : ""}`}
+                      aria-label={isSidebarCollapsed ? item.label : undefined}
+                    >
+                      <FontAwesomeIcon icon={item.icon} className="w-5 shrink-0 text-lg" aria-hidden="true" />
+                      <span className="sidebar-text min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm">
+                        {item.label}
+                      </span>
+                    </Link>
+                  </AppTooltip>
+                ))}
+              </div>
             ))}
           </div>
         ))}

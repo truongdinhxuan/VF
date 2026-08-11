@@ -6,9 +6,8 @@ import {
   listSupplyCategories,
   updateSupplyCategory,
 } from '../../controllers/supply-categories';
-import { ROLE_CODES } from '../../domain/enums';
-import { MASTER_DATA_MANAGER_ROLES } from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   categoryListQuerySchema,
   categoryCreateSchema,
@@ -17,29 +16,30 @@ import {
 } from '../../schemas/master-data';
 
 const supplyCategoryRoutes: FastifyPluginAsync = async (fastify) => {
+  const catalogReadPermission = [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)];
   fastify.get(
     '/',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: categoryListQuerySchema },
+    { preHandler: catalogReadPermission, schema: categoryListQuerySchema },
     listSupplyCategories,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(ROLE_CODES), schema: idParamsSchema },
+    { preHandler: catalogReadPermission, schema: idParamsSchema },
     getSupplyCategory,
   );
   fastify.post(
     '/',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: categoryCreateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)], schema: categoryCreateSchema },
     createSupplyCategory,
   );
   fastify.patch(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: categoryUpdateSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)], schema: categoryUpdateSchema },
     updateSupplyCategory,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: idParamsSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)], schema: idParamsSchema },
     deleteSupplyCategory,
   );
 };

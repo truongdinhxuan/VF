@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  normalizeRoleCode,
-  ROLE_CODES,
-  type OrderStatus,
-} from '../../src/domain/enums';
+import type { OrderStatus } from '../../src/domain/enums';
+import { PERMISSION_CODE } from '../../src/domain/permission-codes';
 import {
   assertApprovedQuantity,
   assertCancelReason,
@@ -15,14 +12,6 @@ import {
   calculateStockAvailability,
   orderActionAffectsStock,
 } from '../../src/domain/orderRules';
-import {
-  canApproveOrder,
-  canCreateOrder,
-  canIssueOrder,
-  canMutateStock,
-  canViewStock,
-  USER_MANAGER_ROLES,
-} from '../../src/domain/permissions';
 
 describe('order state flow', () => {
   it('supports DRAFT -> PENDING -> APPROVED -> PARTIAL_ISSUED -> ISSUED -> RECEIVED -> COMPLETED', () => {
@@ -91,7 +80,7 @@ describe('order quantity rules', () => {
   });
 });
 
-describe('order reason and role rules', () => {
+describe('order reason and permission rules', () => {
   it('requires rejected_reason', () => {
     assert.throws(() => assertRejectedReason('  '), /rejected_reason/);
     assert.equal(assertRejectedReason('not available'), 'not available');
@@ -103,30 +92,10 @@ describe('order reason and role rules', () => {
     assert.equal(assertCancelReason('PENDING', 'changed plan'), 'changed plan');
   });
 
-  it('uses the five role codes and grants Admin all operational actions', () => {
-    assert.deepEqual(ROLE_CODES, [
-      'ADMIN',
-      'DATA_PACKING',
-      'DATA_MATERIAL',
-      'MATERIAL_LEADER',
-      'MATERIAL_CONTROL',
-    ]);
-    assert.equal(normalizeRoleCode('ADMIN'), 'ADMIN');
-    assert.equal(normalizeRoleCode('admin'), null);
-    assert.deepEqual(USER_MANAGER_ROLES, ['ADMIN']);
-    assert.equal(canCreateOrder('DATA_PACKING'), true);
-    assert.equal(canApproveOrder('DATA_MATERIAL'), true);
-    assert.equal(canApproveOrder('MATERIAL_LEADER'), true);
-    assert.equal(canApproveOrder('MATERIAL_CONTROL'), true);
-    assert.equal(canApproveOrder('ADMIN'), true);
-    assert.equal(canIssueOrder('DATA_MATERIAL'), true);
-    assert.equal(canIssueOrder('MATERIAL_LEADER'), true);
-    assert.equal(canIssueOrder('MATERIAL_CONTROL'), true);
-    assert.equal(canIssueOrder('DATA_PACKING'), false);
-    assert.equal(canIssueOrder('ADMIN'), true);
-    assert.equal(canViewStock('MATERIAL_CONTROL'), true);
-    assert.equal(canViewStock('ADMIN'), true);
-    assert.equal(canMutateStock('MATERIAL_CONTROL'), true);
-    assert.equal(canMutateStock('ADMIN'), true);
+  it('uses permission codes for each operational capability', () => {
+    assert.equal(PERMISSION_CODE.SUPPLY_ORDER_CREATE, 'supply.order.create');
+    assert.equal(PERMISSION_CODE.SUPPLY_ORDER_APPROVE, 'supply.order.approve');
+    assert.equal(PERMISSION_CODE.SUPPLY_STOCK_READ, 'supply.stock.read');
+    assert.equal(PERMISSION_CODE.SUPPLY_STOCK_ADJUST, 'supply.stock.adjust');
   });
 });

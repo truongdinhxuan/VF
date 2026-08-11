@@ -20,7 +20,7 @@ import {
   RowActions,
   StatusBadge,
 } from '../../components/crud/CrudPrimitives';
-import { PROVIDER_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
@@ -154,8 +154,11 @@ const ProviderForm = ({
 };
 
 const ProvidersPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && PROVIDER_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const hasActions = canUpdate || canDelete;
   const loader = useCallback(
     (query: ProviderQuery, signal: AbortSignal) => getProviders(query, signal),
     [],
@@ -233,16 +236,16 @@ const ProvidersPage = () => {
       sortKey: 'updated_at',
       render: (item) => formatDate(item.updated_at),
     },
-    ...(canMutate ? [{
+    ...(hasActions ? [{
       header: 'Thao tác',
       accessor: 'actions',
       render: (item: Provider) => (
         <RowActions
-          onEdit={() => {
+          onEdit={canUpdate ? () => {
             setEditing(item);
             setFormOpen(true);
-          }}
-          onDelete={item.code === UNKNOWN_PROVIDER_CODE
+          } : undefined}
+          onDelete={!canDelete || item.code === UNKNOWN_PROVIDER_CODE
             ? undefined
             : () => setDeactivateTarget(item)}
         />
@@ -256,7 +259,7 @@ const ProvidersPage = () => {
         title="Providers"
         description="Quản lý nhà cung cấp được liên kết với vật tư và tồn kho."
         createLabel="Thêm Provider"
-        onCreate={canMutate ? () => {
+        onCreate={canCreate ? () => {
           setEditing(null);
           setFormOpen(true);
         } : undefined}
@@ -302,7 +305,7 @@ const ProvidersPage = () => {
         />
       )}
 
-      {formOpen && canMutate && (
+      {formOpen && (editing ? canUpdate : canCreate) && (
         <CrudModal
           title={editing ? 'Chỉnh sửa Provider' : 'Tạo Provider'}
           busy={resource.mutating}
@@ -318,7 +321,7 @@ const ProvidersPage = () => {
         </CrudModal>
       )}
 
-      {deactivateTarget && canMutate && (
+      {deactivateTarget && canDelete && (
         <ConfirmDialog
           title="Deactivate Provider?"
           message={`Provider “${deactivateTarget.code} — ${deactivateTarget.name}” sẽ ngừng hoạt động và bị soft delete.`}

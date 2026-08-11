@@ -1,4 +1,3 @@
-import type { RoleCode } from '../domain/enums';
 import type { PaginationQuery } from './pagination';
 
 export interface ActiveListQuery extends PaginationQuery {
@@ -16,7 +15,7 @@ export interface RoleListQuery extends PaginationQuery {
 }
 
 export interface CreateRoleBody {
-  code: RoleCode;
+  code: string;
   name: string;
   description?: string | null;
   is_active?: boolean;

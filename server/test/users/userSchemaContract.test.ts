@@ -114,7 +114,9 @@ describe('current users schema contract', () => {
   it('uses Admin-managed user creation instead of public registration', () => {
     assert.doesNotMatch(authRoutes, /register/i);
     assert.match(userRoutes, /fastify\.post\(/);
-    assert.match(userRoutes, /verifyTokenAndRole\(USER_MANAGER_ROLES\)/);
+    assert.match(userRoutes, /PERMISSION_CODE\.ADMIN_USER_CREATE/);
+    assert.match(userRoutes, /PERMISSION_CODE\.ADMIN_USER_ASSIGN_ROLE/);
+    assert.doesNotMatch(userRoutes, /verifyTokenAndRole/);
   });
 
   it('updates profile email without depending on Supabase Auth', () => {

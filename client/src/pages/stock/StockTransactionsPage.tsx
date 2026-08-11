@@ -10,7 +10,7 @@ import { DataTable, type Column } from '../../components/common/DataTable';
 import { CardSkeleton, SelectSkeleton } from '../../components/common/skeleton';
 import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, inputClassName } from '../../components/crud/CrudPrimitives';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
-import { STOCK_MUTATOR_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -36,8 +36,8 @@ const transactionTypeCode = (transaction: StockTransaction) =>
   (transaction.transaction_type?.code ?? 'UNKNOWN') as StockTransactionType;
 
 const StockTransactionsPage = () => {
-  const { role } = useAuth();
-  const canAdjust = role !== null && STOCK_MUTATOR_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
   const loader = useCallback((query: StockTransactionQuery, signal: AbortSignal) => listStockTransactions(query, signal), []);
   const resource = usePaginatedResource<StockTransaction, StockTransactionQuery>({
     loader,

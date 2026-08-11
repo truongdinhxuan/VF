@@ -46,13 +46,13 @@ export const getRoleWorkspace = (
 
 export const getRoleBasePath = (
   role: RoleCode | null | undefined,
-): string => getRoleWorkspace(role)?.basePath ?? '/';
+): string => getRoleWorkspace(role)?.basePath ?? '/workspace';
 
 export const getRoleHomePath = (
   role: RoleCode | null | undefined,
 ): string => {
   const workspace = getRoleWorkspace(role);
-  return workspace ? `${workspace.basePath}/dashboard` : '/403-unauthorized';
+  return workspace ? `${workspace.basePath}/dashboard` : '/workspace/dashboard';
 };
 
 export const getWorkspacePath = (

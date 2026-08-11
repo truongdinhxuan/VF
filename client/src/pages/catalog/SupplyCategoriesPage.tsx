@@ -20,7 +20,7 @@ import {
   RowActions,
   StatusBadge,
 } from '../../components/crud/CrudPrimitives';
-import { MASTER_DATA_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
@@ -87,8 +87,11 @@ const CategoryForm = ({ item, busy, onCancel, onSave }: {
 };
 
 const SupplyCategoriesPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const hasActions = canUpdate || canDelete;
   const loader = useCallback((query: CategoryQuery, signal: AbortSignal) => listSupplyCategories(query, signal), []);
   const resource = usePaginatedResource<SupplyCategory, CategoryQuery>({
     loader,
@@ -124,10 +127,10 @@ const SupplyCategoriesPage = () => {
     { header: 'Tên', accessor: 'name', sortKey: 'name' },
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (item) => item.description || '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
-    ...(canMutate ? [{
+    ...(hasActions ? [{
       header: 'Thao tác',
       accessor: 'actions',
-      render: (item: SupplyCategory) => <RowActions onEdit={() => { setEditing(item); setFormOpen(true); }} onDelete={() => setDeleteTarget(item)} />,
+      render: (item: SupplyCategory) => <RowActions onEdit={canUpdate ? () => { setEditing(item); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(item) : undefined} />,
     }] : []),
   ];
 
@@ -137,7 +140,7 @@ const SupplyCategoriesPage = () => {
         title="Supply categories"
         description="Quản lý nhóm vật tư với mã danh mục duy nhất."
         createLabel="Thêm danh mục"
-        onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined}
       />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
@@ -159,8 +162,8 @@ const SupplyCategoriesPage = () => {
           emptyText="Không có danh mục phù hợp."
         />
       )}
-      {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa danh mục' : 'Tạo danh mục'} busy={resource.mutating} onClose={() => setFormOpen(false)}><CategoryForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-      {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động danh mục?" message={`Danh mục “${deleteTarget.code}” sẽ được soft delete nếu không vi phạm ràng buộc dữ liệu.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateSupplyCategory(deleteTarget.id), 'Đã deactivate danh mục.', 'Không thể deactivate danh mục.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+      {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa danh mục' : 'Tạo danh mục'} busy={resource.mutating} onClose={() => setFormOpen(false)}><CategoryForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+      {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động danh mục?" message={`Danh mục “${deleteTarget.code}” sẽ được soft delete nếu không vi phạm ràng buộc dữ liệu.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateSupplyCategory(deleteTarget.id), 'Đã deactivate danh mục.', 'Không thể deactivate danh mục.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>
   );
 };

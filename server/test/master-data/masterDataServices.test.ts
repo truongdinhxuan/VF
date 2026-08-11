@@ -84,9 +84,14 @@ describe('master data read contracts', () => {
     assert.match(storageLocationsService, /request = request\.eq\('area_id', areaId\)/);
   });
 
-  it('protects read routes using all configured roles', () => {
-    assert.match(supplyRoute, /verifyTokenAndRole\(ROLE_CODES\)/);
-    assert.match(areaRoute, /verifyTokenAndRole\(ROLE_CODES\)/);
-    assert.match(storageRoute, /verifyTokenAndRole\(STOCK_VIEWER_ROLES\)/);
+  it('protects read routes using permission codes', () => {
+    assert.match(supplyRoute, /requirePermission\(/);
+    assert.match(supplyRoute, /PERMISSION_CODE\.SUPPLY_CATALOG_READ/);
+    assert.match(areaRoute, /requirePermission\(/);
+    assert.match(storageRoute, /requirePermission\(PERMISSION_CODE\.SUPPLY_CATALOG_READ\)/);
+    assert.doesNotMatch(
+      [supplyRoute, areaRoute, storageRoute].join('\n'),
+      /verifyTokenAndRole/,
+    );
   });
 });

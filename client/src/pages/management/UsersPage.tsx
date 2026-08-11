@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { listAreas } from '../../api/areas.service';
 import { listRoles } from '../../api/roles.service';
-import { createUser, deactivateUser, getUsers, updateUser } from '../../api/users.service';
+import {
+  createUser, deactivateUser, getUserRoles, getUsers, replaceUserRoles, updateUser,
+} from '../../api/users.service';
 import { TextButton } from '../../components/common/Button';
 import { DataTable, type Column } from '../../components/common/DataTable';
 import {
@@ -19,7 +21,7 @@ import {
   StatusBadge,
 } from '../../components/crud/CrudPrimitives';
 import { SelectSkeleton } from '../../components/common/skeleton';
-import { USER_MANAGEMENT_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -42,7 +44,7 @@ interface UserFormValues {
   vinfast_id: number;
   phone_number: string;
   avatar_url: string;
-  role_id: string;
+  role_ids: string[];
   area_id: string;
   managed_by_user_id: string;
   is_active: boolean;
@@ -71,12 +73,15 @@ const loadAreas = async (signal: AbortSignal) =>
   )).data;
 
 const getRoleName = (user: UserProfile): string => {
+  if (user.roles?.length) return user.roles.map((role) => role.name).join(', ');
   if (typeof user.role === 'string') return user.role;
   return user.role ? `${user.role.name} (${user.role.code})` : '—';
 };
 
-const UserForm = ({ user, references, busy, onCancel, onSave }: {
+const UserForm = ({ user, roleIds, canAssignRoles, references, busy, onCancel, onSave }: {
   user: UserProfile | null;
+  roleIds: string[];
+  canAssignRoles: boolean;
   references: UserReferenceData;
   busy: boolean;
   onCancel: () => void;
@@ -97,7 +102,7 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
       vinfast_id: user?.vinfast_id ?? 0,
       phone_number: user?.phone_number ?? '',
       avatar_url: user?.avatar_url ?? '',
-      role_id: user?.role_id ?? '',
+      role_ids: roleIds,
       area_id: user?.area_id ?? '',
       managed_by_user_id: user?.managed_by_user_id ?? '',
       is_active: user?.is_active ?? true,
@@ -156,14 +161,22 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
             </label>
           </>
         )}
-        <label className={labelClassName}>
-          <span>Role</span>
-          {references.loading && references.roles.length === 0 ? <SelectSkeleton label="Đang tải role" /> : <select {...register('role_id', { required: 'Vui lòng chọn role.' })} className={inputClassName}>
-            <option value="">Chọn role</option>
-            {references.roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}
-          </select>}
-          {!references.loading && references.roles.length === 0 ? <FieldError message="Không có role để lựa chọn." /> : <FieldError message={errors.role_id?.message} />}
-        </label>
+        <fieldset className={`${labelClassName} rounded-xl border border-slate-200 p-3`}>
+          <legend className="px-1">Roles</legend>
+          {references.loading && references.roles.length === 0 ? <SelectSkeleton label="Đang tải role" /> : (
+            <div className="max-h-40 space-y-2 overflow-y-auto">
+              {references.roles.map((role) => (
+                <label key={role.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input type="checkbox" value={role.id} disabled={!canAssignRoles}
+                    {...register('role_ids', { required: 'Vui lòng chọn ít nhất một role.' })}
+                    className="h-4 w-4 rounded border-slate-300" />
+                  {role.name} ({role.code})
+                </label>
+              ))}
+            </div>
+          )}
+          {!references.loading && references.roles.length === 0 ? <FieldError message="Không có role để lựa chọn." /> : <FieldError message={errors.role_ids?.message} />}
+        </fieldset>
         <label className={labelClassName}>
           <span>Area</span>
           {references.loading && references.areas.length === 0 ? <SelectSkeleton label="Đang tải area" /> : <select {...register('area_id', { required: 'Vui lòng chọn area.' })} className={inputClassName}>
@@ -209,8 +222,11 @@ const UserForm = ({ user, references, busy, onCancel, onSave }: {
 };
 
 const UsersPage = () => {
-  const { role: currentRole } = useAuth();
-  const canMutate = currentRole !== null && USER_MANAGEMENT_ROLES.includes(currentRole);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.ADMIN_USER_CREATE)
+    && hasPermission(PERMISSION_CODE.ADMIN_USER_ASSIGN_ROLE);
+  const canUpdate = hasPermission(PERMISSION_CODE.ADMIN_USER_UPDATE);
+  const canAssignRoles = hasPermission(PERMISSION_CODE.ADMIN_USER_ASSIGN_ROLE);
   const loader = useCallback((query: UserQuery, signal: AbortSignal) => getUsers(query, signal), []);
   const resource = usePaginatedResource<UserProfile, UserQuery>({
     loader,
@@ -248,6 +264,23 @@ const UsersPage = () => {
   const [editing, setEditing] = useState<UserProfile | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<UserProfile | null>(null);
+  const [editingRoleIds, setEditingRoleIds] = useState<string[]>([]);
+
+  const openUserForm = async (target: UserProfile | null) => {
+    setEditing(target);
+    if (!target) {
+      setEditingRoleIds([]);
+      setFormOpen(true);
+      return;
+    }
+    try {
+      const assigned = await getUserRoles(target.id);
+      setEditingRoleIds(assigned.map((assignedRole) => assignedRole.id));
+      setFormOpen(true);
+    } catch {
+      resource.setFeedback({ type: 'error', message: 'Không thể tải role của người dùng.' });
+    }
+  };
 
   const references: UserReferenceData = {
     roles: roles.items,
@@ -272,13 +305,16 @@ const UsersPage = () => {
       vinfast_id: values.vinfast_id,
       phone_number: values.phone_number.trim() || null,
       avatar_url: values.avatar_url.trim() || null,
-      role_id: values.role_id,
       area_id: values.area_id,
       managed_by_user_id: values.managed_by_user_id || null,
     };
     const action = editing
-      ? () => updateUser(editing.id, { ...commonInput, is_active: values.is_active, is_verified: values.is_verified } satisfies UpdateUserInput)
-      : () => createUser({ ...commonInput, password: values.password } satisfies CreateUserInput);
+      ? async () => {
+          const profile = await updateUser(editing.id, { ...commonInput, is_active: values.is_active, is_verified: values.is_verified } satisfies UpdateUserInput);
+          if (canAssignRoles) await replaceUserRoles(editing.id, values.role_ids);
+          return profile;
+        }
+      : () => createUser({ ...commonInput, password: values.password, role_ids: values.role_ids } satisfies CreateUserInput);
     const ok = await resource.runMutation(
       action,
       editing ? 'Đã cập nhật người dùng.' : 'Đã tạo tài khoản nội bộ. Tài khoản đang chờ duyệt.',
@@ -295,16 +331,16 @@ const UsersPage = () => {
     { header: 'Area', accessor: 'area_id', render: (user) => user.area ? `${user.area.code} - ${user.area.name}` : '—' },
     { header: 'Active', accessor: 'is_active', sortKey: 'is_active', render: (user) => <StatusBadge active={user.is_active} /> },
     { header: 'Duyệt', accessor: 'is_verified', render: (user) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_verified ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{user.is_verified ? 'Đã duyệt' : 'Chờ duyệt'}</span> },
-    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => user.is_active ? (
-      <RowActions onEdit={() => { setEditing(user); setFormOpen(true); }} onDelete={() => setDeactivateTarget(user)} />
+    ...(canUpdate ? [{ header: 'Thao tác', accessor: 'actions', render: (user: UserProfile) => user.is_active ? (
+      <RowActions onEdit={() => void openUserForm(user)} onDelete={() => setDeactivateTarget(user)} />
     ) : (
-      <div className="flex justify-end"><button type="button" onClick={() => { setEditing(user); setFormOpen(true); }} className={TextButton}>Sửa / kích hoạt</button></div>
+      <div className="flex justify-end"><button type="button" onClick={() => void openUserForm(user)} className={TextButton}>Sửa / kích hoạt</button></div>
     ) }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Users" description="Quản lý hồ sơ, role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Users" description="Quản lý hồ sơ, nhiều role, khu vực và trạng thái duyệt tài khoản." createLabel="Thêm người dùng" onCreate={canCreate ? () => void openUserForm(null) : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? (
         <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
@@ -331,12 +367,12 @@ const UsersPage = () => {
           emptyText="Không có người dùng phù hợp."
         />
       )}
-      {formOpen && canMutate && (
+      {formOpen && (editing ? canUpdate : canCreate) && (
         <CrudModal title={editing ? 'Chỉnh sửa người dùng' : 'Tạo người dùng'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
-          <UserForm key={editing?.id ?? 'create'} user={editing} references={references} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
+          <UserForm key={`${editing?.id ?? 'create'}-${editingRoleIds.join('-')}`} user={editing} roleIds={editingRoleIds} canAssignRoles={canAssignRoles} references={references} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
         </CrudModal>
       )}
-      {deactivateTarget && canMutate && (
+      {deactivateTarget && canUpdate && (
         <ConfirmDialog title="Deactivate người dùng?" message={`Tài khoản “${deactivateTarget.email}” sẽ không còn được phép truy cập dữ liệu nội bộ.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeactivateTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUser(deactivateTarget.id), 'Đã deactivate người dùng.', 'Không thể deactivate người dùng.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeactivateTarget(null); })} />
       )}
     </div>

@@ -6,11 +6,8 @@ import {
   listStorageLocations,
   updateStorageLocation,
 } from '../../controllers/storage-locations';
-import {
-  MASTER_DATA_MANAGER_ROLES,
-  STOCK_VIEWER_ROLES,
-} from '../../domain/permissions';
-import { verifyTokenAndRole } from '../../middleware/auth';
+import { PERMISSION_CODE } from '../../domain/permission-codes';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   idParamsSchema,
   storageLocationCreateSchema,
@@ -22,20 +19,23 @@ const storageLocationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     '/',
     {
-      preHandler: verifyTokenAndRole(STOCK_VIEWER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)],
       schema: storageLocationListQuerySchema,
     },
     listStorageLocations,
   );
   fastify.get(
     '/:id',
-    { preHandler: verifyTokenAndRole(STOCK_VIEWER_ROLES), schema: idParamsSchema },
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_READ)],
+      schema: idParamsSchema,
+    },
     getStorageLocation,
   );
   fastify.post(
     '/',
     {
-      preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE)],
       schema: storageLocationCreateSchema,
     },
     createStorageLocation,
@@ -43,14 +43,14 @@ const storageLocationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     '/:id',
     {
-      preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES),
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE)],
       schema: storageLocationUpdateSchema,
     },
     updateStorageLocation,
   );
   fastify.delete(
     '/:id',
-    { preHandler: verifyTokenAndRole(MASTER_DATA_MANAGER_ROLES), schema: idParamsSchema },
+    { preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE)], schema: idParamsSchema },
     deleteStorageLocation,
   );
 };

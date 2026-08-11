@@ -3,10 +3,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
-import {
-  canManageProviders,
-  canViewProviders,
-} from '../../src/domain/permissions';
 import { PROVIDER_SORT_FIELDS } from '../../src/schemas/master-data';
 import {
   DEFAULT_PROVIDER_CODE,
@@ -59,24 +55,6 @@ const fakeFastify = (results: FakeResult[]) => {
 };
 
 describe('Provider permissions and route contract', () => {
-  it('allows all roles to read and excludes DATA_PACKING from mutations', () => {
-    for (const role of [
-      'ADMIN',
-      'DATA_PACKING',
-      'DATA_MATERIAL',
-      'MATERIAL_LEADER',
-      'MATERIAL_CONTROL',
-    ] as const) {
-      assert.equal(canViewProviders(role), true);
-    }
-
-    assert.equal(canManageProviders('ADMIN'), true);
-    assert.equal(canManageProviders('DATA_MATERIAL'), true);
-    assert.equal(canManageProviders('MATERIAL_LEADER'), true);
-    assert.equal(canManageProviders('MATERIAL_CONTROL'), true);
-    assert.equal(canManageProviders('DATA_PACKING'), false);
-  });
-
   it('registers list, detail, create, update and deactivate without hard delete', () => {
     const route = read('src/routes/providers/index.ts');
     assert.equal((route.match(/fastify\.get\(/g) ?? []).length, 2);
@@ -84,8 +62,12 @@ describe('Provider permissions and route contract', () => {
     assert.equal((route.match(/fastify\.patch\(/g) ?? []).length, 2);
     assert.equal((route.match(/fastify\.delete\(/g) ?? []).length, 0);
     assert.match(route, /\/:id\/deactivate/);
-    assert.match(route, /verifyTokenAndRole\(PROVIDER_VIEWER_ROLES\)/);
-    assert.match(route, /verifyTokenAndRole\(PROVIDER_MANAGER_ROLES\)/);
+    assert.match(route, /PERMISSION_CODE\.SUPPLY_CATALOG_READ/);
+    assert.match(route, /PERMISSION_CODE\.SUPPLY_CATALOG_CREATE/);
+    assert.match(route, /PERMISSION_CODE\.SUPPLY_CATALOG_UPDATE/);
+    assert.match(route, /PERMISSION_CODE\.SUPPLY_CATALOG_DELETE/);
+    assert.doesNotMatch(route, /PERMISSION_CODE\.SUPPLY_STOCK_ADJUST/);
+    assert.doesNotMatch(route, /verifyTokenAndRole/);
   });
 });
 

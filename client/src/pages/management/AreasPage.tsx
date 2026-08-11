@@ -7,7 +7,7 @@ import {
   ErrorState, FieldError, FormActions, inputClassName, labelClassName,
   RowActions, StatusBadge,
 } from '../../components/crud/CrudPrimitives';
-import { MASTER_DATA_MANAGER_ROLES } from '../../constants/roles';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
@@ -63,8 +63,11 @@ const AreaForm = ({ area, busy, onCancel, onSave }: {
 };
 
 const AreasPage = () => {
-  const { role } = useAuth();
-  const canMutate = role !== null && MASTER_DATA_MANAGER_ROLES.includes(role);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
+  const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
+  const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const hasActions = canUpdate || canDelete;
   const loader = useCallback((query: AreaQuery, signal: AbortSignal) => listAreas(query, signal), []);
   const resource = usePaginatedResource<Area, AreaQuery>({
     loader,
@@ -95,15 +98,15 @@ const AreasPage = () => {
     { header: 'Mã', accessor: 'code', sortKey: 'code' }, { header: 'Tên khu vực', accessor: 'name', sortKey: 'name' },
     { header: 'Mô tả', accessor: 'description', sortKey: 'description', render: (area) => area.description || '—' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (area) => <StatusBadge active={area.is_active} /> },
-    ...(canMutate ? [{ header: 'Thao tác', accessor: 'actions', render: (area: Area) => <RowActions onEdit={() => { setEditing(area); setFormOpen(true); }} onDelete={() => setDeleteTarget(area)} /> }] : []),
+    ...(hasActions ? [{ header: 'Thao tác', accessor: 'actions', render: (area: Area) => <RowActions onEdit={canUpdate ? () => { setEditing(area); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(area) : undefined} /> }] : []),
   ];
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={canMutate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Areas" description="Quản lý khu vực và mã khu vực duy nhất." createLabel="Thêm khu vực" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc tên khu vực..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có khu vực phù hợp." />}
-      {formOpen && canMutate && <CrudModal title={editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực'} busy={resource.mutating} onClose={() => setFormOpen(false)}><AreaForm key={editing?.id ?? 'create'} area={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-      {deleteTarget && canMutate && <ConfirmDialog title="Ngừng hoạt động khu vực?" message={`Khu vực “${deleteTarget.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateArea(deleteTarget.id), 'Đã deactivate khu vực.', 'Không thể deactivate khu vực.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
+      {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa khu vực' : 'Tạo khu vực'} busy={resource.mutating} onClose={() => setFormOpen(false)}><AreaForm key={editing?.id ?? 'create'} area={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
+      {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động khu vực?" message={`Khu vực “${deleteTarget.name}” sẽ được chuyển sang trạng thái inactive, không xóa cứng.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateArea(deleteTarget.id), 'Đã deactivate khu vực.', 'Không thể deactivate khu vực.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>
   );
 };

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import { canMutateStock, canViewStock } from '../../src/domain/permissions';
 
 const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -25,12 +24,14 @@ describe('Phase 3 stock API contracts', () => {
     assert.doesNotMatch(transactionRoutes, /fastify\.(?:post|patch|delete)\(/);
   });
 
-  it('uses only the current stock permission override', () => {
-    assert.equal(canViewStock('MATERIAL_CONTROL'), true);
-    assert.equal(canMutateStock('MATERIAL_CONTROL'), true);
-    assert.equal(canMutateStock('DATA_MATERIAL'), true);
-    assert.equal(canMutateStock('MATERIAL_LEADER'), true);
-    assert.equal(canMutateStock('ADMIN'), true);
+  it('guards stock endpoints by permission code', () => {
+    assert.match(balanceRoutes, /PERMISSION_CODE\.SUPPLY_STOCK_READ/);
+    assert.match(transactionRoutes, /PERMISSION_CODE\.SUPPLY_STOCK_READ/);
+    assert.match(adjustmentRoutes, /PERMISSION_CODE\.SUPPLY_STOCK_ADJUST/);
+    assert.doesNotMatch(
+      [balanceRoutes, transactionRoutes, adjustmentRoutes].join('\n'),
+      /verifyTokenAndRole|role\s*===/,
+    );
   });
 
   it('calls one atomic RPC instead of writing balance and transaction separately', () => {

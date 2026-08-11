@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { normalizeRoleCode } from '../domain/enums';
 import type { CreateRoleBody, UpdateRoleBody } from '../interfaces/master-data';
 import type { RoleListQuery } from '../interfaces/master-data';
 import { ROLE_SORT_FIELDS } from '../schemas/master-data';
@@ -15,6 +14,14 @@ import {
 const SELECT = `
   id, code, name, description, is_system, is_active, is_deleted, created_at, updated_at
 `;
+
+const normalizeDynamicRoleCode = (value: string): string => {
+  const code = normalizeRequiredText(value, 'code', 100).toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]*$/.test(code)) {
+    fail(400, 'code role chỉ gồm chữ, số và dấu gạch dưới');
+  }
+  return code;
+};
 
 export class RolesService {
   constructor(private readonly fastify: FastifyInstance) {}
@@ -65,15 +72,14 @@ export class RolesService {
   }
 
   async create(body: CreateRoleBody) {
-    const code = normalizeRoleCode(body.code);
-    if (!code) fail(400, 'code không thuộc danh sách role được cấu hình');
+    const code = normalizeDynamicRoleCode(body.code);
     const { data, error } = await this.db
       .from('roles')
       .insert({
         code,
         name: normalizeRequiredText(body.name, 'name'),
         description: normalizeOptionalText(body.description, 'description') ?? null,
-        is_system: true,
+        is_system: false,
         is_active: body.is_active ?? true,
         is_deleted: false,
       })
@@ -96,8 +102,7 @@ export class RolesService {
 
     const payload: Record<string, unknown> = {};
     if (body.code !== undefined) {
-      const code = normalizeRoleCode(body.code);
-      if (!code) fail(400, 'code không thuộc danh sách role được cấu hình');
+      const code = normalizeDynamicRoleCode(body.code);
       if (current.is_system && code !== current.code) {
         fail(409, 'Không thể thay đổi code của role hệ thống');
       }
@@ -106,6 +111,9 @@ export class RolesService {
     if (body.name !== undefined) payload.name = normalizeRequiredText(body.name, 'name');
     if (body.description !== undefined) {
       payload.description = normalizeOptionalText(body.description, 'description');
+    }
+    if (current.is_system && body.is_active === false) {
+      fail(409, 'Không thể deactivate role hệ thống');
     }
     if (body.is_active !== undefined) payload.is_active = body.is_active;
     if (Object.keys(payload).length === 0) fail(400, 'Không có dữ liệu để cập nhật');
@@ -133,9 +141,11 @@ export class RolesService {
     if (role.is_system) fail(409, 'Không thể xóa role hệ thống');
 
     const { count, error: usageError } = await this.db
-      .from('users')
+      .from('user_roles')
       .select('id', { count: 'exact', head: true })
-      .eq('role_id', id);
+      .eq('role_id', id)
+      .eq('is_active', true)
+      .eq('is_deleted', false);
     if (usageError) databaseError(usageError, 'Không thể kiểm tra role đang được sử dụng');
     if ((count ?? 0) > 0) fail(409, 'Không thể xóa role đang được user sử dụng');
 

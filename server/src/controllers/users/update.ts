@@ -10,6 +10,7 @@ export const userUpdate = (request: FastifyRequest, reply: FastifyReply) => {
     data: await new UsersService(request.server).update(
       id,
       request.body as UpdateUserBody,
+      request.user.id,
     ),
   }));
 };

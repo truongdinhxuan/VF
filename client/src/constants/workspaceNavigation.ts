@@ -1,7 +1,7 @@
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
-  faBoxesStacked,
   faBuilding,
+  faChartLine,
   faClipboardList,
   faClockRotateLeft,
   faDashboard,
@@ -9,6 +9,7 @@ import {
   faLocationDot,
   faPlus,
   faRightLeft,
+  faRoute,
   faRulerCombined,
   faSliders,
   faTruck,
@@ -17,27 +18,26 @@ import {
   faWarehouse,
 } from '@fortawesome/free-solid-svg-icons';
 import type { RoleCode } from './roles';
-import {
-  AREA_VIEWER_ROLES,
-  MASTER_DATA_VIEWER_ROLES,
-  ORDER_CREATOR_ROLES,
-  PROVIDER_VIEWER_ROLES,
-  STOCK_MUTATOR_ROLES,
-  STOCK_VIEWER_ROLES,
-  USER_VIEWER_ROLES,
-} from './roles';
+import { PERMISSION_CODE, type PermissionCode } from './permissions';
 import { getWorkspacePath } from './workspaces';
 
 interface WorkspaceNavigationDefinition {
   path: string;
   label: string;
   icon: IconDefinition;
-  roles?: readonly RoleCode[];
+  permission?: PermissionCode;
+  anyPermissions?: readonly PermissionCode[];
+  allPermissions?: readonly PermissionCode[];
 }
 
 interface WorkspaceNavigationGroupDefinition {
   label: string;
   items: readonly WorkspaceNavigationDefinition[];
+}
+
+interface WorkspaceNavigationCatalogDefinition {
+  label: string;
+  groups: readonly WorkspaceNavigationGroupDefinition[];
 }
 
 export interface WorkspaceNavigationItem extends WorkspaceNavigationDefinition {
@@ -49,119 +49,139 @@ export interface WorkspaceNavigationGroup {
   items: readonly WorkspaceNavigationItem[];
 }
 
-const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationGroupDefinition[] = [
+export interface WorkspaceNavigationCatalog {
+  label: string;
+  groups: readonly WorkspaceNavigationGroup[];
+}
+
+const OVERVIEW_PERMISSIONS = [
+  PERMISSION_CODE.SUPPLY_DASHBOARD_READ,
+  PERMISSION_CODE.MILKRUN_DASHBOARD_READ,
+  PERMISSION_CODE.ADMIN_USER_READ,
+] as const;
+
+const ORDER_READ_PERMISSIONS = [
+  PERMISSION_CODE.SUPPLY_ORDER_CREATE,
+  PERMISSION_CODE.SUPPLY_ORDER_APPROVE,
+  PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
+] as const;
+
+const MILKRUN_MASTER_READ_PERMISSIONS = [
+  PERMISSION_CODE.MILKRUN_TRIP_READ_OWN,
+  PERMISSION_CODE.MILKRUN_TRIP_READ_ALL,
+  PERMISSION_CODE.MILKRUN_TRIP_CREATE,
+] as const;
+
+const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
   {
     label: 'Overview',
-    items: [{ path: 'dashboard', label: 'Dashboard', icon: faDashboard }],
+    groups: [{
+      label: 'Dashboard',
+      items: [
+        { path: 'dashboard', label: 'Tổng quan', icon: faDashboard, anyPermissions: OVERVIEW_PERMISSIONS },
+        { path: 'dashboard/supply', label: 'Vật tư tiêu hao', icon: faChartLine, permission: PERMISSION_CODE.SUPPLY_DASHBOARD_READ },
+        { path: 'dashboard/milkrun', label: 'Milkrun', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
+      ],
+    }],
   },
   {
-    label: 'Operations',
-    items: [
-      { path: 'orders', label: 'Orders', icon: faClipboardList },
+    label: 'Vật tư tiêu hao',
+    groups: [
       {
-        path: 'orders/create',
-        label: 'Create order',
-        icon: faPlus,
-        roles: ORDER_CREATOR_ROLES,
+        label: 'Quản lý giao dịch',
+        items: [
+          { path: 'orders', label: 'Orders', icon: faClipboardList, anyPermissions: ORDER_READ_PERMISSIONS },
+          { path: 'orders/create', label: 'Tạo order', icon: faPlus, permission: PERMISSION_CODE.SUPPLY_ORDER_CREATE },
+          { path: 'stock-balances', label: 'Vật tư tồn kho', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
+          { path: 'stock-transactions', label: 'Giao dịch vật tư', icon: faClockRotateLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
+          { path: 'stock-adjustments', label: 'Điều chỉnh giao dịch', icon: faSliders, permission: PERMISSION_CODE.SUPPLY_STOCK_ADJUST },
+          { path: 'stock-transfers', label: 'Chuyển kho', icon: faRightLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_ADJUST },
+        ],
       },
       {
-        path: 'stock-balances',
-        label: 'Stock balances',
-        icon: faWarehouse,
-        roles: STOCK_VIEWER_ROLES,
-      },
-      {
-        path: 'stock-transactions',
-        label: 'Stock transactions',
-        icon: faClockRotateLeft,
-        roles: STOCK_VIEWER_ROLES,
-      },
-      {
-        path: 'stock-adjustments',
-        label: 'Stock adjustments',
-        icon: faSliders,
-        roles: STOCK_MUTATOR_ROLES,
-      },
-      {
-        path: 'stock-transfers',
-        label: 'Stock transfers',
-        icon: faRightLeft,
-        roles: STOCK_MUTATOR_ROLES,
+        label: 'Quản lý mã',
+        items: [
+          { path: 'supplies', label: 'Vật tư', icon: faTruck, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+          { path: 'supply-categories', label: 'Vật tư categories', icon: faLayerGroup, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+          { path: 'providers', label: 'Nhà cung cấp', icon: faBuilding, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+          { path: 'units', label: 'Đơn vị', icon: faRulerCombined, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+          { path: 'storage-locations', label: 'Khu vực lưu kho', icon: faLocationDot, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+        ],
       },
     ],
   },
   {
-    label: 'Catalog',
-    items: [
-      { path: 'supplies', label: 'Supplies', icon: faTruck },
+    label: 'Milkrun',
+    groups: [
       {
-        path: 'providers',
-        label: 'Providers',
-        icon: faBuilding,
-        roles: PROVIDER_VIEWER_ROLES,
+        label: 'Vận hành',
+        items: [
+          { path: 'milkrun/trips/create', label: 'Đăng ký chuyến', icon: faPlus, permission: PERMISSION_CODE.MILKRUN_TRIP_CREATE },
+          { path: 'milkrun/trips/my', label: 'Chuyến đi của tôi', icon: faRoute, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_OWN },
+          { path: 'milkrun/trips', label: 'Tất cả chuyến đi', icon: faClipboardList, permission: PERMISSION_CODE.MILKRUN_TRIP_READ_ALL },
+        ],
       },
       {
-        path: 'supply-categories',
-        label: 'Supply categories',
-        icon: faLayerGroup,
-        roles: MASTER_DATA_VIEWER_ROLES,
+        label: 'Quản lý tồn',
+        items: [
+          { path: 'milkrun/stock', label: 'Tồn rack', icon: faWarehouse, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
+          { path: 'milkrun/transactions', label: 'Giao dịch rack', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_STOCK_READ },
+          { path: 'milkrun/adjustments', label: 'Cân / điều chỉnh tồn', icon: faSliders, permission: PERMISSION_CODE.MILKRUN_STOCK_ADJUST },
+        ],
       },
       {
-        path: 'units',
-        label: 'Units',
-        icon: faRulerCombined,
-        roles: MASTER_DATA_VIEWER_ROLES,
+        label: 'Quản lý danh mục',
+        items: [
+          { path: 'milkrun/racks', label: 'Rack', icon: faLayerGroup, permission: PERMISSION_CODE.MILKRUN_RACK_READ },
+          { path: 'milkrun/shops', label: 'Shop', icon: faBuilding, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
+          { path: 'milkrun/trip-types', label: 'Loại chuyến', icon: faRightLeft, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
+          { path: 'milkrun/trip-statuses', label: 'Trạng thái chuyến', icon: faClockRotateLeft, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
+          { path: 'milkrun/vehicles', label: 'Xe', icon: faTruck, permission: PERMISSION_CODE.MILKRUN_VEHICLE_READ },
+        ],
       },
       {
-        path: 'storage-locations',
-        label: 'Storage locations',
-        icon: faLocationDot,
-        roles: STOCK_VIEWER_ROLES,
+        label: 'Báo cáo',
+        items: [
+          { path: 'dashboard/milkrun', label: 'Dashboard Milkrun', icon: faChartLine, permission: PERMISSION_CODE.MILKRUN_DASHBOARD_READ },
+        ],
       },
     ],
   },
   {
-    label: 'Management',
-    items: [
-      {
-        path: 'users',
-        label: 'Users',
-        icon: faUsers,
-        roles: USER_VIEWER_ROLES,
-      },
-      {
-        path: 'roles',
-        label: 'Roles',
-        icon: faUserShield,
-        roles: USER_VIEWER_ROLES,
-      },
-      {
-        path: 'areas',
-        label: 'Areas',
-        icon: faWarehouse,
-        roles: AREA_VIEWER_ROLES,
-      },
-      {
-        path: 'milkrun',
-        label: 'Milkrun (legacy)',
-        icon: faBoxesStacked,
-        roles: STOCK_MUTATOR_ROLES,
-      },
-    ],
+    label: 'Administration',
+    groups: [{
+      label: 'System',
+      items: [
+        { path: 'users', label: 'Users', icon: faUsers, permission: PERMISSION_CODE.ADMIN_USER_READ },
+        { path: 'roles', label: 'Roles', icon: faUserShield, permission: PERMISSION_CODE.ADMIN_ROLE_READ },
+        { path: 'areas', label: 'Areas', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_CATALOG_READ },
+      ],
+    }],
   },
 ];
 
-export const navigationForRole = (
+export const buildWorkspaceNavigation = (
   role: RoleCode | null,
-): WorkspaceNavigationGroup[] =>
-  WORKSPACE_NAVIGATION.map((group) => ({
-    label: group.label,
-    items: group.items
-      .filter(
-        (item) => !item.roles || (role !== null && item.roles.includes(role)),
-      )
-      .map((item) => ({
-        ...item,
-        to: getWorkspacePath(role, item.path),
-      })),
-  })).filter((group) => group.items.length > 0);
+  hasPermission: (permission: PermissionCode) => boolean,
+  hasAnyPermission: (permissions: readonly PermissionCode[]) => boolean,
+  hasAllPermissions: (permissions: readonly PermissionCode[]) => boolean,
+): WorkspaceNavigationCatalog[] => WORKSPACE_NAVIGATION
+  .map((catalog) => ({
+    label: catalog.label,
+    groups: catalog.groups
+      .map((group) => ({
+        label: group.label,
+        items: group.items
+          .filter((item) => (
+            (!item.permission || hasPermission(item.permission))
+            && (!item.anyPermissions || hasAnyPermission(item.anyPermissions))
+            && (!item.allPermissions || hasAllPermissions(item.allPermissions))
+          ))
+          .map((item) => ({
+            ...item,
+            to: getWorkspacePath(role, item.path),
+          })),
+      }))
+      .filter((group) => group.items.length > 0),
+  }))
+  .filter((catalog) => catalog.groups.length > 0);
