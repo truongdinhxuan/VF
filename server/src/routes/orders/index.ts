@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
+  allocateOrder,
   approveOrder,
   cancelOrder,
   completeOrder,
@@ -11,6 +12,7 @@ import {
   receiveOrder,
   rejectOrder,
   submitOrder,
+  confirmOrderAllocation,
 } from '../../controllers/orders';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
 import { requirePermission, verifyToken } from '../../middleware/auth';
@@ -18,6 +20,8 @@ import {
   orderCreateSchema,
   orderListSchema,
   orderPatchSchema,
+  allocationConfirmSchema,
+  orderIssueSchema,
 } from '../../schemas/orders';
 
 const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -31,6 +35,9 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
       anyOf: [
         PERMISSION_CODE.SUPPLY_ORDER_CREATE,
         PERMISSION_CODE.SUPPLY_ORDER_APPROVE,
+        PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE,
+        PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION,
+        PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
       ],
     }),
   ];
@@ -41,6 +48,14 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
   const orderIssuePermission = [
     verifyToken,
     requirePermission(PERMISSION_CODE.SUPPLY_ORDER_ISSUE),
+  ];
+  const orderAllocatePermission = [
+    verifyToken,
+    requirePermission(PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE),
+  ];
+  const orderConfirmAllocationPermission = [
+    verifyToken,
+    requirePermission(PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION),
   ];
   fastify.post(
     '/',
@@ -74,8 +89,21 @@ const orderRoutes: FastifyPluginAsync = async (fastify) => {
     rejectOrder,
   );
   fastify.post(
+    '/:id/allocate',
+    { preHandler: orderAllocatePermission },
+    allocateOrder,
+  );
+  fastify.post(
+    '/:id/allocations/:allocationId/confirm',
+    {
+      preHandler: orderConfirmAllocationPermission,
+      schema: allocationConfirmSchema,
+    },
+    confirmOrderAllocation,
+  );
+  fastify.post(
     '/:id/issue',
-    { preHandler: orderIssuePermission },
+    { preHandler: orderIssuePermission, schema: orderIssueSchema },
     issueOrder,
   );
   fastify.post(

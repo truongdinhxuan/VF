@@ -12,6 +12,9 @@ const providerFoundation = read(
 const orderRuntime = read(
   'supabase/migrations/202608050003_provider_stock_order_runtime.sql',
 );
+const stackImport = read(
+  'supabase/migrations/20260822135035_supply_stack_import.sql',
+);
 const balanceService = read('src/services/stock-balances.service.ts');
 const transactionService = read('src/services/stock-transactions.service.ts');
 const adjustmentService = read('src/services/stock-adjustments.service.ts');
@@ -49,8 +52,16 @@ describe('Provider-aware atomic stock adjustment contract', () => {
       stockSchema,
       /required:[\s\S]*'supply_id',[\s\S]*'provider_id',[\s\S]*'area_id'/,
     );
-    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v3'/);
+    assert.match(adjustmentService, /rpc\('apply_stock_adjustment_v4'/);
     assert.match(adjustmentService, /p_provider_id: body\.provider_id/);
+  });
+
+  it('keeps Provider in the complete stack balance identity', () => {
+    assert.match(
+      stackImport,
+      /on conflict \([\s\S]*supply_id,[\s\S]*provider_id,[\s\S]*area_id,[\s\S]*storage_location_id,[\s\S]*set_per_qty[\s\S]*\)/i,
+    );
+    assert.match(stackImport, /sp\.provider_id = p_provider_id/);
   });
 
   it('validates active Supply-Provider relation inside the transaction', () => {
@@ -151,14 +162,14 @@ describe('Provider-aware atomic OrderItem contract', () => {
   });
 
   it('keeps stock availability separated by Supply and Provider', () => {
-    assert.match(orderService, /availableBySupplyProvider/);
+    assert.match(orderService, /availableByDimension/);
     assert.match(
       orderService,
-      /`\$\{balance\.supply_id\}:\$\{balance\.provider_id\}`/,
+      /`\$\{balance\.supply_id\}:\$\{balance\.provider_id\}:\$\{stackDimension\}`/,
     );
     assert.match(
       orderService,
-      /`\$\{item\.supply_id\}:\$\{item\.provider_id\}`/,
+      /`\$\{item\.supply_id\}:\$\{item\.provider_id\}:\$\{stackDimension\}`/,
     );
   });
 });

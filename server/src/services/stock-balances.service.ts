@@ -10,10 +10,13 @@ import {
 
 const SELECT = `
   id, supply_id, provider_id, area_id, storage_location_id, quantity,
+  set_per_qty, stack_quantity, total_set_quantity,
+  has_open_discrepancy,
   is_active, is_deleted, created_at, updated_at,
   supply:supplies!stock_balances_supply_id_fkey(
     id, code, short_text, description, min_stock,
-    unit:units!supplies_unit_id_fkey(id, code, symbol, name)
+    unit:units!supplies_unit_id_fkey(id, code, symbol, name),
+    category:supply_categories!supplies_category_id_fkey(id, code, name)
   ),
   provider:providers!stock_balances_provider_id_fkey(
     id, code, name, description
@@ -49,6 +52,11 @@ export class StockBalancesService {
     if (areaId) request = request.eq('area_id', areaId);
     if (storageLocationId) {
       request = request.eq('storage_location_id', storageLocationId);
+    }
+    if (query.warning === 'warning') {
+      request = request.eq('has_open_discrepancy', true);
+    } else if (query.warning === 'no_warning') {
+      request = request.eq('has_open_discrepancy', false);
     }
     if (pagination.search) {
       const references = await resolveStockSearchReferences(

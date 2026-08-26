@@ -74,6 +74,33 @@ export interface UserRecord {
   last_name: string;
 }
 
+export interface WorkShiftRecord {
+  id: string;
+  code: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  crosses_midnight: boolean;
+  is_system: boolean;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserWorkShiftAssignmentRecord {
+  id: string;
+  user_id: string;
+  work_shift_id: string;
+  effective_from: string;
+  effective_to: string | null;
+  assigned_by: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SupplyCategoryRecord {
   id: string;
   code: string;
@@ -155,6 +182,9 @@ export interface StockBalanceRecord {
   area_id: string;
   storage_location_id: string;
   quantity: number;
+  set_per_qty: number | null;
+  stack_quantity: number | null;
+  total_set_quantity: number | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -192,9 +222,50 @@ export interface OrderItemRecord {
   provider_id: string;
   unit_id: string;
   quantity_requested: number;
+  set_per_qty: number | null;
+  requested_stack_quantity: number | null;
+  requested_total_set_quantity: number | null;
   quantity_approved: number | null;
   quantity_issued: number | null;
   note: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderItemAllocationRecord {
+  id: string;
+  order_item_id: string;
+  stock_balance_id: string;
+  expected_stack_quantity: number;
+  actual_stack_quantity: number | null;
+  status: string | null;
+  discrepancy_reason: string | null;
+  allocated_at: string;
+  confirmed_at: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryDiscrepancyRecord {
+  id: string;
+  stock_balance_id: string;
+  order_id: string;
+  order_item_id: string;
+  allocation_id: string;
+  expected_stack_quantity: number;
+  actual_stack_quantity: number;
+  difference_stack_quantity: number;
+  reason: string | null;
+  status: 'OPEN' | 'RESOLVED';
+  reported_by: string;
+  reported_at: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -209,10 +280,15 @@ export interface StockTransactionRecord {
   storage_location_id: string;
   order_id: string | null;
   order_item_id: string | null;
+  inventory_discrepancy_id: string | null;
   transaction_type_id: string;
   quantity: number;
   before_quantity: number;
   after_quantity: number;
+  set_per_qty: number | null;
+  stack_quantity: number | null;
+  before_stack_quantity: number | null;
+  after_stack_quantity: number | null;
   reason_id: string | null;
   reason_note: string | null;
   note: string | null;
@@ -305,6 +381,8 @@ export interface DatabaseRecordMap {
   stock_balances: StockBalanceRecord;
   orders: OrderRecord;
   order_items: OrderItemRecord;
+  order_item_allocations: OrderItemAllocationRecord;
+  inventory_discrepancies: InventoryDiscrepancyRecord;
   stock_transactions: StockTransactionRecord;
   order_statuses: OrderStatusRecord;
   stock_transaction_types: StockTransactionTypeRecord;

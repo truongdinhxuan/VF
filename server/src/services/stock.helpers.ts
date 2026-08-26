@@ -7,6 +7,7 @@ export class StockServiceError extends Error {
   constructor(
     public readonly statusCode: number,
     message: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'StockServiceError';
@@ -15,6 +16,14 @@ export class StockServiceError extends Error {
 
 export const stockFail = (statusCode: number, message: string): never => {
   throw new StockServiceError(statusCode, message);
+};
+
+export const stockFailWithDetails = (
+  statusCode: number,
+  message: string,
+  details?: Record<string, unknown>,
+): never => {
+  throw new StockServiceError(statusCode, message, details);
 };
 
 export const stockDatabaseError = (
@@ -31,10 +40,14 @@ export const stockDatabaseError = (
 
 export const stockRpcError = (error: SupabaseErrorLike): never => {
   const message = error.message ?? 'Cannot adjust stock';
-  if (/not found|inactive|outside area/i.test(message)) return stockFail(400, message);
-  if (/not allowed/i.test(message)) return stockFail(403, message);
+  if (/not found|inactive|outside area|not valid|not in area/i.test(message)) {
+    return stockFail(400, message);
+  }
+  if (/not allowed|does not have/i.test(message)) return stockFail(403, message);
   if (/insufficient/i.test(message)) return stockFail(409, message);
-  if (/quantity|reason|type/i.test(message)) return stockFail(400, message);
+  if (/quantity|reason|type|stack|mismatch/i.test(message)) {
+    return stockFail(400, message);
+  }
   return stockFail(400, message);
 };
 

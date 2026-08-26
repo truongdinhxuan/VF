@@ -1,12 +1,17 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
+import { getApiErrorMessage } from '../../api/errors';
+import { resolveInventoryDiscrepancy } from '../../api/inventory-discrepancies.service';
 import { listAreas } from '../../api/areas.service';
-import { listStockBalances } from '../../api/stock-balances.service';
+import { listStockBalanceDiscrepancies, listStockBalances } from '../../api/stock-balances.service';
 import { createStockAdjustment } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
 import { listSupplies } from '../../api/supplies.service';
 import { DataTable, type Column } from '../../components/common/DataTable';
 import { SelectSkeleton } from '../../components/common/skeleton';
-import { CrudFeedbackToast, CrudPageHeader, ErrorState, inputClassName } from '../../components/crud/CrudPrimitives';
+import { CardSkeleton } from '../../components/common/skeleton';
+import { InfoButton, TextButton } from '../../components/common/Button';
+import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, FieldError, inputClassName, labelClassName } from '../../components/crud/CrudPrimitives';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +24,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { StockBalance, StockBalanceListParams } from '../../types/stock-balances';
 import type { CreateStockAdjustmentInput } from '../../types/stock-transactions';
+import type { InventoryDiscrepancy } from '../../types/inventory-discrepancies';
 
 type StockBalanceQuery = StockBalanceListParams & PaginationParams;
 
@@ -29,17 +35,25 @@ const loadAreas = async (signal: AbortSignal) =>
   )).data;
 const numberFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+const isStackBalance = (item: StockBalance) => item.supply?.category?.code === 'KIEN_SAT_TC';
+const isLegacyStackBalance = (item: StockBalance) => isStackBalance(item)
+  && (item.set_per_qty === null || item.stack_quantity === null);
 
 const StockBalancesPage = () => {
   const { hasPermission } = useAuth();
+  const queryClient = useQueryClient();
   const canAdjust = hasPermission(PERMISSION_CODE.SUPPLY_STOCK_ADJUST);
+  const canResolveDiscrepancy = hasPermission(PERMISSION_CODE.SUPPLY_DISCREPANCY_RESOLVE);
   const loader = useCallback((query: StockBalanceQuery, signal: AbortSignal) => listStockBalances(query, signal), []);
   const resource = usePaginatedResource<StockBalance, StockBalanceQuery>({
     loader,
     initialQuery: { page: 1, pageSize: 20, sortBy: 'updated_at', sortOrder: 'desc' },
     loadErrorMessage: 'Không thể tải dữ liệu tồn kho.',
     queryKey: queryKeys.stockBalances.lists,
-    invalidateQueryKeys: [queryKeys.stockTransactions.all],
+    invalidateQueryKeys: [
+      queryKeys.stockTransactions.all,
+      queryKeys.supplyStackOptions.all,
+    ],
   });
   const areas = useCrudResource(
     loadAreas,
@@ -76,6 +90,25 @@ const StockBalancesPage = () => {
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [discrepancyBalance, setDiscrepancyBalance] = useState<StockBalance | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<InventoryDiscrepancy | null>(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const discrepancyQuery = useQuery({
+    queryKey: queryKeys.inventoryDiscrepancies.balance(
+      discrepancyBalance?.id ?? '',
+      { page: 1, pageSize: 100, sortBy: 'reported_at', sortOrder: 'desc' },
+    ),
+    queryFn: ({ signal }) => listStockBalanceDiscrepancies(
+      discrepancyBalance!.id,
+      { page: 1, pageSize: 100, sortBy: 'reported_at', sortOrder: 'desc' },
+      signal,
+    ),
+    enabled: Boolean(discrepancyBalance),
+  });
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      resolveInventoryDiscrepancy(id, { resolution_note: note }),
+  });
 
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
@@ -87,7 +120,40 @@ const StockBalancesPage = () => {
     { header: 'Provider', accessor: 'provider_id', render: (item) => item.provider ? <div><p className="font-semibold text-slate-800">{item.provider.code}</p><p className="text-xs text-slate-500">{item.provider.name}</p></div> : '—' },
     { header: 'Khu vực', accessor: 'area_id', render: (item) => item.area ? `${item.area.code} - ${item.area.name}` : '—' },
     { header: 'Vị trí kho', accessor: 'storage_location_id', render: (item) => item.storage_location ? `${item.storage_location.code}${item.storage_location.name ? ` - ${item.storage_location.name}` : ''}` : '—' },
-    { header: 'Số lượng', accessor: 'quantity', sortKey: 'quantity', render: (item) => <span className="font-bold text-slate-900">{numberFormatter.format(item.quantity)} {item.supply?.unit?.symbol ?? ''}</span> },
+    {
+      header: 'SET / chồng',
+      accessor: 'set_per_qty',
+      render: (item) => {
+        if (!isStackBalance(item)) return '—';
+        if (isLegacyStackBalance(item)) {
+          return <span className="text-xs font-semibold text-amber-700">Chưa có dữ liệu quy cách chồng</span>;
+        }
+        return <span className="font-semibold text-slate-800">{numberFormatter.format(item.set_per_qty!)} SET</span>;
+      },
+    },
+    {
+      header: 'Số chồng',
+      accessor: 'stack_quantity',
+      render: (item) => isStackBalance(item) && item.stack_quantity !== null
+        ? `${numberFormatter.format(item.stack_quantity)} chồng`
+        : '—',
+    },
+    {
+      header: 'Tồn / Tổng SET',
+      accessor: 'quantity',
+      sortKey: 'quantity',
+      render: (item) => (
+        <div>
+          <span className="font-bold text-slate-900">
+            {numberFormatter.format(item.total_set_quantity ?? item.quantity)} {item.supply?.unit?.symbol ?? ''}
+          </span>
+          {isStackBalance(item) && !isLegacyStackBalance(item) && (
+            <p className="text-xs text-slate-500">Tổng SET theo quy cách chồng</p>
+          )}
+        </div>
+      ),
+    },
+    { header: 'Cảnh báo', accessor: 'has_open_discrepancy', render: (item) => item.has_open_discrepancy ? <button type="button" onClick={() => setDiscrepancyBalance(item)} className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-200">⚠ Cần kiểm kê</button> : <button type="button" onClick={() => setDiscrepancyBalance(item)} className={TextButton}>Lịch sử</button> },
     { header: 'Cập nhật lúc', accessor: 'updated_at', sortKey: 'updated_at', render: (item) => dateFormatter.format(new Date(item.updated_at)) },
   ];
 
@@ -97,14 +163,47 @@ const StockBalancesPage = () => {
     'Không thể tạo stock adjustment.',
   );
 
+  const submitResolution = async () => {
+    if (!resolveTarget) return;
+    const note = resolutionNote.trim();
+    if (!note) return;
+    try {
+      await resolveMutation.mutateAsync({ id: resolveTarget.id, note });
+      resource.setFeedback({ type: 'success', message: 'Đã đánh dấu discrepancy là RESOLVED.' });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.inventoryDiscrepancies.all }),
+      ]);
+      setResolveTarget(null);
+      setResolutionNote('');
+    } catch (error) {
+      resource.setFeedback({
+        type: 'error',
+        message: getApiErrorMessage(error, 'Không thể resolve discrepancy.'),
+      });
+    }
+  };
+
   return <div className="space-y-6">
     <CrudPageHeader title="Stock balances" description="Tồn kho hiện tại theo vật tư, Provider, khu vực và vị trí lưu." createLabel="Tạo adjustment" onCreate={canAdjust ? () => setAdjustmentOpen(true) : undefined} />
     <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5">
       <div className="space-y-1">
         <input type="search" value={supplies.search} onChange={(event) => supplies.setSearch(event.target.value)} placeholder="Tìm vật tư trên server..." className={inputClassName} />
         {supplies.loading && supplies.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc vật tư" /> : <select value={resource.query.supplyId ?? ''} onChange={(event) => resource.updateQuery({ supplyId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả vật tư</option>{supplies.items.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` - ${supply.description}` : ''}</option>)}</select>}
       </div>
+      <select
+        value={resource.query.warning ?? 'all'}
+        onChange={(event) => resource.updateQuery({
+          warning: event.target.value as StockBalanceQuery['warning'],
+        })}
+        className={inputClassName}
+        aria-label="Lọc cảnh báo kiểm kê"
+      >
+        <option value="all">Tất cả cảnh báo</option>
+        <option value="warning">Có cảnh báo</option>
+        <option value="no_warning">Không cảnh báo</option>
+      </select>
       {providers.loading && providers.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc Provider" /> : <select value={resource.query.providerId ?? ''} onChange={(event) => resource.updateQuery({ providerId: event.target.value || undefined })} className={inputClassName}><option value="">Tất cả Provider</option>{providers.items.map((provider) => <option key={provider.id} value={provider.id}>{provider.code} - {provider.name}</option>)}</select>}
       {areas.loading && areas.items.length === 0 ? <SelectSkeleton label="Đang tải bộ lọc khu vực" /> : <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined, storageLocationId: undefined })} className={inputClassName}><option value="">Tất cả khu vực</option>{areas.items.map((area) => <option key={area.id} value={area.id}>{area.code} - {area.name}</option>)}</select>}
       <div className="space-y-1">
@@ -115,7 +214,96 @@ const StockBalancesPage = () => {
     {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Một số bộ lọc không tải được. Dữ liệu tồn kho vẫn được hiển thị nếu API chính hoạt động.</p>}
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã vật tư, khu vực, vị trí..." searchValue={searchInput} onSearchChange={setSearchInput} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có tồn kho phù hợp với bộ lọc." />}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
+    {discrepancyBalance && (
+      <CrudModal
+        title={`Lịch sử sai lệch — ${discrepancyBalance.supply?.code ?? 'Vật tư'}`}
+        busy={resolveMutation.isPending}
+        onClose={() => {
+          setDiscrepancyBalance(null);
+          setResolveTarget(null);
+          setResolutionNote('');
+        }}
+      >
+        <div className="mb-4 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
+          <Summary label="Provider" value={discrepancyBalance.provider ? `${discrepancyBalance.provider.code} — ${discrepancyBalance.provider.name}` : '—'} />
+          <Summary label="Area" value={discrepancyBalance.area ? `${discrepancyBalance.area.code} — ${discrepancyBalance.area.name}` : '—'} />
+          <Summary label="Vị trí" value={discrepancyBalance.storage_location ? `${discrepancyBalance.storage_location.code}${discrepancyBalance.storage_location.name ? ` — ${discrepancyBalance.storage_location.name}` : ''}` : '—'} />
+        </div>
+        {discrepancyQuery.isPending ? (
+          <CardSkeleton lines={6} label="Đang tải lịch sử sai lệch" />
+        ) : discrepancyQuery.isError ? (
+          <ErrorState
+            message={getApiErrorMessage(discrepancyQuery.error, 'Không thể tải lịch sử sai lệch.')}
+            onRetry={() => void discrepancyQuery.refetch()}
+          />
+        ) : (discrepancyQuery.data?.data.length ?? 0) === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có lịch sử sai lệch.</p>
+        ) : (
+          <div className="space-y-3">
+            {discrepancyQuery.data!.data.map((discrepancy) => {
+              const reporter = discrepancy.reporter
+                ? `${discrepancy.reporter.first_name} ${discrepancy.reporter.last_name}`.trim()
+                : 'Không rõ';
+              const resolver = discrepancy.resolver
+                ? `${discrepancy.resolver.first_name} ${discrepancy.resolver.last_name}`.trim()
+                : null;
+              return (
+                <article key={discrepancy.id} className="rounded-xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-900">Order {discrepancy.order?.code ?? 'Không rõ'}</p>
+                      <p className="mt-1 text-xs text-slate-500">Báo bởi {reporter} · {dateFormatter.format(new Date(discrepancy.reported_at))}</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>{discrepancy.status}</span>
+                  </div>
+                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
+                    <Summary label="Dự kiến" value={`${discrepancy.expected_stack_quantity} chồng`} />
+                    <Summary label="Thực tế" value={`${discrepancy.actual_stack_quantity} chồng`} />
+                    <Summary label="Chênh lệch" value={`${discrepancy.difference_stack_quantity} chồng`} />
+                    <Summary label="Quy cách" value={`${discrepancy.order_item?.set_per_qty ?? '—'} SET/chồng`} />
+                  </dl>
+                  <p className="mt-3 text-sm text-slate-600">Lý do: {discrepancy.reason || 'Không ghi nhận'}</p>
+                  {discrepancy.status === 'RESOLVED' && (
+                    <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+                      <p>{discrepancy.resolution_note}</p>
+                      <p className="mt-1 text-xs">
+                        Xử lý bởi {resolver ?? 'Không rõ'} · {discrepancy.resolved_at
+                          ? dateFormatter.format(new Date(discrepancy.resolved_at))
+                          : 'Không rõ thời gian'}
+                      </p>
+                    </div>
+                  )}
+                  {discrepancy.status === 'OPEN' && canResolveDiscrepancy && (
+                    <button type="button" onClick={() => { setResolveTarget(discrepancy); setResolutionNote(''); }} className={`${InfoButton} mt-3`}>Đánh dấu đã xử lý</button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+        {resolveTarget && (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <label className={labelClassName}>
+              <span>Ghi chú xử lý *</span>
+              <textarea rows={3} maxLength={2000} value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} className={inputClassName} />
+              {!resolutionNote.trim() && <FieldError message="Ghi chú xử lý là bắt buộc." />}
+            </label>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" disabled={resolveMutation.isPending} onClick={() => setResolveTarget(null)} className={TextButton}>Bỏ qua</button>
+              <button type="button" disabled={resolveMutation.isPending || !resolutionNote.trim()} onClick={() => void submitResolution()} className={InfoButton}>{resolveMutation.isPending ? 'Đang xử lý...' : 'Xác nhận resolve'}</button>
+            </div>
+          </div>
+        )}
+      </CrudModal>
+    )}
   </div>;
 };
+
+const Summary = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+    <p className="mt-1 break-words font-semibold text-slate-800">{value}</p>
+  </div>
+);
 
 export default StockBalancesPage;

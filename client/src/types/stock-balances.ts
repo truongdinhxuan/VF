@@ -10,6 +10,11 @@ export interface StockBalanceSupplySummary {
   description: string | null;
   min_stock: number | null;
   unit: UnitSummary | null;
+  category: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
 }
 
 export interface StockBalance {
@@ -19,6 +24,10 @@ export interface StockBalance {
   area_id: string;
   storage_location_id: string;
   quantity: number;
+  set_per_qty: number | null;
+  stack_quantity: number | null;
+  total_set_quantity: number | null;
+  has_open_discrepancy: boolean;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -34,4 +43,5 @@ export interface StockBalanceListParams extends PaginatedListParams {
   providerId?: string;
   areaId?: string;
   storageLocationId?: string;
+  warning?: 'all' | 'warning' | 'no_warning';
 }

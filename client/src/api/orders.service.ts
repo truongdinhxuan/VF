@@ -2,6 +2,8 @@ import instance from "./http";
 import type {
   ApproveOrderInput,
   CancelOrderInput,
+  ConfirmAllocationInput,
+  ConfirmAllocationResult,
   CreateOrderInput,
   IssueOrderInput,
   Order,
@@ -51,6 +53,23 @@ export const submitOrder = async (id: string): Promise<Order> =>
 
 export const approveOrder = async (id: string, input: ApproveOrderInput): Promise<Order> =>
   normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/approve`, input)));
+
+export const allocateOrder = async (id: string): Promise<Order> =>
+  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/allocate`)));
+
+export const confirmOrderAllocation = async (
+  orderId: string,
+  allocationId: string,
+  input: ConfirmAllocationInput,
+): Promise<ConfirmAllocationResult> => {
+  const result = get(
+    await instance.post<
+      ApiEnvelope<ConfirmAllocationResult>,
+      ApiEnvelope<ConfirmAllocationResult>
+    >(`orders/${orderId}/allocations/${allocationId}/confirm`, input),
+  );
+  return { ...result, order: normalizeOrder(result.order) };
+};
 
 export const rejectOrder = async (id: string, input: RejectOrderInput): Promise<Order> =>
   normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/reject`, input)));

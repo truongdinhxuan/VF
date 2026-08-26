@@ -201,6 +201,19 @@ export const supplyProviderListQuerySchema: FastifySchema = {
   },
 };
 
+export const supplyStackOptionsSchema: FastifySchema = {
+  ...idParamsSchema,
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['provider_id', 'area_id'],
+    properties: {
+      provider_id: uuid,
+      area_id: uuid,
+    },
+  },
+};
+
 export const supplyListQuerySchema = createListQuerySchema(SUPPLY_SORT_FIELDS, {
   q: legacySearch,
   category_id: uuid,

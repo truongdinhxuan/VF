@@ -99,4 +99,44 @@ describe('frontend permission authorization contract', () => {
       /path: 'milkrun\/racks'[\s\S]*?MILKRUN_RACK_READ/,
     );
   });
+
+  it('uses the dedicated Shop read permission for navigation and route access', () => {
+    const permissions = read('src/constants/permissions.ts');
+    const navigation = read('src/constants/workspaceNavigation.ts');
+    const routes = read('src/routes/workspace.routes.tsx');
+    for (const permission of [
+      'MILKRUN_SHOP_READ',
+      'MILKRUN_SHOP_CREATE',
+      'MILKRUN_SHOP_UPDATE',
+      'MILKRUN_SHOP_DEACTIVATE',
+    ]) assert.match(permissions, new RegExp(permission));
+    assert.match(
+      navigation,
+      /path: 'milkrun\/shops'[\s\S]*?permission: PERMISSION_CODE\.MILKRUN_SHOP_READ/,
+    );
+    assert.match(
+      routes,
+      /path: 'milkrun\/shops'[\s\S]*?MILKRUN_SHOP_READ[\s\S]*?<MilkrunShopsPage/,
+    );
+  });
+
+  it('uses dedicated Trip Type and Trip Status permissions for navigation and routes', () => {
+    const permissions = read('src/constants/permissions.ts');
+    const navigation = read('src/constants/workspaceNavigation.ts');
+    const routes = read('src/routes/workspace.routes.tsx');
+    for (const permission of [
+      'MILKRUN_TRIP_TYPE_READ',
+      'MILKRUN_TRIP_TYPE_CREATE',
+      'MILKRUN_TRIP_TYPE_UPDATE',
+      'MILKRUN_TRIP_TYPE_DEACTIVATE',
+      'MILKRUN_TRIP_STATUS_READ',
+      'MILKRUN_TRIP_STATUS_CREATE',
+      'MILKRUN_TRIP_STATUS_UPDATE',
+      'MILKRUN_TRIP_STATUS_DEACTIVATE',
+    ]) assert.match(permissions, new RegExp(permission));
+    assert.match(navigation, /milkrun\/trip-types'[\s\S]*?MILKRUN_TRIP_TYPE_READ/);
+    assert.match(navigation, /milkrun\/trip-statuses'[\s\S]*?MILKRUN_TRIP_STATUS_READ/);
+    assert.match(routes, /milkrun\/trip-types'[\s\S]*?MILKRUN_TRIP_TYPE_READ/);
+    assert.match(routes, /milkrun\/trip-statuses'[\s\S]*?MILKRUN_TRIP_STATUS_READ/);
+  });
 });

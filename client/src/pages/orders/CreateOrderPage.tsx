@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { listAreas } from '../../api/areas.service';
@@ -8,6 +8,7 @@ import { createOrder } from '../../api/orders.service';
 import { listSupplies } from '../../api/supplies.service';
 import { InfoButton, SecondaryButton, TextButton, TextErrorButton } from '../../components/common/Button';
 import { SupplyProviderSelect } from '../../components/common/SupplyProviderSelect';
+import { OrderStackFields } from '../../components/orders/OrderStackFields';
 import { SelectSkeleton } from '../../components/common/skeleton';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
@@ -23,7 +24,10 @@ interface CreateOrderForm {
     supply_id: string;
     provider_id: string;
     unit_id: string;
-    quantity_requested: number;
+    quantity_requested?: number;
+    set_per_qty?: number;
+    requested_stack_quantity?: number;
+    requested_total_set_quantity?: number;
     note: string;
   }>;
 }
@@ -34,6 +38,9 @@ const emptyItem = () => ({
   provider_id: '',
   unit_id: '',
   quantity_requested: 1,
+  set_per_qty: undefined,
+  requested_stack_quantity: undefined,
+  requested_total_set_quantity: undefined,
   note: '',
 });
 
@@ -88,12 +95,55 @@ const CreateOrderPage = () => {
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'order_list' });
   const orderItems = useWatch({ control, name: 'order_list' });
+  const previousSourceAreaId = useRef('');
+
+  const resetStackFields = useCallback((index: number) => {
+    setValue(`order_list.${index}.set_per_qty`, undefined, { shouldValidate: false });
+    setValue(`order_list.${index}.requested_stack_quantity`, undefined, { shouldValidate: false });
+    setValue(`order_list.${index}.requested_total_set_quantity`, undefined, { shouldValidate: false });
+  }, [setValue]);
+
+  useEffect(() => {
+    const nextAreaId = sourceArea?.id ?? '';
+    if (previousSourceAreaId.current
+        && nextAreaId
+        && previousSourceAreaId.current !== nextAreaId) {
+      fields.forEach((_, index) => resetStackFields(index));
+    }
+    previousSourceAreaId.current = nextAreaId;
+  }, [fields, resetStackFields, sourceArea?.id]);
 
   const changeSupply = (index: number, supplyId: string) => {
     const supply = supplies.find((item) => item.id === supplyId);
     setValue(`order_list.${index}.supply_id`, supplyId, { shouldValidate: true });
     setValue(`order_list.${index}.provider_id`, '', { shouldValidate: false });
     setValue(`order_list.${index}.unit_id`, supply?.unit_id ?? '', { shouldValidate: true });
+    setValue(`order_list.${index}.quantity_requested`,
+      supply?.category?.code === 'KIEN_SAT_TC' ? undefined : 1,
+      { shouldValidate: false },
+    );
+    resetStackFields(index);
+  };
+
+  const changeProvider = (index: number, providerId: string) => {
+    setValue(`order_list.${index}.provider_id`, providerId, { shouldValidate: true });
+    resetStackFields(index);
+  };
+
+  const changeSetPerQty = (index: number, value: number | undefined) => {
+    const requestedStacks = orderItems[index]?.requested_stack_quantity;
+    setValue(`order_list.${index}.set_per_qty`, value, { shouldValidate: true });
+    const total = value && requestedStacks ? value * requestedStacks : undefined;
+    setValue(`order_list.${index}.requested_total_set_quantity`, total);
+    setValue(`order_list.${index}.quantity_requested`, total, { shouldValidate: true });
+  };
+
+  const changeRequestedStackQuantity = (index: number, value: number | undefined) => {
+    const setPerQty = orderItems[index]?.set_per_qty;
+    setValue(`order_list.${index}.requested_stack_quantity`, value, { shouldValidate: true });
+    const total = value && setPerQty ? value * setPerQty : undefined;
+    setValue(`order_list.${index}.requested_total_set_quantity`, total);
+    setValue(`order_list.${index}.quantity_requested`, total, { shouldValidate: true });
   };
 
   const onSubmit = async (values: CreateOrderForm) => {
@@ -108,13 +158,25 @@ const CreateOrderPage = () => {
       from_area_id: sourceArea.id,
       to_area_id: receivingAreaId,
       note: values.note.trim() || undefined,
-      order_list: values.order_list.map((item) => ({
-        supply_id: item.supply_id.trim(),
-        provider_id: item.provider_id.trim(),
-        unit_id: item.unit_id.trim(),
-        quantity_requested: Number(item.quantity_requested),
-        note: item.note.trim() || undefined,
-      })),
+      order_list: values.order_list.map((item) => {
+        const supply = supplies.find((candidate) => candidate.id === item.supply_id);
+        const isStack = supply?.category?.code === 'KIEN_SAT_TC';
+        const setPerQty = Number(item.set_per_qty);
+        const requestedStacks = Number(item.requested_stack_quantity);
+        const requestedTotal = isStack ? setPerQty * requestedStacks : undefined;
+        return {
+          supply_id: item.supply_id.trim(),
+          provider_id: item.provider_id.trim(),
+          unit_id: item.unit_id.trim(),
+          quantity_requested: isStack ? requestedTotal! : Number(item.quantity_requested),
+          ...(isStack ? {
+            set_per_qty: setPerQty,
+            requested_stack_quantity: requestedStacks,
+            requested_total_set_quantity: requestedTotal,
+          } : {}),
+          note: item.note.trim() || undefined,
+        };
+      }),
     };
 
     try {
@@ -169,8 +231,9 @@ const CreateOrderPage = () => {
             {fields.map((field, index) => {
               const current = orderItems[index] ?? emptyItem();
               const selectedSupply = supplies.find((supply) => supply.id === current.supply_id);
+              const isStack = selectedSupply?.category?.code === 'KIEN_SAT_TC';
               return (
-                <div key={field.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-[2fr_2fr_1fr_130px_2fr_auto]">
+                <div key={field.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-6">
                   <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Vật tư
                     {suppliesLoading && supplies.length === 0 ? <SelectSkeleton label="Đang tải danh mục vật tư" /> : (
@@ -187,7 +250,7 @@ const CreateOrderPage = () => {
                     <SupplyProviderSelect
                       supplyId={current.supply_id}
                       value={current.provider_id}
-                      onChange={(providerId) => setValue(`order_list.${index}.provider_id`, providerId, { shouldValidate: true })}
+                      onChange={(providerId) => changeProvider(index, providerId)}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
                       ariaLabel={`Chọn Provider cho dòng ${index + 1}`}
                     />
@@ -200,11 +263,31 @@ const CreateOrderPage = () => {
                     <input type="hidden" {...register(`order_list.${index}.unit_id`, { required: 'Vật tư chưa có Unit.' })} />
                     {errors.order_list?.[index]?.unit_id && <span className="block normal-case text-rose-600">{errors.order_list[index]?.unit_id?.message}</span>}
                   </label>
-                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Số lượng
-                    <input type="number" step="any" min="0.000001" {...register(`order_list.${index}.quantity_requested`, { valueAsNumber: true, required: 'Nhập số lượng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800" />
-                    {errors.order_list?.[index]?.quantity_requested && <span className="block normal-case text-rose-600">{errors.order_list[index]?.quantity_requested?.message}</span>}
-                  </label>
+                  {isStack ? (
+                    <>
+                      <input type="hidden" {...register(`order_list.${index}.set_per_qty`, { required: 'Chọn SET/chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                      <input type="hidden" {...register(`order_list.${index}.requested_stack_quantity`, { required: 'Nhập số chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                      <input type="hidden" {...register(`order_list.${index}.requested_total_set_quantity`)} />
+                      <input type="hidden" {...register(`order_list.${index}.quantity_requested`, { required: 'Tổng SET chưa hợp lệ.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                      <OrderStackFields
+                        supplyId={current.supply_id}
+                        providerId={current.provider_id}
+                        areaId={sourceArea?.id ?? ''}
+                        setPerQty={current.set_per_qty}
+                        requestedStackQuantity={current.requested_stack_quantity}
+                        onSetPerQtyChange={(value) => changeSetPerQty(index, value)}
+                        onRequestedStackQuantityChange={(value) => changeRequestedStackQuantity(index, value)}
+                        setPerQtyError={errors.order_list?.[index]?.set_per_qty?.message}
+                        requestedStackQuantityError={errors.order_list?.[index]?.requested_stack_quantity?.message}
+                      />
+                    </>
+                  ) : (
+                    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Số lượng
+                      <input type="number" step="any" min="0.000001" {...register(`order_list.${index}.quantity_requested`, { valueAsNumber: true, required: 'Nhập số lượng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800" />
+                      {errors.order_list?.[index]?.quantity_requested && <span className="block normal-case text-rose-600">{errors.order_list[index]?.quantity_requested?.message}</span>}
+                    </label>
+                  )}
                   <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Ghi chú dòng
                     <input {...register(`order_list.${index}.note`)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal normal-case text-slate-800" />

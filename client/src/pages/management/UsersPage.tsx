@@ -28,6 +28,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
+import { UserWorkShiftPanel } from '../../components/users/UserWorkShiftPanel';
 import type { Area } from '../../types/areas';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { Role } from '../../types/roles';
@@ -370,6 +371,7 @@ const UsersPage = () => {
       {formOpen && (editing ? canUpdate : canCreate) && (
         <CrudModal title={editing ? 'Chỉnh sửa người dùng' : 'Tạo người dùng'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
           <UserForm key={`${editing?.id ?? 'create'}-${editingRoleIds.join('-')}`} user={editing} roleIds={editingRoleIds} canAssignRoles={canAssignRoles} references={references} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
+          {editing && <UserWorkShiftPanel userId={editing.id} canAssign={canUpdate} />}
         </CrudModal>
       )}
       {deactivateTarget && canUpdate && (

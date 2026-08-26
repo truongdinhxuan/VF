@@ -18,14 +18,24 @@ export class StockAdjustmentsService {
   }
 
   async create(actor: StockActor, body: CreateStockAdjustmentBody) {
-    let quantity: number;
-    try {
-      quantity = assertPositiveStockQuantity(body.quantity);
-    } catch (error) {
-      if (error instanceof StockRuleError) {
-        throw new StockServiceError(400, error.message);
+    let quantity: number | null = null;
+    if (body.quantity !== undefined) {
+      try {
+        quantity = assertPositiveStockQuantity(body.quantity);
+      } catch (error) {
+        if (error instanceof StockRuleError) {
+          throw new StockServiceError(400, error.message);
+        }
+        throw error;
       }
-      throw error;
+    }
+    if (body.stack_quantity !== undefined
+      && (!Number.isFinite(body.stack_quantity) || body.stack_quantity <= 0)) {
+      throw new StockServiceError(400, 'Invalid stack_quantity');
+    }
+    if (body.set_per_qty !== undefined
+      && (!Number.isFinite(body.set_per_qty) || body.set_per_qty <= 0)) {
+      throw new StockServiceError(400, 'Invalid set_per_qty');
     }
 
     let typeRequest = this.db
@@ -96,13 +106,15 @@ export class StockAdjustmentsService {
     }
 
     const note = typeof body.note === 'string' ? body.note.trim() || null : null;
-    const { data, error } = await this.db.rpc('apply_stock_adjustment_v3', {
+    const { data, error } = await this.db.rpc('apply_stock_adjustment_v4', {
       p_supply_id: body.supply_id,
       p_provider_id: body.provider_id,
       p_area_id: body.area_id,
       p_storage_location_id: body.storage_location_id,
       p_transaction_type_id: transactionType.id,
       p_quantity: quantity,
+      p_stack_quantity: body.stack_quantity ?? null,
+      p_set_per_qty: body.set_per_qty ?? null,
       p_adjustment_reason_id: body.adjustment_reason_id ?? null,
       p_reason_note: reasonNote,
       p_note: note,

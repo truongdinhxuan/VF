@@ -224,6 +224,19 @@ export interface MilkrunRackInput {
   is_active?: boolean;
 }
 
+export interface MilkrunShopInput {
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active?: boolean;
+}
+
+export type MilkrunTripTypeInput = MilkrunShopInput;
+
+export interface MilkrunTripStatusInput extends MilkrunShopInput {
+  sort_order: number;
+}
+
 export interface MilkrunVehicleInput {
   code?: string;
   plate_number?: string;

@@ -5,6 +5,7 @@ import {
   getSupply,
   listSupplies,
   listSupplyProviders,
+  listSupplyStackOptions,
   updateSupply,
 } from '../../controllers/supplies';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
@@ -14,6 +15,7 @@ import {
   supplyCreateSchema,
   supplyListQuerySchema,
   supplyProviderListQuerySchema,
+  supplyStackOptionsSchema,
   supplyUpdateSchema,
 } from '../../schemas/master-data';
 
@@ -31,6 +33,17 @@ const supplyRoutes: FastifyPluginAsync = async (fastify) => {
       schema: supplyProviderListQuerySchema,
     },
     listSupplyProviders,
+  );
+  fastify.get(
+    '/:id/stack-options',
+    {
+      preHandler: [
+        verifyToken,
+        requirePermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE),
+      ],
+      schema: supplyStackOptionsSchema,
+    },
+    listSupplyStackOptions,
   );
   fastify.get(
     '/:id',

@@ -69,6 +69,18 @@ export type SupplyOption = Pick<
   | 'description'
   | 'unit_id'
   | 'unit'
+  | 'category'
   | 'is_active'
   | 'is_deleted'
 >;
+
+export interface SupplyStackOption {
+  set_per_qty: number;
+  available_stack_quantity: number;
+  available_total_set_quantity: number;
+}
+
+export interface SupplyStackOptionsParams {
+  provider_id: string;
+  area_id: string;
+}

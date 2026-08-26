@@ -4,6 +4,9 @@ export interface OrderListItemInput {
   supply_id: string;
   provider_id: string;
   quantity_requested: number;
+  set_per_qty?: number;
+  requested_stack_quantity?: number;
+  requested_total_set_quantity?: number;
   unit_id?: string;
   note?: string;
 }
@@ -50,6 +53,11 @@ export interface ReceiveOrderBody {
 
 export interface CancelOrderBody {
   cancel_reason?: string;
+}
+
+export interface ConfirmAllocationBody {
+  actual_stack_quantity: number;
+  reason?: string;
 }
 
 export interface OrderListQuery extends PaginationQuery {

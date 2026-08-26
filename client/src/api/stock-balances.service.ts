@@ -6,6 +6,10 @@ import type {
 import type { PaginatedResponse } from '../types/pagination.types';
 import instance from './http';
 import { unwrapData } from './response';
+import type {
+  InventoryDiscrepancy,
+  InventoryDiscrepancyListParams,
+} from '../types/inventory-discrepancies';
 
 export const listStockBalances = async (
   params: StockBalanceListParams = {},
@@ -22,3 +26,13 @@ export const getStockBalance = async (id: string): Promise<StockBalance> =>
       `stock-balances/${id}`,
     ),
   );
+
+export const listStockBalanceDiscrepancies = async (
+  stockBalanceId: string,
+  params: InventoryDiscrepancyListParams = {},
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<InventoryDiscrepancy>> =>
+  instance.get<
+    PaginatedResponse<InventoryDiscrepancy>,
+    PaginatedResponse<InventoryDiscrepancy>
+  >(`stock-balances/${stockBalanceId}/discrepancies`, { params, signal });

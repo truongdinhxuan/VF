@@ -66,12 +66,6 @@ const ORDER_READ_PERMISSIONS = [
   PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
 ] as const;
 
-const MILKRUN_MASTER_READ_PERMISSIONS = [
-  PERMISSION_CODE.MILKRUN_TRIP_READ_OWN,
-  PERMISSION_CODE.MILKRUN_TRIP_READ_ALL,
-  PERMISSION_CODE.MILKRUN_TRIP_CREATE,
-] as const;
-
 const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
   {
     label: 'Overview',
@@ -133,9 +127,9 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
         label: 'Quản lý danh mục',
         items: [
           { path: 'milkrun/racks', label: 'Rack', icon: faLayerGroup, permission: PERMISSION_CODE.MILKRUN_RACK_READ },
-          { path: 'milkrun/shops', label: 'Shop', icon: faBuilding, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
-          { path: 'milkrun/trip-types', label: 'Loại chuyến', icon: faRightLeft, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
-          { path: 'milkrun/trip-statuses', label: 'Trạng thái chuyến', icon: faClockRotateLeft, anyPermissions: MILKRUN_MASTER_READ_PERMISSIONS },
+          { path: 'milkrun/shops', label: 'Shop', icon: faBuilding, permission: PERMISSION_CODE.MILKRUN_SHOP_READ },
+          { path: 'milkrun/trip-types', label: 'Loại chuyến', icon: faRightLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_TYPE_READ },
+          { path: 'milkrun/trip-statuses', label: 'Trạng thái chuyến', icon: faClockRotateLeft, permission: PERMISSION_CODE.MILKRUN_TRIP_STATUS_READ },
           { path: 'milkrun/vehicles', label: 'Xe', icon: faTruck, permission: PERMISSION_CODE.MILKRUN_VEHICLE_READ },
         ],
       },

@@ -13,20 +13,38 @@ describe('Milkrun management UI contract', () => {
       'MilkrunStockTransactionsPage',
       'MilkrunStockAdjustmentPage',
       'MilkrunRacksPage',
+      'MilkrunShopsPage',
       'MilkrunVehiclesPage',
     ]) assert.match(routes, new RegExp(`<${page}`));
     assert.doesNotMatch(routes, /path: 'milkrun\/stock'[\s\S]{0,180}WorkspacePlaceholderPage/);
   });
 
-  it('uses permission codes and keeps unavailable master mutations read-only', () => {
+  it('uses dedicated permission codes for every implemented Milkrun catalog', () => {
     const routes = read('src/routes/workspace.routes.tsx');
     const navigation = read('src/constants/workspaceNavigation.ts');
-    const readOnlyPage = read('src/pages/milkrun/ReadOnlyMasterPage.tsx');
+    const tripCatalogPage = read('src/pages/milkrun/TripCatalogPage.tsx');
+    const shopsPage = read('src/pages/milkrun/ShopsPage.tsx');
+    const masterApi = read('src/api/milkrun-master-data.service.ts');
     assert.match(routes, /MILKRUN_STOCK_READ/);
     assert.match(routes, /MILKRUN_STOCK_ADJUST/);
     assert.match(routes, /MILKRUN_RACK_READ/);
-    assert.match(navigation, /MILKRUN_MASTER_READ_PERMISSIONS/);
-    assert.doesNotMatch(readOnlyPage, /createMilkrun|updateMilkrun|deactivateMilkrun/);
+    assert.match(routes, /MILKRUN_SHOP_READ/);
+    assert.match(navigation, /MILKRUN_SHOP_READ/);
+    assert.match(shopsPage, /MILKRUN_SHOP_CREATE/);
+    assert.match(shopsPage, /MILKRUN_SHOP_UPDATE/);
+    assert.match(shopsPage, /MILKRUN_SHOP_DEACTIVATE/);
+    assert.match(shopsPage, /createMilkrunShop/);
+    assert.match(shopsPage, /updateMilkrunShop/);
+    assert.match(shopsPage, /deactivateMilkrunShop/);
+    assert.match(masterApi, /getMilkrunShopById/);
+    assert.match(tripCatalogPage, /createMilkrunTripType/);
+    assert.match(tripCatalogPage, /updateMilkrunTripStatus/);
+    assert.match(tripCatalogPage, /MILKRUN_TRIP_TYPE_CREATE/);
+    assert.match(tripCatalogPage, /MILKRUN_TRIP_STATUS_DEACTIVATE/);
+    assert.doesNotMatch(tripCatalogPage, /Chế độ chỉ đọc/);
+    assert.match(routes, /key="trip-types"/);
+    assert.match(routes, /key="trip-statuses"/);
+    assert.doesNotMatch(navigation, /MILKRUN_TRIP_LOOKUP_READ_PERMISSIONS/);
     assert.doesNotMatch(`${routes}\n${navigation}`, /role\s*===|role\.includes/);
   });
 

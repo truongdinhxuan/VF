@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { listAreas } from '../../api/areas.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
@@ -77,15 +77,40 @@ export const StockAdjustmentModal = ({
       storage_location_id: '',
       type: 'ADJUSTMENT_IN',
       quantity: 1,
+      stack_quantity: undefined,
+      set_per_qty: undefined,
       reason: '',
       note: '',
     },
   });
   const selectedSupplyId = useWatch({ control, name: 'supply_id' });
   const selectedProviderId = useWatch({ control, name: 'provider_id' });
+  const selectedType = useWatch({ control, name: 'type' });
+  const stackQuantity = useWatch({ control, name: 'stack_quantity' });
+  const setPerQty = useWatch({ control, name: 'set_per_qty' });
+  const selectedSupply = useMemo(
+    () => supplies.items.find((supply) => supply.id === selectedSupplyId),
+    [selectedSupplyId, supplies.items],
+  );
+  const isStackSupply = selectedSupply?.category?.code === 'KIEN_SAT_TC';
+  const isStackImport = isStackSupply && selectedType === 'IMPORT';
+  const isUnsupportedStackAdjustment = isStackSupply && selectedType !== 'IMPORT';
+  const totalSetQuantity = isStackImport
+    && typeof stackQuantity === 'number'
+    && Number.isFinite(stackQuantity)
+    && typeof setPerQty === 'number'
+    && Number.isFinite(setPerQty)
+    ? stackQuantity * setPerQty
+    : 0;
   const supplyRegistration = register('supply_id', { required: 'Vui lòng chọn vật tư.' });
   const areaRegistration = register('area_id', { required: 'Vui lòng chọn khu vực.' });
   register('provider_id', { required: 'Vui lòng chọn Provider.' });
+
+  useEffect(() => {
+    if (isStackImport) return;
+    setValue('stack_quantity', undefined, { shouldValidate: false });
+    setValue('set_per_qty', undefined, { shouldValidate: false });
+  }, [isStackImport, setValue]);
 
   const referenceErrors = [supplies.error, areas.error, locations.error].filter(
     (error): error is string => Boolean(error),
@@ -95,11 +120,18 @@ export const StockAdjustmentModal = ({
     || supplies.items.length === 0 || areas.items.length === 0;
 
   const submit = async (values: CreateStockAdjustmentInput) => {
-    if (await onSubmit({
+    const payload: CreateStockAdjustmentInput = {
       ...values,
       reason: values.reason.trim(),
       note: values.note?.trim() || null,
-    })) onClose();
+    };
+    if (isStackImport) {
+      payload.quantity = values.stack_quantity! * values.set_per_qty!;
+    } else {
+      delete payload.stack_quantity;
+      delete payload.set_per_qty;
+    }
+    if (await onSubmit(payload)) onClose();
   };
 
   return (
@@ -111,6 +143,11 @@ export const StockAdjustmentModal = ({
         {referenceErrors.length > 0 && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
             {referenceErrors.map((message) => <p key={message}>{message}</p>)}
+          </div>
+        )}
+        {isUnsupportedStackAdjustment && (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            Loại điều chỉnh này hiện chưa hỗ trợ cho kiện sắt tiêu chuẩn. Hãy dùng nghiệp vụ Nhập kho (IMPORT) hoặc chọn vật tư khác.
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -125,6 +162,8 @@ export const StockAdjustmentModal = ({
                 onChange={(event) => {
                   void supplyRegistration.onChange(event);
                   setValue('provider_id', '', { shouldValidate: false });
+                  setValue('stack_quantity', undefined, { shouldValidate: false });
+                  setValue('set_per_qty', undefined, { shouldValidate: false });
                 }}
               >
                 <option value="">Chọn vật tư</option>
@@ -181,11 +220,59 @@ export const StockAdjustmentModal = ({
               {ADJUSTMENT_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
           </label>
-          <label className={labelClassName}>
-            <span>Số lượng</span>
-            <input type="number" min="0" step="any" {...register('quantity', { valueAsNumber: true, required: 'Vui lòng nhập số lượng.', validate: (value) => value > 0 || 'Số lượng phải lớn hơn 0.' })} className={inputClassName} />
-            <FieldError message={errors.quantity?.message} />
-          </label>
+          {isStackImport ? (
+            <>
+              <label className={labelClassName}>
+                <span>Số chồng</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  {...register('stack_quantity', {
+                    valueAsNumber: true,
+                    required: 'Vui lòng nhập số chồng.',
+                    validate: (value) => (typeof value === 'number' && value > 0) || 'Số chồng phải lớn hơn 0.',
+                  })}
+                  className={inputClassName}
+                />
+                <FieldError message={errors.stack_quantity?.message} />
+              </label>
+              <label className={labelClassName}>
+                <span>SET / chồng</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  {...register('set_per_qty', {
+                    valueAsNumber: true,
+                    required: 'Vui lòng nhập số SET trên mỗi chồng.',
+                    validate: (value) => (typeof value === 'number' && value > 0) || 'SET / chồng phải lớn hơn 0.',
+                  })}
+                  className={inputClassName}
+                />
+                <FieldError message={errors.set_per_qty?.message} />
+              </label>
+              <label className={labelClassName}>
+                <span>Tổng SET</span>
+                <input
+                  type="number"
+                  value={Number.isFinite(totalSetQuantity) ? totalSetQuantity : 0}
+                  readOnly
+                  aria-label="Tổng SET được hệ thống tính"
+                  className={`${inputClassName} bg-slate-50 font-semibold text-slate-700`}
+                />
+                <span className="text-xs font-normal text-slate-500">
+                  Backend sẽ tính lại số chồng × SET/chồng trước khi cập nhật tồn.
+                </span>
+              </label>
+            </>
+          ) : (
+            <label className={labelClassName}>
+              <span>Số lượng</span>
+              <input type="number" min="0" step="any" {...register('quantity', { valueAsNumber: true, required: 'Vui lòng nhập số lượng.', validate: (value) => (typeof value === 'number' && value > 0) || 'Số lượng phải lớn hơn 0.' })} className={inputClassName} />
+              <FieldError message={errors.quantity?.message} />
+            </label>
+          )}
         </div>
         <label className={labelClassName}>
           <span>Lý do</span>
@@ -196,7 +283,7 @@ export const StockAdjustmentModal = ({
           <span>Ghi chú</span>
           <textarea rows={2} {...register('note')} className={inputClassName} />
         </label>
-        <FormActions busy={busy || referencesUnavailable || (Boolean(selectedAreaId) && locations.items.length === 0)} onCancel={onClose} submitLabel="Tạo adjustment" />
+        <FormActions busy={busy || referencesUnavailable || isUnsupportedStackAdjustment || (Boolean(selectedAreaId) && locations.items.length === 0)} onCancel={onClose} submitLabel="Tạo adjustment" />
       </form>
     </CrudModal>
   );

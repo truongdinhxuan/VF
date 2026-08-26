@@ -11,6 +11,15 @@ export interface StockBalanceListQuery extends PaginationQuery {
   storage_location_id?: string;
   storageLocationId?: string;
   low_stock?: string | boolean;
+  warning?: 'all' | 'warning' | 'no_warning';
+}
+
+export interface InventoryDiscrepancyListQuery extends PaginationQuery {
+  status?: 'OPEN' | 'RESOLVED';
+}
+
+export interface ResolveInventoryDiscrepancyBody {
+  resolution_note: string;
 }
 
 export interface StockTransactionListQuery extends PaginationQuery {
@@ -45,7 +54,9 @@ export interface CreateStockAdjustmentBody {
   transaction_type_id?: string;
   transaction_type_code?: StockAdjustmentType;
   adjustment_reason_id?: string;
-  quantity: number;
+  quantity?: number;
+  stack_quantity?: number;
+  set_per_qty?: number;
   reason?: string;
   reason_note?: string;
   note?: string | null;

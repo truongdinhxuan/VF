@@ -5,6 +5,7 @@ import type {
   CreateSupplyBody,
   SupplyListQuery,
   SupplyProviderListQuery,
+  SupplyStackOptionsQuery,
   UpdateSupplyBody,
 } from '../interfaces/supplies';
 import {
@@ -335,6 +336,29 @@ export class SuppliesService {
         (link as { provider: ProviderRecord | ProviderRecord[] | null }).provider,
       ))
       .filter((provider): provider is ProviderRecord => provider !== null);
+  }
+
+  async listStackOptions(id: string, query: SupplyStackOptionsQuery) {
+    const providerId = assertFilterId(query.provider_id, 'provider_id');
+    const areaId = assertFilterId(query.area_id, 'area_id');
+    if (!providerId || !areaId) fail(400, 'provider_id và area_id là bắt buộc');
+
+    const { data, error } = await this.db.rpc('get_supply_stack_options', {
+      p_supply_id: id,
+      p_provider_id: providerId,
+      p_area_id: areaId,
+    });
+    if (error) databaseError(error, 'Không thể lấy quy cách chồng đang tồn kho');
+
+    return ((data ?? []) as Array<{
+      set_per_qty: number | string;
+      available_stack_quantity: number | string;
+      available_total_set_quantity: number | string;
+    }>).map((option) => ({
+      set_per_qty: Number(option.set_per_qty),
+      available_stack_quantity: Number(option.available_stack_quantity),
+      available_total_set_quantity: Number(option.available_total_set_quantity),
+    }));
   }
 
   async remove(id: string) {

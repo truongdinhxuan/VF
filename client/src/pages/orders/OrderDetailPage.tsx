@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getApiErrorMessage } from "../../api/errors";
+import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from "../../api/errors";
 import { listStorageLocations } from "../../api/storage-locations.service";
 import {
   approveOrder,
+  allocateOrder,
   cancelOrder,
   completeOrder,
+  confirmOrderAllocation,
   getOrder,
   issueOrder,
   receiveOrder,
@@ -27,13 +29,20 @@ import {
 import { CardSkeleton, SelectSkeleton } from "../../components/common/skeleton";
 import { OrderStatusBadge } from "../../components/orders/OrderStatusBadge";
 import { StockAvailabilityWarning } from "../../components/orders/StockAvailabilityWarning";
+import { CrudModal, FieldError, inputClassName, labelClassName } from "../../components/crud/CrudPrimitives";
 import { PERMISSION_CODE } from "../../constants/permissions";
 import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
 import { useServerLookup } from "../../hooks/useServerLookup";
 import { queryKeys } from "../../lib/queryKeys";
 import type { StorageLocationOption } from "../../types/catalog";
-import type { Order, OrderItem } from "../../types/orders";
+import type {
+  Order,
+  OrderItem,
+  OrderItemAllocation,
+  StackAllocationErrorDetails,
+  StackIssueStockConflictDetails,
+} from "../../types/orders";
 
 type ActionPanel = "approve" | "reject" | "issue" | "cancel" | null;
 type ItemValues = Record<string, { quantity: string; note?: string; storageLocationId?: string }>;
@@ -45,6 +54,60 @@ const formatDate = (value: string | null) =>
 
 const itemRemaining = (item: OrderItem) =>
   Math.max(0, Number(item.quantity_approved ?? 0) - Number(item.quantity_issued ?? 0));
+
+const approvedStackQuantity = (item: OrderItem): number | null => {
+  const approved = Number(item.quantity_approved);
+  const setPerQty = Number(item.set_per_qty);
+  if (
+    item.set_per_qty === null ||
+    !Number.isFinite(approved) ||
+    !Number.isFinite(setPerQty) ||
+    approved <= 0 ||
+    setPerQty <= 0 ||
+    approved % setPerQty !== 0
+  ) return null;
+  return approved / setPerQty;
+};
+
+interface StackIssueReadiness {
+  approvedStacks: number | null;
+  actualConfirmedStacks: number;
+  unconfirmedAllocations: number;
+  remainingStacks: number;
+  isAlreadyIssued: boolean;
+  ready: boolean;
+}
+
+const getStackIssueReadiness = (item: OrderItem): StackIssueReadiness => {
+  const approvedStacks = approvedStackQuantity(item);
+  const allocations = item.allocations ?? [];
+  const unconfirmedAllocations = allocations.filter(
+    (allocation) => allocation.actual_stack_quantity === null || !allocation.confirmed_at,
+  ).length;
+  const actualConfirmedStacks = allocations.reduce(
+    (total, allocation) => total + Number(allocation.actual_stack_quantity ?? 0),
+    0,
+  );
+  const isAlreadyIssued = item.quantity_approved !== null
+    && Number(item.quantity_issued ?? 0) === Number(item.quantity_approved);
+  const remainingStacks = approvedStacks === null
+    ? 0
+    : Math.max(0, approvedStacks - actualConfirmedStacks);
+
+  return {
+    approvedStacks,
+    actualConfirmedStacks,
+    unconfirmedAllocations,
+    remainingStacks,
+    isAlreadyIssued,
+    ready: isAlreadyIssued || (
+      approvedStacks !== null
+      && allocations.length > 0
+      && unconfirmedAllocations === 0
+      && actualConfirmedStacks === approvedStacks
+    ),
+  };
+};
 
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -59,17 +122,42 @@ const OrderDetailPage = () => {
   const orderMutation = useMutation({
     mutationFn: (operation: () => Promise<Order>) => operation(),
   });
+  const confirmationMutation = useMutation({
+    mutationFn: ({
+      allocationId,
+      actualStackQuantity,
+      reason: confirmationReason,
+    }: {
+      allocationId: string;
+      actualStackQuantity: number;
+      reason?: string;
+    }) => confirmOrderAllocation(id!, allocationId, {
+      actual_stack_quantity: actualStackQuantity,
+      reason: confirmationReason,
+    }),
+  });
   const order = orderQuery.data ?? null;
   const loading = orderQuery.isPending;
   const loadError = orderQuery.isError
     ? getApiErrorMessage(orderQuery.error, "Không thể tải order.")
     : null;
   const [actionError, setActionError] = useState<string | null>(null);
-  const mutating = orderMutation.isPending;
+  const [allocationErrorDetails, setAllocationErrorDetails] =
+    useState<StackAllocationErrorDetails | null>(null);
+  const [stackIssueErrorDetails, setStackIssueErrorDetails] =
+    useState<StackIssueStockConflictDetails | null>(null);
+  const mutating = orderMutation.isPending || confirmationMutation.isPending;
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [reason, setReason] = useState("");
   const [itemValues, setItemValues] = useState<ItemValues>({});
   const [editing, setEditing] = useState(false);
+  const [confirmationTarget, setConfirmationTarget] = useState<{
+    item: OrderItem;
+    allocation: OrderItemAllocation;
+  } | null>(null);
+  const [actualStackQuantity, setActualStackQuantity] = useState('');
+  const [confirmationReason, setConfirmationReason] = useState('');
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const storageLocationLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => {
       if (!order) throw new Error("Order chưa sẵn sàng.");
@@ -94,7 +182,11 @@ const OrderDetailPage = () => {
       isActive: true,
     }),
     errorMessage: "Không thể tải danh sách vị trí kho.",
-    enabled: panel === "issue" && Boolean(order),
+    enabled: panel === "issue" && Boolean(
+      order?.order_items?.some(
+        (item) => item.set_per_qty === null && itemRemaining(item) > 0,
+      ),
+    ),
   });
   const storageLocations = storageLocationLookup.items;
   const storageLocationsLoading = storageLocationLookup.loading;
@@ -116,20 +208,73 @@ const OrderDetailPage = () => {
     ),
   );
   const isApprover = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
+  const isAllocator = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE);
+  const canConfirmAllocations = hasPermission(
+    PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION,
+  );
   const isIssuer = hasPermission(PERMISSION_CODE.SUPPLY_ORDER_ISSUE);
+  const stackItems = useMemo(
+    () => items.filter((item) => item.set_per_qty !== null),
+    [items],
+  );
+  const normalIssueItems = useMemo(
+    () => items.filter((item) => item.set_per_qty === null && itemRemaining(item) > 0),
+    [items],
+  );
+  const stackReadiness = useMemo(
+    () => new Map(stackItems.map((item) => [item.id, getStackIssueReadiness(item)])),
+    [stackItems],
+  );
+  const stackItemsNotReady = useMemo(
+    () => stackItems.filter((item) => !stackReadiness.get(item.id)?.ready),
+    [stackItems, stackReadiness],
+  );
+  const incompatibleStackItems = useMemo(
+    () => stackItems.filter((item) => approvedStackQuantity(item) === null),
+    [stackItems],
+  );
+  const hasInitialAllocations = stackItems.some(
+    (item) => (item.allocations?.length ?? 0) > 0,
+  );
   const canEdit = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));
   const canSubmit = Boolean(order && isPackingOwner && order.status === "DRAFT");
   const canCancel = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));
   const canApprove = Boolean(order && isApprover && order.status === "PENDING");
-  const canIssue = Boolean(order && isIssuer && ["APPROVED", "PARTIAL_ISSUED"].includes(order.status));
+  const canAllocate = Boolean(
+    order &&
+    isAllocator &&
+    order.status === "APPROVED" &&
+    stackItems.length > 0 &&
+    incompatibleStackItems.length === 0 &&
+    !hasInitialAllocations
+  );
+  const hasIssueAction = Boolean(
+    order && isIssuer && ["APPROVED", "PARTIAL_ISSUED"].includes(order.status),
+  );
+  const canIssue = hasIssueAction && stackItemsNotReady.length === 0;
   const canReceive = Boolean(order && isPackingOwner && order.status === "ISSUED");
   const canComplete = Boolean(order && isIssuer && ["ISSUED", "RECEIVED"].includes(order.status));
+  const stackAllocationRows = useMemo(
+    () => stackItems.flatMap((item) =>
+      (item.allocations ?? []).map((allocation) => ({ item, allocation })),
+    ),
+    [stackItems],
+  );
+  const canConfirmAnyAllocation = Boolean(
+    order?.status === 'APPROVED'
+    && canConfirmAllocations
+    && stackAllocationRows.some(({ allocation }) =>
+      allocation.actual_stack_quantity === null && allocation.confirmed_at === null),
+  );
 
   const runMutation = async (
     operation: () => Promise<Order>,
     affectsStock = false,
+    onError?: (error: unknown) => void,
   ) => {
     setActionError(null);
+    setAllocationErrorDetails(null);
+    setStackIssueErrorDetails(null);
     try {
       const updated = await orderMutation.mutateAsync(operation);
       queryClient.setQueryData(queryKeys.orders.detail(updated.id), updated);
@@ -138,6 +283,7 @@ const OrderDetailPage = () => {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.stockTransactions.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.supplyStackOptions.all }),
         ]);
       }
       setPanel(null);
@@ -145,11 +291,67 @@ const OrderDetailPage = () => {
       setReason("");
     } catch (requestError) {
       setActionError(getApiErrorMessage(requestError, "Không thể cập nhật order."));
+      onError?.(requestError);
+    }
+  };
+
+  const openConfirmation = (
+    item: OrderItem,
+    allocation: OrderItemAllocation,
+  ) => {
+    setActionError(null);
+    setConfirmationMessage(null);
+    setConfirmationTarget({ item, allocation });
+    setActualStackQuantity(String(allocation.expected_stack_quantity));
+    setConfirmationReason('');
+  };
+
+  const confirmActualAllocation = async () => {
+    if (!id || !confirmationTarget) return;
+    const actual = Number(actualStackQuantity);
+    if (!Number.isFinite(actual) || actual < 0) {
+      setActionError('Số chồng thực tế phải lớn hơn hoặc bằng 0.');
+      return;
+    }
+    if (actual > confirmationTarget.allocation.expected_stack_quantity) {
+      setActionError('Số chồng thực tế không được vượt số chồng dự kiến.');
+      return;
+    }
+
+    setActionError(null);
+    try {
+      const result = await confirmationMutation.mutateAsync({
+        allocationId: confirmationTarget.allocation.id,
+        actualStackQuantity: actual,
+        reason: confirmationReason.trim() || undefined,
+      });
+      queryClient.setQueryData(queryKeys.orders.detail(result.order.id), result.order);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.stockTransactions.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.supplyStackOptions.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.inventoryDiscrepancies.all }),
+      ]);
+      const confirmation = result.confirmation;
+      setConfirmationMessage(
+        confirmation.reallocation_status === 'INSUFFICIENT'
+          ? `Đã ghi nhận chênh lệch ${confirmation.difference_stack_quantity} chồng. Không đủ tồn thay thế; còn thiếu ${confirmation.unallocated_stack_quantity} chồng.`
+          : confirmation.reallocation_status === 'REALLOCATED'
+            ? `Đã ghi nhận chênh lệch và tạo ${confirmation.reallocation_count ?? confirmation.new_allocations.length} allocation thay thế.`
+            : 'Đã xác nhận đúng số chồng dự kiến.',
+      );
+      setConfirmationTarget(null);
+    } catch (requestError) {
+      setActionError(
+        getApiErrorMessage(requestError, 'Không thể xác nhận số chồng thực tế.'),
+      );
     }
   };
 
   const openPanel = (nextPanel: Exclude<ActionPanel, null>) => {
     setActionError(null);
+    setStackIssueErrorDetails(null);
     setReason("");
     setPanel(nextPanel);
     if (nextPanel === "approve") {
@@ -194,6 +396,11 @@ const OrderDetailPage = () => {
         provider_id: item.provider_id,
         unit_id: item.unit_id,
         quantity_requested: Number(itemValues[item.id].quantity),
+        ...(item.set_per_qty !== null ? {
+          set_per_qty: item.set_per_qty,
+          requested_stack_quantity: item.requested_stack_quantity ?? undefined,
+          requested_total_set_quantity: item.requested_total_set_quantity ?? undefined,
+        } : {}),
         note: itemValues[item.id].note?.trim() || undefined,
       })),
     }));
@@ -219,22 +426,26 @@ const OrderDetailPage = () => {
 
   const confirmIssue = () => {
     if (!id) return;
-    if (storageLocationsLoading) {
-      setActionError("Danh sách vị trí kho vẫn đang tải.");
+    if (stackItemsNotReady.length > 0) {
+      setActionError("Chưa xác nhận đầy đủ số chồng thực tế trước khi xuất hàng.");
       return;
     }
-    if (storageLocationsError || storageLocations.length === 0) {
-      setActionError("Danh sách vị trí kho chưa sẵn sàng. Không thể issue hàng.");
-      return;
-    }
-    const selected = items.flatMap((item) => {
+    const selected = normalIssueItems.flatMap((item) => {
       const values = itemValues[item.id];
       const quantity = Number(values?.quantity);
       if (!Number.isFinite(quantity) || quantity <= 0) return [];
       return [{ item, quantity, storageLocationId: values?.storageLocationId?.trim() ?? "" }];
     });
-    if (selected.length === 0) {
+    if (selected.length === 0 && stackItems.length === 0) {
       setActionError("Nhập ít nhất một số lượng cần cấp.");
+      return;
+    }
+    if (selected.length > 0 && storageLocationsLoading) {
+      setActionError("Danh sách vị trí kho vẫn đang tải.");
+      return;
+    }
+    if (selected.length > 0 && (storageLocationsError || storageLocations.length === 0)) {
+      setActionError("Danh sách vị trí kho chưa sẵn sàng. Không thể issue hàng.");
       return;
     }
     if (selected.some(({ item, quantity, storageLocationId }) =>
@@ -249,7 +460,13 @@ const OrderDetailPage = () => {
         order_item_id: item.id,
         issues: [{ storage_location_id: storageLocationId, quantity }],
       })),
-    }), true);
+    }), true, (error) => {
+      if (getApiErrorCode(error) === 'STACK_ISSUE_STOCK_CONFLICT') {
+        setStackIssueErrorDetails(
+          getApiErrorDetails<StackIssueStockConflictDetails>(error),
+        );
+      }
+    });
   };
 
   if (loading) {
@@ -264,13 +481,14 @@ const OrderDetailPage = () => {
     );
   }
 
-  const hasActions = canEdit || canSubmit || canCancel || canApprove || canIssue || canReceive || canComplete;
-  const fromAreaName = order.from_area?.name ?? order.from_area_id;
-  const toAreaName = order.to_area?.name ?? order.to_area_id;
+  const hasActions = canEdit || canSubmit || canCancel || canApprove || canAllocate
+    || canConfirmAnyAllocation || hasIssueAction || canReceive || canComplete;
+  const fromAreaName = order.from_area?.name ?? 'Không rõ';
+  const toAreaName = order.to_area?.name ?? 'Không rõ';
   const stockShortageItems = items.filter((item) => item.has_stock_shortage);
   const requesterName = order.requester
     ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
-    : order.requested_by;
+    : 'Không rõ';
   const reviewRevisions = (order.order_revisions ?? []).filter(
     (revision) => revision.action?.code === 'APPROVE' || revision.action?.code === 'REJECT',
   );
@@ -284,7 +502,6 @@ const OrderDetailPage = () => {
             <h1 className="text-2xl font-bold text-slate-900">{order.code}</h1>
             <OrderStatusBadge status={order.status} />
           </div>
-          <p className="mt-1 font-mono text-xs text-slate-400">{order.id}</p>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
           Tạo, submit và approve không thay đổi tồn kho.<br />Chỉ thao tác issue mới trừ tồn và tạo transaction.
@@ -300,7 +517,7 @@ const OrderDetailPage = () => {
         ].map(([label, value]) => (
           <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-            <p className="mt-2 break-all text-sm font-semibold text-slate-800">{value}</p>
+            <p className="mt-2 break-words text-sm font-semibold text-slate-800">{value}</p>
           </div>
         ))}
       </div>
@@ -312,7 +529,7 @@ const OrderDetailPage = () => {
             {reviewRevisions.map((revision) => {
               const actorName = revision.creator
                 ? `${revision.creator.first_name} ${revision.creator.last_name}`.trim()
-                : revision.created_by;
+                : 'Không rõ';
               return (
                 <div
                   key={revision.id}
@@ -339,10 +556,19 @@ const OrderDetailPage = () => {
         </div>
       )}
 
+      {order.status === "APPROVED" && incompatibleStackItems.length > 0 && (
+        <div role="alert" className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800">
+          <p className="font-bold">Không thể phân bổ vị trí cho một số vật tư chồng.</p>
+          <p className="mt-1">
+            Số lượng đã duyệt phải chia hết cho quy cách SET/chồng. Cần điều chỉnh bước duyệt trước khi phân bổ.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-bold text-slate-900">Thao tác theo trạng thái và role</h2>
+            <h2 className="font-bold text-slate-900">Thao tác theo trạng thái và quyền</h2>
             <p className="mt-1 text-xs text-slate-500">Backend vẫn là lớp kiểm tra quyền cuối cùng.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -350,7 +576,20 @@ const OrderDetailPage = () => {
             {canSubmit && <button type="button" title="DRAFT → PENDING; không làm thay đổi tồn kho" disabled={mutating} onClick={() => void runMutation(() => submitOrder(id))} className={WarningButton}>Submit → PENDING</button>}
             {canApprove && <button type="button" title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Approve → APPROVED</button>}
             {canApprove && <button type="button" onClick={() => openPanel("reject")} className={ErrorButton}>Reject</button>}
-            {canIssue && <button type="button" title="Issue mới trừ tồn và tạo StockTransactions" onClick={openIssuePanel} className={VioletButton}>Issue hàng</button>}
+            {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={mutating} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
+            {hasIssueAction && (
+              <button
+                type="button"
+                title={canIssue
+                  ? "Issue mới trừ tồn và tạo StockTransactions"
+                  : "Chưa xác nhận đủ số chồng thực tế"}
+                disabled={!canIssue || mutating}
+                onClick={openIssuePanel}
+                className={VioletButton}
+              >
+                Issue hàng
+              </button>
+            )}
             {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Xác nhận nhận</button>}
             {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Complete</button>}
             {canCancel && <button type="button" onClick={() => openPanel("cancel")} className={SecondaryButton}>Hủy order</button>}
@@ -359,6 +598,19 @@ const OrderDetailPage = () => {
         {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
         {mutating && <p className="mt-4 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
         {actionError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
+        {hasIssueAction && stackItemsNotReady.length > 0 && (
+          <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>
+            <p className="mt-1">Chưa xác nhận đầy đủ số chồng thực tế hoặc tổng đã xác nhận chưa bằng số chồng được duyệt.</p>
+          </div>
+        )}
+        {stackIssueErrorDetails && (
+          <StackIssueConflictDetails details={stackIssueErrorDetails} />
+        )}
+        {confirmationMessage && <div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{confirmationMessage}</div>}
+        {allocationErrorDetails && (
+          <AllocationErrorDetails details={allocationErrorDetails} items={items} />
+        )}
       </div>
 
       {panel === "approve" && (
@@ -394,21 +646,57 @@ const OrderDetailPage = () => {
 
       {panel === "issue" && (
         <ActionCard title={`Cấp hàng từ ${fromAreaName}`} note="Chỉ được chọn vị trí kho thuộc Area gửi. Issue là thao tác duy nhất trừ StockBalances và tạo StockTransactions.">
-          <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder={`Tìm vị trí kho thuộc ${fromAreaName}...`} className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          {storageLocationsError && (
-            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-              {storageLocationsError}
+          {stackItems.length > 0 && (
+            <div className="mb-4 space-y-3">
+              {stackItems.map((item) => {
+                const readiness = stackReadiness.get(item.id)!;
+                return (
+                  <div key={item.id} className={`rounded-xl border p-4 ${readiness.ready ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-slate-900">{item.supply?.code ?? 'Vật tư'}</p>
+                        <p className="mt-1 text-xs text-slate-600">{item.set_per_qty} SET/chồng</p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${readiness.ready ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                        {readiness.isAlreadyIssued ? 'Đã xuất đủ' : readiness.ready ? 'Sẵn sàng xuất' : 'Chưa sẵn sàng'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                      <p>Đã duyệt: <strong>{readiness.approvedStacks ?? 'Không tương thích'} chồng</strong></p>
+                      <p>Đã xác nhận: <strong>{readiness.actualConfirmedStacks} chồng</strong></p>
+                      <p>Còn thiếu: <strong>{readiness.remainingStacks} chồng</strong></p>
+                    </div>
+                    {!readiness.ready && (
+                      <p className="mt-2 text-xs font-semibold text-amber-800">
+                        {readiness.unconfirmedAllocations > 0
+                          ? `Còn ${readiness.unconfirmedAllocations} allocation chưa xác nhận thực tế.`
+                          : 'Tổng số chồng thực tế chưa bằng số chồng được duyệt.'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-          {!storageLocationsLoading && !storageLocationsError && storageLocations.length === 0 && (
-            <div className="mb-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              Không có vị trí kho active trong Area gửi {fromAreaName}.
-            </div>
+          {normalIssueItems.length > 0 && (
+            <>
+              <input type="search" value={storageLocationSearch} onChange={(event) => setStorageLocationSearch(event.target.value)} placeholder={`Tìm vị trí kho thuộc ${fromAreaName}...`} className="mb-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              {storageLocationsError && (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  {storageLocationsError}
+                </div>
+              )}
+              {!storageLocationsLoading && !storageLocationsError && storageLocations.length === 0 && (
+                <div className="mb-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  Không có vị trí kho active trong Area gửi {fromAreaName}.
+                </div>
+              )}
+            </>
           )}
           <div className="space-y-3">
-            {items.map((item) => (
+            {normalIssueItems.map((item) => (
               <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr]">
-                <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply?.code ?? item.supply_id}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
+                <div className="text-sm"><p className="font-semibold text-slate-800">{item.supply?.code ?? 'Vật tư'}</p><p className="mt-1 text-xs text-slate-500">Còn được cấp: {itemRemaining(item)}</p></div>
                 {storageLocationsLoading && storageLocations.length === 0 ? (
                   <SelectSkeleton label="Đang tải vị trí kho của Area gửi" />
                 ) : (
@@ -436,7 +724,20 @@ const OrderDetailPage = () => {
               </div>
             ))}
           </div>
-          <PanelButtons disabled={mutating || storageLocationsLoading || Boolean(storageLocationsError) || storageLocations.length === 0} onCancel={() => setPanel(null)} onConfirm={confirmIssue} confirmLabel="Xác nhận issue" />
+          <PanelButtons
+            disabled={
+              mutating
+              || stackItemsNotReady.length > 0
+              || (normalIssueItems.length > 0 && (
+                storageLocationsLoading
+                || Boolean(storageLocationsError)
+                || storageLocations.length === 0
+              ))
+            }
+            onCancel={() => setPanel(null)}
+            onConfirm={confirmIssue}
+            confirmLabel="Xác nhận issue"
+          />
         </ActionCard>
       )}
 
@@ -450,16 +751,46 @@ const OrderDetailPage = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Supply ID</th><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Tồn khả dụng</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Vật tư</th><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Yêu cầu</th><th className="px-5 py-3">Tồn khả dụng</th><th className="px-5 py-3">Đã duyệt</th><th className="px-5 py-3">Đã cấp</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {items.map((item) => (
                   <tr key={item.id} className={item.has_stock_shortage ? "bg-amber-50/70" : undefined}>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? item.supply_id}</td>
-                    <td className="px-5 py-4"><p className="font-semibold text-slate-800">{item.provider?.code ?? item.provider_id}</p><p className="text-xs text-slate-500">{item.provider?.name ?? '—'}</p></td>
-                    <td className="px-5 py-4">{editing ? <input type="number" min="0.000001" step="any" value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5" /> : item.quantity_requested}</td>
+                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{item.supply?.code ?? '—'}</td>
+                    <td className="px-5 py-4"><p className="font-semibold text-slate-800">{item.provider?.code ?? '—'}</p><p className="text-xs text-slate-500">{item.provider?.name ?? '—'}</p></td>
+                    <td className="px-5 py-4">
+                      {item.set_per_qty !== null ? (
+                        <div>
+                          <p className="font-semibold text-slate-800">{item.set_per_qty} SET/chồng</p>
+                          <p className="text-xs text-slate-500">
+                            {item.requested_stack_quantity} chồng — {item.requested_total_set_quantity} SET
+                          </p>
+                          {item.available_stack_quantity !== undefined && (
+                            <p className="text-xs text-slate-500">Tồn: {item.available_stack_quantity} chồng cùng quy cách</p>
+                          )}
+                        </div>
+                      ) : editing ? (
+                        <input type="number" min="0.000001" step="any" value={itemValues[item.id]?.quantity ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: event.target.value } }))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5" />
+                      ) : item.quantity_requested}
+                    </td>
                     <td className="px-5 py-4"><StockAvailabilityWarning item={item} compact /></td>
-                    <td className="px-5 py-4">{item.quantity_approved ?? "—"}</td>
-                    <td className="px-5 py-4">{item.quantity_issued ?? 0}</td>
+                    <td className="px-5 py-4">
+                      {item.quantity_approved ?? "—"}
+                      {item.set_per_qty !== null && item.quantity_approved !== null && (
+                        <p className="text-xs text-slate-500">
+                          {approvedStackQuantity(item) === null
+                            ? "Không tương thích quy cách"
+                            : `${approvedStackQuantity(item)} chồng`}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p>{item.quantity_issued ?? 0} SET</p>
+                      {item.set_per_qty !== null && (
+                        <p className="text-xs text-slate-500">
+                          {getStackIssueReadiness(item).actualConfirmedStacks} chồng thực tế đã xác nhận
+                        </p>
+                      )}
+                    </td>
                     <td className="px-5 py-4">{editing ? <input value={itemValues[item.id]?.note ?? ""} onChange={(event) => setItemValues((current) => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} className="w-full min-w-48 rounded-lg border border-slate-300 px-2 py-1.5" /> : (item.note ?? "—")}</td>
                   </tr>
                 ))}
@@ -470,12 +801,141 @@ const OrderDetailPage = () => {
         {editing && <div className="flex justify-end gap-2 border-t border-slate-200 p-4"><button type="button" onClick={() => setEditing(false)} className={SecondaryButton}>Bỏ qua</button><button type="button" disabled={mutating} onClick={saveItems} className={InfoButton}>Lưu items</button></div>}
       </div>
 
+      {stackAllocationRows.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="font-bold text-slate-900">Đề xuất phân bổ vị trí</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Đây là đề xuất lấy hàng ban đầu; chưa trừ tồn, chưa giữ tồn và chưa ghi StockTransactions.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Vật tư</th>
+                  <th className="px-5 py-3">Provider</th>
+                  <th className="px-5 py-3">Quy cách</th>
+                  <th className="px-5 py-3">Vị trí</th>
+                  <th className="px-5 py-3">Chồng dự kiến</th>
+                  <th className="px-5 py-3">Chồng thực tế</th>
+                  <th className="px-5 py-3">Trạng thái</th>
+                  <th className="px-5 py-3">Thời điểm</th>
+                  <th className="px-5 py-3 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {stackAllocationRows.map(({ item, allocation }) => (
+                  <tr key={allocation.id}>
+                    <td className="px-5 py-4 font-semibold text-slate-800">
+                      {item.supply?.code ?? "—"}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-slate-800">{item.provider?.code ?? "—"}</p>
+                      <p className="text-xs text-slate-500">{item.provider?.name ?? "—"}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${allocation.confirmed_at ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {allocation.confirmed_at ? 'Đã xác nhận' : 'Chưa xác nhận'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">{item.set_per_qty} SET/chồng</td>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-slate-800">{allocation.location?.code ?? "—"}</p>
+                      <p className="text-xs text-slate-500">{allocation.location?.name ?? "—"}</p>
+                    </td>
+                    <td className="px-5 py-4 font-semibold">{allocation.expected_stack_quantity}</td>
+                    <td className="px-5 py-4">
+                      <p>{allocation.actual_stack_quantity ?? "—"}</p>
+                      {(allocation.discrepancies ?? []).map((discrepancy) => (
+                        <span key={discrepancy.id} className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${discrepancy.status === 'OPEN' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {discrepancy.status === 'OPEN' ? 'Cần kiểm kê' : 'Đã xử lý'}
+                        </span>
+                      ))}
+                    </td>
+                    <td className="px-5 py-4 text-xs text-slate-500">{formatDate(allocation.allocated_at)}</td>
+                    <td className="px-5 py-4 text-right">
+                      {order.status === 'APPROVED'
+                        && canConfirmAllocations
+                        && allocation.actual_stack_quantity === null
+                        && allocation.confirmed_at === null ? (
+                          <button
+                            type="button"
+                            disabled={mutating}
+                            onClick={() => openConfirmation(item, allocation)}
+                            className={InfoButton}
+                          >
+                            Xác nhận thực tế
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">
+                            {allocation.confirmed_at ? 'Đã xác nhận' : '—'}
+                          </span>
+                        )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {(order.note || order.rejected_reason || order.cancel_reason) && (
         <div className="grid gap-3 md:grid-cols-3">
           {order.note && <InfoNote label="Ghi chú" value={order.note} />}
           {order.rejected_reason && <InfoNote label="Lý do từ chối" value={order.rejected_reason} />}
           {order.cancel_reason && <InfoNote label="Lý do hủy" value={order.cancel_reason} />}
         </div>
+      )}
+      {confirmationTarget && (
+        <CrudModal
+          title="Xác nhận số chồng thực tế"
+          busy={confirmationMutation.isPending}
+          onClose={() => setConfirmationTarget(null)}
+        >
+          <div className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+            <ReadOnlyValue label="Vật tư" value={confirmationTarget.item.supply?.code ?? '—'} />
+            <ReadOnlyValue label="Provider" value={confirmationTarget.item.provider ? `${confirmationTarget.item.provider.code} — ${confirmationTarget.item.provider.name}` : '—'} />
+            <ReadOnlyValue label="Vị trí" value={confirmationTarget.allocation.location ? `${confirmationTarget.allocation.location.code} — ${confirmationTarget.allocation.location.name}` : '—'} />
+            <ReadOnlyValue label="Quy cách" value={`${confirmationTarget.item.set_per_qty ?? '—'} SET/chồng`} />
+            <ReadOnlyValue label="Dự kiến" value={`${confirmationTarget.allocation.expected_stack_quantity} chồng`} />
+          </div>
+          <div className="mt-4 space-y-4">
+            <label className={labelClassName}>
+              <span>Số chồng thực tế *</span>
+              <input
+                type="number"
+                min="0"
+                max={confirmationTarget.allocation.expected_stack_quantity}
+                step="any"
+                value={actualStackQuantity}
+                onChange={(event) => setActualStackQuantity(event.target.value)}
+                className={inputClassName}
+              />
+              {Number(actualStackQuantity) > confirmationTarget.allocation.expected_stack_quantity && (
+                <FieldError message="Không được vượt số chồng dự kiến." />
+              )}
+            </label>
+            <label className={labelClassName}>
+              <span>Lý do sai lệch (không bắt buộc)</span>
+              <textarea
+                rows={3}
+                maxLength={2000}
+                value={confirmationReason}
+                onChange={(event) => setConfirmationReason(event.target.value)}
+                className={inputClassName}
+                placeholder="Nhập lý do nếu số thực tế thấp hơn dự kiến"
+              />
+            </label>
+          </div>
+          <PanelButtons
+            disabled={confirmationMutation.isPending}
+            onCancel={() => setConfirmationTarget(null)}
+            onConfirm={() => void confirmActualAllocation()}
+            confirmLabel="Xác nhận"
+          />
+        </CrudModal>
       )}
     </section>
   );
@@ -487,12 +947,69 @@ const ActionCard = ({ title, note, children }: { title: string; note: string; ch
   </div>
 );
 
+const ReadOnlyValue = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+    <p className="mt-1 text-sm font-semibold text-slate-800">{value}</p>
+  </div>
+);
+
 const PanelButtons = ({ disabled, onCancel, onConfirm, confirmLabel, danger = false }: { disabled: boolean; onCancel: () => void; onConfirm: () => void; confirmLabel: string; danger?: boolean }) => (
   <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={disabled} onClick={onCancel} className={SecondaryButton}>Bỏ qua</button><button type="button" disabled={disabled} onClick={onConfirm} className={danger ? ErrorButton : InfoButton}>{confirmLabel}</button></div>
 );
 
 const QuantityRow = ({ item, label, value, max, onChange }: { item: OrderItem; label: string; value: string; max: number; onChange: (value: string) => void }) => (
-  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? item.supply_id}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0.000001" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
+  <div className={`grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-[1fr_180px] md:items-center ${item.has_stock_shortage ? "border-amber-300 bg-amber-50/70" : "border-slate-200"}`}><div><strong className="block text-slate-800">{item.supply?.code ?? 'Vật tư'}</strong><span className="text-xs text-slate-500">Yêu cầu: {item.quantity_requested}</span><div className="mt-2"><StockAvailabilityWarning item={item} /></div></div><label><span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span><input type="number" min="0.000001" max={max} step="any" value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
+);
+
+const AllocationErrorDetails = ({
+  details,
+  items,
+}: {
+  details: StackAllocationErrorDetails;
+  items: OrderItem[];
+}) => {
+  const item = items.find((candidate) => candidate.id === details.order_item_id);
+  const supplyLabel = details.supply_code ?? item?.supply?.code ?? "Vật tư chồng";
+  const hasAvailabilityDetails =
+    details.required_stack_quantity !== undefined &&
+    details.available_stack_quantity !== undefined &&
+    details.shortage_stack_quantity !== undefined;
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-bold">Chi tiết phân bổ: {supplyLabel}</p>
+      {hasAvailabilityDetails ? (
+        <dl className="mt-3 grid gap-2 sm:grid-cols-4">
+          <div><dt className="text-xs text-amber-700">Cần</dt><dd className="font-semibold">{details.required_stack_quantity} chồng</dd></div>
+          <div><dt className="text-xs text-amber-700">Hiện có</dt><dd className="font-semibold">{details.available_stack_quantity} chồng</dd></div>
+          <div><dt className="text-xs text-amber-700">Thiếu</dt><dd className="font-semibold">{details.shortage_stack_quantity} chồng</dd></div>
+          <div><dt className="text-xs text-amber-700">Quy cách</dt><dd className="font-semibold">{details.set_per_qty ?? "—"} SET/chồng</dd></div>
+        </dl>
+      ) : (
+        <p className="mt-2">
+          Số duyệt: {details.quantity_approved ?? "—"}; quy cách: {details.set_per_qty ?? "—"} SET/chồng.
+        </p>
+      )}
+    </div>
+  );
+};
+
+const StackIssueConflictDetails = ({
+  details,
+}: {
+  details: StackIssueStockConflictDetails;
+}) => (
+  <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
+    <p className="font-bold">Không đủ tồn thực tế tại vị trí đã xác nhận.</p>
+    <dl className="mt-3 grid gap-2 sm:grid-cols-5">
+      <div><dt className="text-xs text-rose-700">Vị trí</dt><dd className="font-semibold">{details.location_code ?? "—"}</dd></div>
+      <div><dt className="text-xs text-rose-700">Quy cách</dt><dd className="font-semibold">{details.set_per_qty ?? "—"} SET/chồng</dd></div>
+      <div><dt className="text-xs text-rose-700">Cần xuất</dt><dd className="font-semibold">{details.required_stack_quantity ?? "—"} chồng</dd></div>
+      <div><dt className="text-xs text-rose-700">Tồn hiện tại</dt><dd className="font-semibold">{details.current_stack_quantity ?? "—"} chồng</dd></div>
+      <div><dt className="text-xs text-rose-700">Thiếu</dt><dd className="font-semibold">{details.shortage_stack_quantity ?? "—"} chồng</dd></div>
+    </dl>
+  </div>
 );
 
 const InfoNote = ({ label, value }: { label: string; value: string }) => <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm text-slate-700">{value}</p></div>;

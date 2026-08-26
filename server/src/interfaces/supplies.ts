@@ -15,6 +15,11 @@ export interface SupplyProviderListQuery {
   isDeleted?: string | boolean;
 }
 
+export interface SupplyStackOptionsQuery {
+  provider_id: string;
+  area_id: string;
+}
+
 export interface CreateSupplyBody {
   code: string;
   short_text: string;

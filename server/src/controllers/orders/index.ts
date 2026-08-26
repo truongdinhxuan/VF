@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   ApproveOrderBody,
   CancelOrderBody,
+  ConfirmAllocationBody,
   CreateOrderBody,
   IssueOrderBody,
   OrderListQuery,
@@ -46,7 +47,11 @@ const respond = async (
       return reply.code(error.statusCode).send({ error: error.message });
     }
     if (error instanceof OrderServiceError) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      return reply.code(error.statusCode).send({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.details ? { details: error.details } : {}),
+      });
     }
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal server error' });
@@ -102,6 +107,29 @@ export const approveOrder = (request: FastifyRequest, reply: FastifyReply) =>
       request.body as ApproveOrderBody,
     ),
   );
+
+export const allocateOrder = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () =>
+    new OrderService(request.server).allocate(
+      actorFrom(request),
+      (request.params as { id: string }).id,
+    ),
+  );
+
+export const confirmOrderAllocation = (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const params = request.params as { id: string; allocationId: string };
+  return respond(request, reply, () =>
+    new OrderService(request.server).confirmAllocation(
+      actorFrom(request),
+      params.id,
+      params.allocationId,
+      request.body as ConfirmAllocationBody,
+    ),
+  );
+};
 
 export const rejectOrder = (request: FastifyRequest, reply: FastifyReply) =>
   respond(request, reply, () =>

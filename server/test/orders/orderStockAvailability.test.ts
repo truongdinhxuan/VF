@@ -9,20 +9,22 @@ const orderService = readFileSync(
 );
 
 describe('order stock availability response', () => {
-  it('loads balances once for all order supplies in the source area', () => {
+  it('uses one bulk availability query and one bulk create-validation query', () => {
     assert.equal(
       (orderService.match(/\.from\(['"]stock_balances['"]\)/g) ?? []).length,
-      1,
+      2,
     );
     assert.match(orderService, /\.eq\('area_id', order\.from_area_id\)/);
     assert.match(orderService, /\.in\('supply_id', supplyIds\)/);
     assert.match(orderService, /provider_id/);
     assert.match(orderService, /storage_location\.is_active/);
+    assert.match(orderService, /eligibleStackOptions/);
   });
 
   it('returns derived warning fields without storing them in OrderItems', () => {
     assert.match(orderService, /calculateStockAvailability/);
-    assert.match(orderService, /availableBySupplyProvider\.get\(/);
+    assert.match(orderService, /availableByDimension\.get\(/);
+    assert.match(orderService, /availableStacksByDimension\.get\(/);
     assert.match(orderService, /item\.supply_id.*item\.provider_id/s);
     assert.doesNotMatch(
       orderService,

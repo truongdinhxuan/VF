@@ -33,8 +33,39 @@ export const stockBalanceListSchema = createListQuerySchema(
     areaId: uuid,
     storage_location_id: uuid,
     storageLocationId: uuid,
+    warning: { type: 'string', enum: ['all', 'warning', 'no_warning'] },
   },
 );
+
+export const inventoryDiscrepancyListSchema: FastifySchema = {
+  ...createListQuerySchema(
+    ['reported_at', 'created_at', 'status'] as const,
+    { status: { type: 'string', enum: ['OPEN', 'RESOLVED'] } },
+  ),
+  params: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: { id: uuid },
+  },
+};
+
+export const inventoryDiscrepancyResolveSchema: FastifySchema = {
+  params: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: { id: uuid },
+  },
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['resolution_note'],
+    properties: {
+      resolution_note: { type: 'string', minLength: 1, maxLength: 2000 },
+    },
+  },
+};
 
 export const stockTransactionListSchema = createListQuerySchema(
   STOCK_TRANSACTION_SORT_FIELDS,
@@ -66,7 +97,6 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
       'provider_id',
       'area_id',
       'storage_location_id',
-      'quantity',
     ],
     properties: {
       supply_id: uuid,
@@ -81,6 +111,8 @@ export const stockAdjustmentCreateSchema: FastifySchema = {
       },
       adjustment_reason_id: uuid,
       quantity: { type: 'number', exclusiveMinimum: 0 },
+      stack_quantity: { type: 'number', exclusiveMinimum: 0 },
+      set_per_qty: { type: 'number', exclusiveMinimum: 0 },
       reason: { type: 'string', minLength: 1, maxLength: 2000 },
       reason_note: { type: 'string', minLength: 1, maxLength: 2000 },
       note: {

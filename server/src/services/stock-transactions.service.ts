@@ -14,8 +14,10 @@ import {
 
 const SELECT = `
   id, supply_id, provider_id, area_id, storage_location_id, order_id, order_item_id,
+  inventory_discrepancy_id,
   transaction_type_id, reason_id, reason_note,
   quantity, before_quantity, after_quantity, reason, note, created_by,
+  set_per_qty, stack_quantity, before_stack_quantity, after_stack_quantity,
   is_active, is_deleted, created_at, updated_at,
   transaction_type:stock_transaction_types!stock_transactions_transaction_type_id_fkey(
     id, code, name, effect, requires_reason
@@ -24,12 +26,16 @@ const SELECT = `
     id, code, name, requires_note
   ),
   supply:supplies!stock_transactions_supply_id_fkey(id, code, short_text, description),
+  order:orders!stock_transactions_order_id_fkey(id, code),
   provider:providers!stock_transactions_provider_id_fkey(
     id, code, name, description
   ),
   area:areas!stock_transactions_area_id_fkey(id, code, name),
   storage_location:storage_locations!stock_transactions_storage_location_id_fkey(id, code, name),
   creator:users!stock_transactions_created_by_fkey(id, first_name, last_name, vinfast_id)
+  ,discrepancy:inventory_discrepancies!stock_transactions_inventory_discrepancy_id_fkey(
+    id, allocation_id, status
+  )
 `;
 
 export class StockTransactionsService {

@@ -19,6 +19,12 @@ const read = (path: string): string =>
 const migration = read(
   'supabase/migrations/202608110004_milkrun_master_data.sql',
 );
+const shopPermissionMigration = read(
+  'supabase/migrations/20260813151215_adding_shop_permisions.sql',
+);
+const tripCatalogPermissionMigration = read(
+  'supabase/migrations/20260821143648_add_trip_type_status_permissions.sql',
+);
 
 const replyRecorder = () => {
   const state: { statusCode?: number; payload?: unknown } = {};
@@ -137,6 +143,30 @@ describe('Phase 6 Milkrun master-data migration', () => {
 });
 
 describe('Phase 6 Milkrun CRUD contract', () => {
+  it('seeds the four dedicated Shop permissions without a database enum', () => {
+    for (const code of [
+      'milkrun.shop.read',
+      'milkrun.shop.create',
+      'milkrun.shop.update',
+      'milkrun.shop.deactivate',
+    ]) assert.match(shopPermissionMigration, new RegExp(`'${code}'`));
+    assert.doesNotMatch(shopPermissionMigration, /create type\s+/i);
+  });
+
+  it('seeds dedicated Trip Type and Trip Status CRUD permissions', () => {
+    for (const code of [
+      'milkrun.trip_type.read',
+      'milkrun.trip_type.create',
+      'milkrun.trip_type.update',
+      'milkrun.trip_type.deactivate',
+      'milkrun.trip_status.read',
+      'milkrun.trip_status.create',
+      'milkrun.trip_status.update',
+      'milkrun.trip_status.deactivate',
+    ]) assert.match(tripCatalogPermissionMigration, new RegExp(`'${code.replaceAll('.', '\\.')}'`));
+    assert.doesNotMatch(tripCatalogPermissionMigration, /create type\s+/i);
+  });
+
   it('normalizes business codes without an enum', () => {
     assert.equal(normalizeMilkrunCode('  rack_01  '), 'RACK_01');
   });
@@ -183,6 +213,36 @@ describe('Phase 6 Milkrun CRUD contract', () => {
     const vehicles = read('src/routes/milkrun/vehicles/index.ts');
     assert.match(vehicles, /MILKRUN_VEHICLE_READ/);
     assert.match(vehicles, /MILKRUN_VEHICLE_ASSIGN/);
+  });
+
+  it('guards every Shop operation with its dedicated permission', () => {
+    const shops = read('src/routes/milkrun/shops/index.ts');
+    assert.match(shops, /MILKRUN_SHOP_READ/);
+    assert.match(shops, /MILKRUN_SHOP_CREATE/);
+    assert.match(shops, /MILKRUN_SHOP_UPDATE/);
+    assert.match(shops, /MILKRUN_SHOP_DEACTIVATE/);
+    assert.doesNotMatch(shops, /MILKRUN_TRIP_|requireSystemAdmin/);
+  });
+
+  it('guards Trip Type and Trip Status operations with dedicated permissions', () => {
+    const tripTypes = read('src/routes/milkrun/trip-types/index.ts');
+    const tripStatuses = read('src/routes/milkrun/trip-statuses/index.ts');
+
+    for (const source of [tripTypes, tripStatuses]) {
+      assert.doesNotMatch(source, /MILKRUN_TRIP_(?:READ|CREATE)|requireSystemAdmin/);
+    }
+    for (const permission of [
+      'MILKRUN_TRIP_TYPE_READ',
+      'MILKRUN_TRIP_TYPE_CREATE',
+      'MILKRUN_TRIP_TYPE_UPDATE',
+      'MILKRUN_TRIP_TYPE_DEACTIVATE',
+    ]) assert.match(tripTypes, new RegExp(permission));
+    for (const permission of [
+      'MILKRUN_TRIP_STATUS_READ',
+      'MILKRUN_TRIP_STATUS_CREATE',
+      'MILKRUN_TRIP_STATUS_UPDATE',
+      'MILKRUN_TRIP_STATUS_DEACTIVATE',
+    ]) assert.match(tripStatuses, new RegExp(permission));
   });
 
   it('allows only the resolved system ADMIN context through the fallback guard', async () => {

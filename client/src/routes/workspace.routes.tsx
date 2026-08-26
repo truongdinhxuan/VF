@@ -28,7 +28,8 @@ const MilkrunStockBalancesPage = lazy(() => import('../pages/milkrun/StockBalanc
 const MilkrunStockTransactionsPage = lazy(() => import('../pages/milkrun/StockTransactionsPage'));
 const MilkrunStockAdjustmentPage = lazy(() => import('../pages/milkrun/StockAdjustmentPage'));
 const MilkrunRacksPage = lazy(() => import('../pages/milkrun/RacksPage'));
-const MilkrunReadOnlyMasterPage = lazy(() => import('../pages/milkrun/ReadOnlyMasterPage'));
+const MilkrunShopsPage = lazy(() => import('../pages/milkrun/ShopsPage'));
+const MilkrunTripCatalogPage = lazy(() => import('../pages/milkrun/TripCatalogPage'));
 const MilkrunVehiclesPage = lazy(() => import('../pages/milkrun/VehiclesPage'));
 const WorkspacePlaceholderPage = lazy(() => import('../pages/operations/WorkspacePlaceholderPage'));
 const OrdersListPage = lazy(() => import('../pages/orders/OrdersListPage'));
@@ -48,12 +49,6 @@ const orderReadPermissions = [
 const milkrunTripReadPermissions = [
   PERMISSION_CODE.MILKRUN_TRIP_READ_OWN,
   PERMISSION_CODE.MILKRUN_TRIP_READ_ALL,
-] as const;
-
-const milkrunMasterReadPermissions = [
-  PERMISSION_CODE.MILKRUN_TRIP_READ_OWN,
-  PERMISSION_CODE.MILKRUN_TRIP_READ_ALL,
-  PERMISSION_CODE.MILKRUN_TRIP_CREATE,
 ] as const;
 
 const MilkrunIndexRedirect = () => {
@@ -117,15 +112,15 @@ const createFeatureRoutes = (role?: RoleCode): RouteObject[] => [
   },
   {
     path: 'milkrun/shops',
-    element: guarded(milkrunMasterReadPermissions, <MilkrunReadOnlyMasterPage resourceName="shops" />),
+    element: guarded([PERMISSION_CODE.MILKRUN_SHOP_READ], <MilkrunShopsPage />),
   },
   {
     path: 'milkrun/trip-types',
-    element: guarded(milkrunMasterReadPermissions, <MilkrunReadOnlyMasterPage resourceName="trip-types" />),
+    element: guarded([PERMISSION_CODE.MILKRUN_TRIP_TYPE_READ], <MilkrunTripCatalogPage key="trip-types" resourceName="trip-types" />),
   },
   {
     path: 'milkrun/trip-statuses',
-    element: guarded(milkrunMasterReadPermissions, <MilkrunReadOnlyMasterPage resourceName="trip-statuses" />),
+    element: guarded([PERMISSION_CODE.MILKRUN_TRIP_STATUS_READ], <MilkrunTripCatalogPage key="trip-statuses" resourceName="trip-statuses" />),
   },
   {
     path: 'milkrun/vehicles',

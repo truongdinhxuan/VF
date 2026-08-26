@@ -22,7 +22,10 @@ export const respondWithStockData = async (
       return reply.code(error.statusCode).send({ error: error.message });
     }
     if (error instanceof StockServiceError) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      return reply.code(error.statusCode).send({
+        error: error.message,
+        ...(error.details ? { details: error.details } : {}),
+      });
     }
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal server error' });

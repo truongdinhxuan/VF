@@ -3,6 +3,8 @@ import type {
   CreateSupplyInput,
   Supply,
   SupplyListParams,
+  SupplyStackOption,
+  SupplyStackOptionsParams,
   UpdateSupplyInput,
 } from '../types/supplies';
 import type { PaginatedResponse } from '../types/pagination.types';
@@ -30,6 +32,18 @@ export const getSupplyProviders = async (
     await instance.get<ApiEnvelope<Provider[]>, ApiEnvelope<Provider[]>>(
       `supplies/${id}/providers`,
       { params: { isActive: true, isDeleted: false }, signal },
+    ),
+  );
+
+export const getSupplyStackOptions = async (
+  id: string,
+  params: SupplyStackOptionsParams,
+  signal?: AbortSignal,
+): Promise<SupplyStackOption[]> =>
+  unwrapData(
+    await instance.get<ApiEnvelope<SupplyStackOption[]>, ApiEnvelope<SupplyStackOption[]>>(
+      `supplies/${id}/stack-options`,
+      { params, signal },
     ),
   );
 

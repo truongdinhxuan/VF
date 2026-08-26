@@ -18,6 +18,7 @@ export const STOCK_TRANSACTION_TYPES = [
   'EXPORT',
   'REVERSAL_IN',
   'REVERSAL_OUT',
+  'DISCREPANCY_CORRECTION',
 ] as const;
 
 export type StockTransactionType = (typeof STOCK_TRANSACTION_TYPES)[number];
@@ -34,10 +35,15 @@ export interface StockTransaction {
   storage_location_id: string;
   order_id: string | null;
   order_item_id: string | null;
+  inventory_discrepancy_id: string | null;
   transaction_type_id: string;
   quantity: number;
   before_quantity: number;
   after_quantity: number;
+  set_per_qty: number | null;
+  stack_quantity: number | null;
+  before_stack_quantity: number | null;
+  after_stack_quantity: number | null;
   reason: string | null;
   reason_id: string | null;
   reason_note: string | null;
@@ -50,6 +56,7 @@ export interface StockTransaction {
   transaction_type?: StockTransactionTypeLookup | null;
   adjustment_reason?: AdjustmentReasonLookup | null;
   supply?: { id: string; code: string; description: string | null } | null;
+  order?: { id: string; code: string } | null;
   provider?: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
   area?: Pick<Area, 'id' | 'code' | 'name'> | null;
   storage_location?: Pick<StorageLocation, 'id' | 'code' | 'name'> | null;
@@ -58,6 +65,11 @@ export interface StockTransaction {
     first_name: string;
     last_name: string;
     vinfast_id: number;
+  } | null;
+  discrepancy?: {
+    id: string;
+    allocation_id: string;
+    status: 'OPEN' | 'RESOLVED';
   } | null;
 }
 
@@ -82,7 +94,9 @@ export interface CreateStockAdjustmentInput {
   transaction_type_id?: string;
   transaction_type_code?: StockAdjustmentType;
   adjustment_reason_id?: string;
-  quantity: number;
+  quantity?: number;
+  stack_quantity?: number;
+  set_per_qty?: number;
   reason: string;
   reason_note?: string;
   note?: string | null;
@@ -96,6 +110,9 @@ export interface StockAdjustmentResult {
     area_id: string;
     storage_location_id: string;
     quantity: number;
+    set_per_qty: number | null;
+    stack_quantity: number | null;
+    total_set_quantity: number | null;
     created_at: string;
     updated_at: string;
   };

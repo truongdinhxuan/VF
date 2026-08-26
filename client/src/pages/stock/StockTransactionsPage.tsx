@@ -44,7 +44,10 @@ const StockTransactionsPage = () => {
     initialQuery: { page: 1, pageSize: 20, sortBy: 'created_at', sortOrder: 'desc' },
     loadErrorMessage: 'Không thể tải stock transactions.',
     queryKey: queryKeys.stockTransactions.lists,
-    invalidateQueryKeys: [queryKeys.stockBalances.all],
+    invalidateQueryKeys: [
+      queryKeys.stockBalances.all,
+      queryKeys.supplyStackOptions.all,
+    ],
   });
   const areas = useCrudResource(
     loadAreas,
@@ -102,7 +105,15 @@ const StockTransactionsPage = () => {
     { header: 'Số lượng', accessor: 'quantity', sortKey: 'quantity', render: (item) => numberFormatter.format(item.quantity) },
     { header: 'Trước → Sau', accessor: 'before_quantity', render: (item) => `${numberFormatter.format(item.before_quantity)} → ${numberFormatter.format(item.after_quantity)}` },
     { header: 'Lý do', accessor: 'reason', render: (item) => item.reason || '—' },
-    { header: 'Người tạo', accessor: 'created_by', render: (item) => item.creator ? `${item.creator.first_name} ${item.creator.last_name}`.trim() : item.created_by },
+    { header: 'Order', accessor: 'order_id', render: (item) => item.order?.code ?? '—' },
+    {
+      header: 'Quy cách chồng',
+      accessor: 'set_per_qty',
+      render: (item) => item.set_per_qty === null
+        ? '—'
+        : <div><p>{numberFormatter.format(item.set_per_qty)} SET/chồng</p><p className="text-xs text-slate-500">{numberFormatter.format(item.stack_quantity ?? 0)} chồng</p></div>,
+    },
+    { header: 'Người tạo', accessor: 'created_by', render: (item) => item.creator ? `${item.creator.first_name} ${item.creator.last_name}`.trim() : 'Không rõ' },
     { header: 'Thời gian', accessor: 'created_at', sortKey: 'created_at', render: (item) => dateFormatter.format(new Date(item.created_at)) },
     { header: 'Chi tiết', accessor: 'detail', render: (item) => <button type="button" onClick={() => setDetailId(item.id)} className={TextButton}>Xem</button> },
   ];
@@ -115,18 +126,25 @@ const StockTransactionsPage = () => {
 
   const detailFields: Array<[string, string]> = detail ? [
     ['Type', transactionTypeCode(detail)],
-    ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : detail.supply_id],
-    ['Provider', detail.provider ? `${detail.provider.code} - ${detail.provider.name}` : detail.provider_id],
-    ['Khu vực', detail.area ? `${detail.area.code} - ${detail.area.name}` : detail.area_id],
-    ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : detail.storage_location_id],
+    ['Vật tư', detail.supply ? `${detail.supply.code}${detail.supply.description ? ` - ${detail.supply.description}` : ''}` : 'Không rõ'],
+    ['Provider', detail.provider ? `${detail.provider.code} - ${detail.provider.name}` : 'Không rõ'],
+    ['Khu vực', detail.area ? `${detail.area.code} - ${detail.area.name}` : 'Không rõ'],
+    ['Vị trí kho', detail.storage_location ? `${detail.storage_location.code}${detail.storage_location.name ? ` - ${detail.storage_location.name}` : ''}` : 'Không rõ'],
     ['Số lượng', numberFormatter.format(detail.quantity)],
     ['Tồn trước', numberFormatter.format(detail.before_quantity)],
     ['Tồn sau', numberFormatter.format(detail.after_quantity)],
+    ...(detail.set_per_qty !== null ? [
+      ['SET / chồng', numberFormatter.format(detail.set_per_qty)],
+      ['Số chồng thay đổi', numberFormatter.format(detail.stack_quantity ?? 0)],
+      ['Số chồng trước', numberFormatter.format(detail.before_stack_quantity ?? 0)],
+      ['Số chồng sau', numberFormatter.format(detail.after_stack_quantity ?? 0)],
+    ] as Array<[string, string]> : []),
     ['Lý do', detail.reason || '—'],
     ['Ghi chú', detail.note || '—'],
-    ['Người tạo', detail.creator ? `${detail.creator.first_name} ${detail.creator.last_name}`.trim() : detail.created_by],
+    ['Người tạo', detail.creator ? `${detail.creator.first_name} ${detail.creator.last_name}`.trim() : 'Không rõ'],
     ['Thời gian', dateFormatter.format(new Date(detail.created_at))],
-    ['Order ID', detail.order_id || '—'],
+    ['Order', detail.order?.code ?? '—'],
+    ['Sai lệch tồn', detail.discrepancy ? `${detail.discrepancy.status} — có liên kết audit` : '—'],
   ] : [];
 
   return <div className="space-y-6">

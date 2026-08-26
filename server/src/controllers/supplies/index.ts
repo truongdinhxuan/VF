@@ -3,6 +3,7 @@ import type {
   CreateSupplyBody,
   SupplyListQuery,
   SupplyProviderListQuery,
+  SupplyStackOptionsQuery,
   UpdateSupplyBody,
 } from '../../interfaces/supplies';
 import { PERMISSION_CODE } from '../../domain/permission-codes';
@@ -36,6 +37,15 @@ export const listSupplyProviders = (
   new SuppliesService(request.server).listProviders(
     (request.params as { id: string }).id,
     request.query as SupplyProviderListQuery,
+  ));
+
+export const listSupplyStackOptions = (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => respondWithData(request, reply, () =>
+  new SuppliesService(request.server).listStackOptions(
+    (request.params as { id: string }).id,
+    request.query as SupplyStackOptionsQuery,
   ));
 
 export const createSupply = (request: FastifyRequest, reply: FastifyReply) =>

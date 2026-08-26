@@ -8,7 +8,9 @@ import { requirePermission, verifyToken } from '../../middleware/auth';
 import {
   stockBalanceListSchema,
   stockIdParamsSchema,
+  inventoryDiscrepancyListSchema,
 } from '../../schemas/stock';
+import { listStockBalanceDiscrepancies } from '../../controllers/inventory-discrepancies';
 
 const stockBalanceRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -26,6 +28,14 @@ const stockBalanceRoutes: FastifyPluginAsync = async (fastify) => {
       schema: stockIdParamsSchema,
     },
     getStockBalance,
+  );
+  fastify.get(
+    '/:id/discrepancies',
+    {
+      preHandler: [verifyToken, requirePermission(PERMISSION_CODE.SUPPLY_STOCK_READ)],
+      schema: inventoryDiscrepancyListSchema,
+    },
+    listStockBalanceDiscrepancies,
   );
 };
 

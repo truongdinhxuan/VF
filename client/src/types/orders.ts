@@ -1,5 +1,6 @@
 import type { PaginatedListParams } from './pagination.types';
 import type { Provider } from './providers';
+import type { InventoryDiscrepancy } from './inventory-discrepancies';
 
 import type {
   OrderRevisionActionLookup,
@@ -47,6 +48,77 @@ export interface OrderUnitSummary {
   symbol: string;
 }
 
+export interface OrderAllocationLocation {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface OrderItemAllocation {
+  id: string;
+  order_item_id: string;
+  stock_balance_id: string;
+  expected_stack_quantity: number;
+  actual_stack_quantity: number | null;
+  status: string | null;
+  discrepancy_reason: string | null;
+  allocated_at: string;
+  confirmed_at: string | null;
+  location?: OrderAllocationLocation | null;
+  discrepancies?: InventoryDiscrepancy[];
+}
+
+export interface AllocationConfirmation {
+  allocation_id: string;
+  actual_stack_quantity: number;
+  discrepancy_id: string | null;
+  difference_stack_quantity: number;
+  reallocation_status: 'NOT_REQUIRED' | 'REALLOCATED' | 'INSUFFICIENT';
+  required_stack_quantity: number;
+  available_stack_quantity: number;
+  unallocated_stack_quantity: number;
+  reallocation_count?: number;
+  new_allocations: Array<{
+    id: string;
+    stock_balance_id: string;
+    expected_stack_quantity: number;
+  }>;
+}
+
+export interface ConfirmAllocationInput {
+  actual_stack_quantity: number;
+  reason?: string;
+}
+
+export interface ConfirmAllocationResult {
+  order: Order;
+  confirmation: AllocationConfirmation;
+}
+
+export interface StackAllocationErrorDetails {
+  order_item_id?: string;
+  supply_code?: string;
+  quantity_approved?: number;
+  set_per_qty?: number;
+  required_stack_quantity?: number;
+  available_stack_quantity?: number;
+  shortage_stack_quantity?: number;
+  current_status?: string;
+}
+
+export interface StackIssueStockConflictDetails {
+  reason?: string;
+  stock_balance_id?: string;
+  order_item_id?: string;
+  supply_code?: string;
+  provider_code?: string;
+  location_code?: string;
+  set_per_qty?: number;
+  required_stack_quantity?: number;
+  current_stack_quantity?: number;
+  shortage_stack_quantity?: number;
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -54,15 +126,20 @@ export interface OrderItem {
   provider_id: string;
   unit_id: string;
   quantity_requested: number;
+  set_per_qty: number | null;
+  requested_stack_quantity: number | null;
+  requested_total_set_quantity: number | null;
   quantity_approved: number | null;
   quantity_issued: number | null;
   available_quantity: number;
   shortage_quantity: number;
   has_stock_shortage: boolean;
+  available_stack_quantity?: number;
   note: string | null;
   supply?: OrderSupplySummary | null;
   provider?: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
   unit?: OrderUnitSummary | null;
+  allocations?: OrderItemAllocation[];
 }
 
 export interface OrderRevision {
@@ -126,6 +203,9 @@ export interface OrderItemInput {
   supply_id: string;
   provider_id: string;
   quantity_requested: number;
+  set_per_qty?: number;
+  requested_stack_quantity?: number;
+  requested_total_set_quantity?: number;
   unit_id?: string;
   note?: string;
 }

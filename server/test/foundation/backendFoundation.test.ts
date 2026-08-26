@@ -59,6 +59,7 @@ describe('Phase 1 backend foundation', () => {
       'EXPORT',
       'REVERSAL_IN',
       'REVERSAL_OUT',
+      'DISCREPANCY_CORRECTION',
     ]);
   });
 
@@ -114,17 +115,20 @@ describe('Phase 1 backend foundation', () => {
     ]);
     assert.deepEqual(interfaceProperties('StockBalanceRecord'), [
       'id', 'supply_id', 'provider_id', 'area_id', 'storage_location_id', 'quantity',
+      'set_per_qty', 'stack_quantity', 'total_set_quantity',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('OrderItemRecord'), [
       'id', 'order_id', 'supply_id', 'provider_id', 'unit_id',
-      'quantity_requested', 'quantity_approved', 'quantity_issued', 'note',
+      'quantity_requested', 'set_per_qty', 'requested_stack_quantity',
+      'requested_total_set_quantity', 'quantity_approved', 'quantity_issued', 'note',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
     assert.deepEqual(interfaceProperties('StockTransactionRecord'), [
       'id', 'supply_id', 'provider_id', 'area_id', 'storage_location_id', 'order_id',
-      'order_item_id', 'transaction_type_id', 'quantity', 'before_quantity',
-      'after_quantity', 'reason_id', 'reason_note', 'note', 'created_by',
+      'order_item_id', 'inventory_discrepancy_id', 'transaction_type_id', 'quantity', 'before_quantity',
+      'after_quantity', 'set_per_qty', 'stack_quantity', 'before_stack_quantity',
+      'after_stack_quantity', 'reason_id', 'reason_note', 'note', 'created_by',
       'is_active', 'is_deleted', 'created_at', 'updated_at',
     ]);
   });

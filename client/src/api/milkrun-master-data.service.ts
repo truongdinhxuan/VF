@@ -6,10 +6,13 @@ import type {
   MilkrunRack,
   MilkrunRackInput,
   MilkrunShop,
+  MilkrunShopInput,
   MilkrunStockTransactionType,
   MilkrunTripStatus,
   MilkrunTripStatusRecord,
+  MilkrunTripStatusInput,
   MilkrunTripType,
+  MilkrunTripTypeInput,
   MilkrunVehicle,
   MilkrunVehicleInput,
 } from '../types/milkrun';
@@ -32,6 +35,9 @@ const listMaster = <T>(
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<T>> => instance.get(`milkrun/${path}`, { params, signal });
 
+const getMaster = async <T>(path: MilkrunMasterPath, id: string): Promise<T> =>
+  unwrapData(await instance.get<ApiEnvelope<T>, ApiEnvelope<T>>(`milkrun/${path}/${id}`));
+
 const createMaster = async <T, TInput>(path: MilkrunMasterPath, input: TInput): Promise<T> =>
   unwrapData(await instance.post<ApiEnvelope<T>, ApiEnvelope<T>>(`milkrun/${path}`, input));
 
@@ -52,10 +58,34 @@ export const deactivateMilkrunRack = (id: string) =>
 
 export const listMilkrunShops = (params?: MilkrunLookupListParams, signal?: AbortSignal) =>
   listMaster<MilkrunShop>('shops', params, signal);
+export const getMilkrunShopById = (id: string) =>
+  getMaster<MilkrunShop>('shops', id);
+export const createMilkrunShop = (input: MilkrunShopInput) =>
+  createMaster<MilkrunShop, MilkrunShopInput>('shops', input);
+export const updateMilkrunShop = (id: string, input: Partial<MilkrunShopInput>) =>
+  updateMaster<MilkrunShop, Partial<MilkrunShopInput>>('shops', id, input);
+export const deactivateMilkrunShop = (id: string) =>
+  deactivateMaster<MilkrunShop>('shops', id);
 export const listMilkrunTripTypes = (params?: MilkrunLookupListParams, signal?: AbortSignal) =>
   listMaster<MilkrunTripType>('trip-types', params, signal);
+export const getMilkrunTripTypeById = (id: string) =>
+  getMaster<MilkrunTripType>('trip-types', id);
+export const createMilkrunTripType = (input: MilkrunTripTypeInput) =>
+  createMaster<MilkrunTripType, MilkrunTripTypeInput>('trip-types', input);
+export const updateMilkrunTripType = (id: string, input: Partial<MilkrunTripTypeInput>) =>
+  updateMaster<MilkrunTripType, Partial<MilkrunTripTypeInput>>('trip-types', id, input);
+export const deactivateMilkrunTripType = (id: string) =>
+  deactivateMaster<MilkrunTripType>('trip-types', id);
 export const listMilkrunTripStatuses = (params?: MilkrunLookupListParams, signal?: AbortSignal) =>
   listMaster<MilkrunTripStatusRecord>('trip-statuses', params, signal);
+export const getMilkrunTripStatusById = (id: string) =>
+  getMaster<MilkrunTripStatusRecord>('trip-statuses', id);
+export const createMilkrunTripStatus = (input: MilkrunTripStatusInput) =>
+  createMaster<MilkrunTripStatusRecord, MilkrunTripStatusInput>('trip-statuses', input);
+export const updateMilkrunTripStatus = (id: string, input: Partial<MilkrunTripStatusInput>) =>
+  updateMaster<MilkrunTripStatusRecord, Partial<MilkrunTripStatusInput>>('trip-statuses', id, input);
+export const deactivateMilkrunTripStatus = (id: string) =>
+  deactivateMaster<MilkrunTripStatusRecord>('trip-statuses', id);
 export const listMilkrunVehicles = (params?: MilkrunLookupListParams, signal?: AbortSignal) =>
   listMaster<MilkrunVehicle>('vehicles', params, signal);
 export const updateMilkrunVehicle = (id: string, input: MilkrunVehicleInput) =>
