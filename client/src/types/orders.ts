@@ -1,6 +1,7 @@
 import type { PaginatedListParams } from './pagination.types';
 import type { Provider } from './providers';
 import type { InventoryDiscrepancy } from './inventory-discrepancies';
+import type { ShiftOrderSheetSummary } from './shift-order-sheets';
 
 import type {
   OrderRevisionActionLookup,
@@ -167,6 +168,7 @@ export interface Order {
   forklift_by: string | null;
   taken_away_by: string | null;
   status_id: string;
+  shift_order_sheet_id: string | null;
   status: OrderStatus;
   status_lookup?: OrderStatusLookup | null;
   note: string | null;
@@ -189,6 +191,7 @@ export interface Order {
   taken_away?: OrderUserSummary | null;
   order_items?: OrderItem[];
   order_revisions?: OrderRevision[];
+  shift_order_sheet?: ShiftOrderSheetSummary | null;
 }
 
 export interface OrderListParams extends PaginatedListParams {
@@ -213,8 +216,22 @@ export interface OrderItemInput {
 export interface CreateOrderInput {
   from_area_id: string;
   to_area_id: string;
+  shift_order_sheet_id?: string;
   note?: string;
   order_list: OrderItemInput[];
+}
+
+export interface SubmitOrderInput {
+  shift_order_sheet_id?: string;
+}
+
+export interface ZeroStockErrorDetails {
+  order_item_id: string;
+  supply_code: string;
+  provider_code: string;
+  set_per_qty: number | null;
+  available_quantity: number;
+  inventory_mode: 'NORMAL' | 'STACK';
 }
 
 export interface UpdateOrderInput {

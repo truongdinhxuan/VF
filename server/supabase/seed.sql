@@ -1,0 +1,3 @@
+-- Intentionally empty.
+-- Required system/master seeds are versioned in migrations so clean resets do
+-- not depend on mutable post-migration fixture data.

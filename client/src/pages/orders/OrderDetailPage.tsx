@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from "../../api/errors";
 import { listStorageLocations } from "../../api/storage-locations.service";
 import {
@@ -42,6 +42,7 @@ import type {
   OrderItemAllocation,
   StackAllocationErrorDetails,
   StackIssueStockConflictDetails,
+  ZeroStockErrorDetails,
 } from "../../types/orders";
 
 type ActionPanel = "approve" | "reject" | "issue" | "cancel" | null;
@@ -111,6 +112,8 @@ const getStackIssueReadiness = (item: OrderItem): StackIssueReadiness => {
 
 const OrderDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const shiftOrderSheetContextId = searchParams.get('shiftOrderSheetId') ?? undefined;
   const { user, role, hasPermission, isSystemAdmin } = useAuth();
   const ordersPath = getWorkspacePath(role, "orders");
   const queryClient = useQueryClient();
@@ -146,6 +149,8 @@ const OrderDetailPage = () => {
     useState<StackAllocationErrorDetails | null>(null);
   const [stackIssueErrorDetails, setStackIssueErrorDetails] =
     useState<StackIssueStockConflictDetails | null>(null);
+  const [zeroStockErrorDetails, setZeroStockErrorDetails] =
+    useState<ZeroStockErrorDetails | null>(null);
   const mutating = orderMutation.isPending || confirmationMutation.isPending;
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [reason, setReason] = useState("");
@@ -229,6 +234,12 @@ const OrderDetailPage = () => {
     () => stackItems.filter((item) => !stackReadiness.get(item.id)?.ready),
     [stackItems, stackReadiness],
   );
+  const zeroStockItems = useMemo(
+    () => items.filter((item) => item.set_per_qty === null
+      ? Number(item.available_quantity ?? 0) <= 0
+      : Number(item.available_stack_quantity ?? 0) <= 0),
+    [items],
+  );
   const incompatibleStackItems = useMemo(
     () => stackItems.filter((item) => approvedStackQuantity(item) === null),
     [stackItems],
@@ -237,7 +248,9 @@ const OrderDetailPage = () => {
     (item) => (item.allocations?.length ?? 0) > 0,
   );
   const canEdit = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));
-  const canSubmit = Boolean(order && isPackingOwner && order.status === "DRAFT");
+  const canSubmit = Boolean(
+    order && isPackingOwner && order.status === "DRAFT" && zeroStockItems.length === 0,
+  );
   const canCancel = Boolean(order && isPackingOwner && ["DRAFT", "PENDING"].includes(order.status));
   const canApprove = Boolean(order && isApprover && order.status === "PENDING");
   const canAllocate = Boolean(
@@ -275,10 +288,18 @@ const OrderDetailPage = () => {
     setActionError(null);
     setAllocationErrorDetails(null);
     setStackIssueErrorDetails(null);
+    setZeroStockErrorDetails(null);
     try {
       const updated = await orderMutation.mutateAsync(operation);
       queryClient.setQueryData(queryKeys.orders.detail(updated.id), updated);
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.lists });
+      const affectedSheetId = updated.shift_order_sheet_id ?? shiftOrderSheetContextId;
+      if (affectedSheetId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.shiftOrderSheets.detail(affectedSheetId),
+        });
+      }
       if (affectsStock) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.stockBalances.all }),
@@ -485,7 +506,11 @@ const OrderDetailPage = () => {
     || canConfirmAnyAllocation || hasIssueAction || canReceive || canComplete;
   const fromAreaName = order.from_area?.name ?? 'Không rõ';
   const toAreaName = order.to_area?.name ?? 'Không rõ';
-  const stockShortageItems = items.filter((item) => item.has_stock_shortage);
+  const stockShortageItems = items.filter((item) => item.has_stock_shortage && (
+    item.set_per_qty === null
+      ? Number(item.available_quantity ?? 0) > 0
+      : Number(item.available_stack_quantity ?? 0) > 0
+  ));
   const requesterName = order.requester
     ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
     : 'Không rõ';
@@ -556,6 +581,20 @@ const OrderDetailPage = () => {
         </div>
       )}
 
+      {zeroStockItems.length > 0 && order.status === 'DRAFT' && (
+        <div role="alert" className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
+          <p className="font-bold">Không thể submit: {zeroStockItems.length} vật tư hiện đã hết tồn tại Area cấp.</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {zeroStockItems.map((item) => (
+              <li key={item.id}>
+                {item.supply?.code ?? 'Vật tư'}{item.set_per_qty === null ? '' : ` — ${item.set_per_qty} SET/chồng`}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2">Bạn có thể sửa hoặc xóa dòng. Hệ thống không tự đổi Provider hay quy cách.</p>
+        </div>
+      )}
+
       {order.status === "APPROVED" && incompatibleStackItems.length > 0 && (
         <div role="alert" className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800">
           <p className="font-bold">Không thể phân bổ vị trí cho một số vật tư chồng.</p>
@@ -573,7 +612,11 @@ const OrderDetailPage = () => {
           </div>
           <div className="flex flex-wrap gap-2">
             {canEdit && <button type="button" onClick={startEditing} className={SecondaryButton}>Sửa items</button>}
-            {canSubmit && <button type="button" title="DRAFT → PENDING; không làm thay đổi tồn kho" disabled={mutating} onClick={() => void runMutation(() => submitOrder(id))} className={WarningButton}>Submit → PENDING</button>}
+            {order.status === 'DRAFT' && isPackingOwner && <button type="button" title="DRAFT → PENDING; không làm thay đổi tồn kho" disabled={!canSubmit || mutating} onClick={() => void runMutation(() => submitOrder(id, { shift_order_sheet_id: shiftOrderSheetContextId }), false, (error) => {
+              if (getApiErrorCode(error) === 'ORDER_ITEM_ZERO_STOCK') {
+                setZeroStockErrorDetails(getApiErrorDetails<ZeroStockErrorDetails>(error));
+              }
+            })} className={WarningButton}>Submit → PENDING</button>}
             {canApprove && <button type="button" title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Approve → APPROVED</button>}
             {canApprove && <button type="button" onClick={() => openPanel("reject")} className={ErrorButton}>Reject</button>}
             {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={mutating} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
@@ -598,6 +641,13 @@ const OrderDetailPage = () => {
         {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
         {mutating && <p className="mt-4 text-sm font-semibold text-blue-600">Đang cập nhật order...</p>}
         {actionError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{actionError}</div>}
+        {zeroStockErrorDetails && (
+          <div role="alert" className="mt-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+            <p className="font-bold">{zeroStockErrorDetails.supply_code} hiện không còn tồn.</p>
+            <p className="mt-1">Provider: {zeroStockErrorDetails.provider_code}{zeroStockErrorDetails.set_per_qty === null ? '' : `; quy cách: ${zeroStockErrorDetails.set_per_qty} SET/chồng`}.</p>
+            <p className="mt-1">Draft và các items vẫn được giữ nguyên để bạn sửa hoặc xóa dòng.</p>
+          </div>
+        )}
         {hasIssueAction && stackItemsNotReady.length > 0 && (
           <div role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             <p className="font-bold">Chưa sẵn sàng xuất kiện sắt tiêu chuẩn.</p>

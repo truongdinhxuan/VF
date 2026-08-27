@@ -37,9 +37,24 @@ export const orderCreateSchema = {
     properties: {
       from_area_id: uuid,
       to_area_id: uuid,
+      shift_order_sheet_id: uuid,
       note: { type: 'string', maxLength: 2000 },
       order_list: orderItems,
     },
+  },
+};
+
+export const orderSubmitSchema = {
+  params: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: { id: uuid },
+  },
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { shift_order_sheet_id: uuid },
   },
 };
 

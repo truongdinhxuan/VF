@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:permissions": "node --test test/permission-authorization.test.mjs",
+    "test:notifications": "node --test test/notifications.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

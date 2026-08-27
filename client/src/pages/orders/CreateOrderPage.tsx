@@ -1,10 +1,11 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
 import { createOrder } from '../../api/orders.service';
+import { getShiftOrderSheet } from '../../api/shift-order-sheets.service';
 import { listSupplies } from '../../api/supplies.service';
 import { InfoButton, SecondaryButton, TextButton, TextErrorButton } from '../../components/common/Button';
 import { SupplyProviderSelect } from '../../components/common/SupplyProviderSelect';
@@ -52,10 +53,17 @@ const loadAreas = async (signal: AbortSignal) =>
 
 const CreateOrderPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
   const ordersPath = getWorkspacePath(role, 'orders');
   const receivingAreaId = user?.publicData.area_id ?? '';
+  const shiftOrderSheetId = searchParams.get('shiftOrderSheetId') ?? '';
+  const shiftSheetQuery = useQuery({
+    queryKey: queryKeys.shiftOrderSheets.detail(shiftOrderSheetId),
+    queryFn: ({ signal }) => getShiftOrderSheet(shiftOrderSheetId, signal),
+    enabled: Boolean(shiftOrderSheetId),
+  });
   const supplyLoader = useCallback(
     (search: string | undefined, signal: AbortSignal) => listSupplies(
       { page: 1, pageSize: 20, search, isActive: true, isDeleted: false, sortBy: 'code', sortOrder: 'asc' },
@@ -157,6 +165,7 @@ const CreateOrderPage = () => {
     const payload: CreateOrderInput = {
       from_area_id: sourceArea.id,
       to_area_id: receivingAreaId,
+      ...(shiftOrderSheetId ? { shift_order_sheet_id: shiftOrderSheetId } : {}),
       note: values.note.trim() || undefined,
       order_list: values.order_list.map((item) => {
         const supply = supplies.find((candidate) => candidate.id === item.supply_id);
@@ -182,7 +191,7 @@ const CreateOrderPage = () => {
     try {
       const order = await createOrder(payload);
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists });
-      navigate(`${ordersPath}/${order.id}`);
+      navigate(`${ordersPath}/${order.id}${shiftOrderSheetId ? `?shiftOrderSheetId=${shiftOrderSheetId}` : ''}`);
     } catch (requestError) {
       setSubmitError(getApiErrorMessage(requestError, 'Không thể tạo order.'));
     }
@@ -190,7 +199,8 @@ const CreateOrderPage = () => {
 
   const referenceUnavailable = suppliesLoading || areaResource.loading
     || Boolean(suppliesError) || Boolean(areaResource.error)
-    || supplies.length === 0 || areas.length === 0 || !sourceArea || !receivingAreaId;
+    || supplies.length === 0 || areas.length === 0 || !sourceArea || !receivingAreaId
+    || Boolean(shiftOrderSheetId && (shiftSheetQuery.isPending || shiftSheetQuery.isError || !shiftSheetQuery.data));
 
   return (
     <section className="space-y-5">
@@ -199,6 +209,24 @@ const CreateOrderPage = () => {
         <h1 className="mt-3 text-2xl font-bold text-slate-900">Tạo order</h1>
         <p className="mt-1 text-sm text-slate-500">Order được tạo ở trạng thái DRAFT và chưa làm thay đổi tồn kho.</p>
       </div>
+
+      {shiftOrderSheetId && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          {shiftSheetQuery.isPending ? (
+            <p>Đang kiểm tra Phiếu Order Ca...</p>
+          ) : shiftSheetQuery.isError || !shiftSheetQuery.data ? (
+            <p role="alert" className="font-semibold">Không thể xác thực Phiếu Order Ca. Không nên tiếp tục tạo Order từ context này.</p>
+          ) : (
+            <>
+              <p className="font-bold">Tạo thêm Order trong Phiếu Order Ca</p>
+              <p className="mt-1">
+                {shiftSheetQuery.data.area?.name ?? 'Area không xác định'} — {shiftSheetQuery.data.work_shift?.code ?? 'Ca không xác định'} — {shiftSheetQuery.data.work_date}
+              </p>
+              <p className="mt-1 text-xs text-blue-700">Backend sẽ kiểm tra lại Area, hierarchy, ca và ngày làm việc khi tạo và submit.</p>
+            </>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">

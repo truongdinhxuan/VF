@@ -6,6 +6,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 import { PERMISSION_CODE, type PermissionCode } from '../constants/permissions';
 import { ROLE_CODES, type RoleCode } from '../constants/roles';
 import { ROLE_WORKSPACES } from '../constants/workspaces';
+import { ORDER_READ_PERMISSIONS } from '../constants/workspaceNavigation';
 import { useAuth } from '../context/AuthContext';
 
 const WorkspaceLayout = lazy(() => import('../layouts/workspace/WorkspaceLayout').then((module) => ({ default: module.WorkspaceLayout })));
@@ -35,16 +36,12 @@ const WorkspacePlaceholderPage = lazy(() => import('../pages/operations/Workspac
 const OrdersListPage = lazy(() => import('../pages/orders/OrdersListPage'));
 const CreateOrderPage = lazy(() => import('../pages/orders/CreateOrderPage'));
 const OrderDetailPage = lazy(() => import('../pages/orders/OrderDetailPage'));
+const ShiftOrderSheetsPage = lazy(() => import('../pages/orders/ShiftOrderSheetsPage'));
+const ShiftOrderSheetDetailPage = lazy(() => import('../pages/orders/ShiftOrderSheetDetailPage'));
 
 const guarded = (permissions: readonly PermissionCode[], element: ReactNode) => (
   <PermissionGuard anyOf={permissions}>{element}</PermissionGuard>
 );
-
-const orderReadPermissions = [
-  PERMISSION_CODE.SUPPLY_ORDER_CREATE,
-  PERMISSION_CODE.SUPPLY_ORDER_APPROVE,
-  PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
-] as const;
 
 const milkrunTripReadPermissions = [
   PERMISSION_CODE.MILKRUN_TRIP_READ_OWN,
@@ -72,9 +69,11 @@ const createFeatureRoutes = (role?: RoleCode): RouteObject[] => [
   { path: 'units', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <UnitsPage />) },
   { path: 'storage-locations', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <StorageLocationsPage />) },
   { path: 'areas', element: guarded([PERMISSION_CODE.SUPPLY_CATALOG_READ], <AreasPage />) },
-  { path: 'orders', element: guarded(orderReadPermissions, <OrdersListPage />) },
+  { path: 'orders', element: guarded(ORDER_READ_PERMISSIONS, <OrdersListPage />) },
   { path: 'orders/create', element: guarded([PERMISSION_CODE.SUPPLY_ORDER_CREATE], <CreateOrderPage />) },
-  { path: 'orders/:id', element: guarded(orderReadPermissions, <OrderDetailPage />) },
+  { path: 'orders/:id', element: guarded(ORDER_READ_PERMISSIONS, <OrderDetailPage />) },
+  { path: 'shift-order-sheets', element: guarded(ORDER_READ_PERMISSIONS, <ShiftOrderSheetsPage />) },
+  { path: 'shift-order-sheets/:id', element: guarded(ORDER_READ_PERMISSIONS, <ShiftOrderSheetDetailPage />) },
   { path: 'stock-balances', element: guarded([PERMISSION_CODE.SUPPLY_STOCK_READ], <StockBalancesPage />) },
   { path: 'stock-transactions', element: guarded([PERMISSION_CODE.SUPPLY_STOCK_READ], <StockTransactionsPage />) },
   {

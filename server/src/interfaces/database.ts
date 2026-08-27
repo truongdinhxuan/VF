@@ -201,6 +201,7 @@ export interface OrderRecord {
   forklift_by: string | null;
   taken_away_by: string | null;
   status_id: string;
+  shift_order_sheet_id: string | null;
   note: string | null;
   rejected_reason: string | null;
   cancel_reason: string | null;
@@ -209,6 +210,47 @@ export interface OrderRecord {
   issued_at: string | null;
   received_at: string | null;
   completed_at: string | null;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplyShiftOrderSheetRecord {
+  id: string;
+  area_id: string;
+  work_shift_id: string;
+  work_date: string;
+  leader_id: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  domain: string;
+  type: string;
+  title: string;
+  message: string;
+  entity_type: string;
+  entity_id: string;
+  area_id: string | null;
+  created_by: string | null;
+  event_key: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationRecipientRecord {
+  id: string;
+  notification_id: string;
+  user_id: string;
+  is_read: boolean;
+  read_at: string | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -380,6 +422,9 @@ export interface DatabaseRecordMap {
   storage_locations: StorageLocationRecord;
   stock_balances: StockBalanceRecord;
   orders: OrderRecord;
+  supply_shift_order_sheets: SupplyShiftOrderSheetRecord;
+  notifications: NotificationRecord;
+  notification_recipients: NotificationRecipientRecord;
   order_items: OrderItemRecord;
   order_item_allocations: OrderItemAllocationRecord;
   inventory_discrepancies: InventoryDiscrepancyRecord;

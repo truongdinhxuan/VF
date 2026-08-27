@@ -3,6 +3,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../../components/workspace/Sidebar";
 import Header from "../../components/workspace/Header";
 import Footer from "../../components/workspace/Footer";
+import { LiveNotificationToast } from "../../components/notifications/LiveNotificationToast";
+import { useSupplyRealtime } from "../../hooks/useSupplyRealtime";
 
 export const WorkspaceLayout = () => {
   const location = useLocation();
@@ -18,6 +20,7 @@ export const WorkspaceLayout = () => {
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const realtime = useSupplyRealtime();
 
   useEffect(() => {
     // Khởi tạo Fonts & Icons...
@@ -68,6 +71,7 @@ export const WorkspaceLayout = () => {
 
   return (
     <div className="relative flex h-screen h-dvh min-h-0 w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
+      <LiveNotificationToast notification={realtime.toast} onDismiss={realtime.dismissToast} />
       
       <style dangerouslySetInnerHTML={{ __html: `
         :root { --brand-primary: #3b82f6; }

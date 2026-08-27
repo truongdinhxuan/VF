@@ -9,6 +9,11 @@ import {
   type PermissionCode,
 } from '../domain/permission-codes';
 import {
+  canReadOrder,
+  isOrderAreaScoped,
+  type OrderReadAccess,
+} from '../domain/order-access';
+import {
   assertApprovedQuantity,
   assertCancelReason,
   assertOrderActionAllowed,
@@ -29,15 +34,16 @@ import type {
   PatchOrderBody,
   ReceiveOrderBody,
   RejectOrderBody,
+  SubmitOrderBody,
 } from '../interfaces/orders';
 import { ORDER_SORT_FIELDS } from '../schemas/orders';
 import { parsePagination, resolvePaginatedQueryResult } from '../utils/pagination';
+import { NOTIFICATION_TYPE, type NotificationType } from '../interfaces/notifications';
+import { NotificationsService } from './notifications.service';
 
-export interface OrderActor {
+export interface OrderActor extends OrderReadAccess {
   id: string;
-  areaId: string;
   permissions: PermissionCode[];
-  isSystemAdmin: boolean;
 }
 
 interface SupplyLookup {
@@ -147,10 +153,13 @@ interface SupplyProviderLookup {
 
 interface OrderData {
   id: string;
+  code: string;
   requested_by: string;
   from_area_id: string;
   to_area_id: string;
   status_id: string;
+  shift_order_sheet_id: string | null;
+  updated_at: string;
   status_lookup: {
     id: string;
     code: OrderStatus;
@@ -222,7 +231,9 @@ function rpcError(error: SupabaseErrorLike): never {
   }
   if (/stock balance not found/i.test(message)) serviceError(409, message);
   if (/not found/i.test(message)) serviceError(404, message);
-  if (/stock|approved|status|issue|location/i.test(message)) serviceError(409, message);
+  if (/stock|approved|status|issue|location|must be PENDING/i.test(message)) {
+    serviceError(409, message);
+  }
   serviceError(400, message);
 }
 
@@ -236,6 +247,53 @@ function parseRpcDetails(details?: string): Record<string, unknown> | undefined 
   } catch {
     return undefined;
   }
+}
+
+function submitRpcError(error: SupabaseErrorLike): never {
+  const code = error.message ?? 'ORDER_SUBMIT_FAILED';
+  const details = parseRpcDetails(error.details);
+  const failures: Record<string, { status: number; message: string }> = {
+    ORDER_ITEM_ZERO_STOCK: {
+      status: 409,
+      message: 'Vật tư hiện không còn tồn tại khu vực cấp. Không thể gửi Order.',
+    },
+    ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
+    ORDER_NOT_DRAFT: {
+      status: 409,
+      message: 'Chỉ Order DRAFT mới được submit.',
+    },
+    ORDER_SUBMIT_FORBIDDEN: {
+      status: 403,
+      message: 'Bạn không có quyền submit Order này.',
+    },
+    ORDER_SHIFT_LEADER_NOT_FOUND: {
+      status: 409,
+      message: 'Không xác định được Tổ trưởng từ hierarchy managed_by.',
+    },
+    WORK_SHIFT_ASSIGNMENT_NOT_FOUND: {
+      status: 409,
+      message: 'Tài khoản chưa có ca làm việc hiệu lực tại thời điểm submit.',
+    },
+    WORK_SHIFT_NOT_AVAILABLE: {
+      status: 409,
+      message: 'Ca làm việc không tồn tại hoặc không hoạt động.',
+    },
+    ORDER_SHIFT_SHEET_CONTEXT_INVALID: {
+      status: 403,
+      message: 'Phiếu Order Ca không thuộc đúng Area, nhóm, ca hoặc ngày làm việc.',
+    },
+    SHIFT_ORDER_SHEET_LEADER_CONFLICT: {
+      status: 409,
+      message: 'Area và ca này đã có Phiếu Order Ca thuộc Tổ trưởng khác.',
+    },
+    SHIFT_ORDER_SHEET_NOT_AVAILABLE: {
+      status: 409,
+      message: 'Phiếu Order Ca không còn hoạt động.',
+    },
+  };
+  const failure = failures[code];
+  if (failure) serviceError(failure.status, failure.message, details, code);
+  serviceError(400, 'Không thể submit Order.', details, code);
 }
 
 function allocationRpcError(error: SupabaseErrorLike): never {
@@ -403,6 +461,16 @@ const ORDER_LIST_SELECT = `
   approver:users!orders_approved_by_fkey(${ORDER_USER_SELECT}),
   forklift:users!orders_forklift_by_fkey(${ORDER_USER_SELECT}),
   taken_away:users!orders_taken_away_by_fkey(${ORDER_USER_SELECT})
+  ,shift_order_sheet:supply_shift_order_sheets!orders_shift_order_sheet_id_fkey(
+    id, area_id, work_shift_id, work_date, leader_id,
+    area:areas!supply_shift_order_sheets_area_id_fkey(id, code, name),
+    work_shift:work_shifts!supply_shift_order_sheets_work_shift_id_fkey(
+      id, code, name, start_time, end_time, crosses_midnight
+    ),
+    leader:users!supply_shift_order_sheets_leader_id_fkey(
+      ${ORDER_USER_SELECT}
+    )
+  )
 `;
 
 const ORDER_DETAIL_SELECT = `
@@ -545,6 +613,33 @@ export class OrderService {
     return this.attachStockAvailability(normalizedOrder);
   }
 
+  private async finishStatusTransition(
+    actor: OrderActor,
+    previous: OrderData,
+    type: NotificationType = NOTIFICATION_TYPE.ORDER_STATUS_CHANGED,
+  ): Promise<OrderData> {
+    const current = await this.findOrder(previous.id);
+    if (previous.status_id === current.status_id) return current;
+    try {
+      await new NotificationsService(this.fastify).persistOrderTransition(
+        actor,
+        previous,
+        current,
+        type,
+      );
+    } catch (error) {
+      // The Order transition has already committed. Do not return a misleading
+      // mutation failure; persistence is post-commit, idempotent and observable.
+      this.fastify.log.error({
+        err: error,
+        orderId: current.id,
+        previousStatusId: previous.status_id,
+        currentStatusId: current.status_id,
+      }, 'Order notification persistence failed after committed transition');
+    }
+    return current;
+  }
+
   private async attachStockAvailability(order: OrderData): Promise<OrderData> {
     const supplyIds = [...new Set(order.order_items.map((item) => item.supply_id))];
     if (supplyIds.length === 0) return order;
@@ -625,11 +720,7 @@ export class OrderService {
   }
 
   private assertOrderVisible(actor: OrderActor, order: OrderData): void {
-    const isOwnerScoped = hasPermission(
-      actor,
-      PERMISSION_CODE.SUPPLY_ORDER_CREATE,
-    ) && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
-    if (!actor.isSystemAdmin && isOwnerScoped && order.to_area_id !== actor.areaId) {
+    if (!canReadOrder(actor, order)) {
       serviceError(403, 'Order is outside your area scope');
     }
   }
@@ -663,6 +754,62 @@ export class OrderService {
 
     if (error || !data) {
       serviceError(400, 'User receiving area is missing or inactive');
+    }
+  }
+
+  private async assertShiftSheetContext(
+    actor: OrderActor,
+    receivingAreaId: string,
+    sheetId: string,
+  ): Promise<void> {
+    const [sheetResult, requesterResult, shiftResult] = await Promise.all([
+      this.db
+        .from('supply_shift_order_sheets')
+        .select('id, area_id, work_shift_id, work_date, leader_id, is_active, is_deleted')
+        .eq('id', sheetId)
+        .single(),
+      this.db
+        .from('users')
+        .select('id, managed_by_user_id')
+        .eq('id', actor.id)
+        .eq('is_active', true)
+        .eq('is_verified', true)
+        .eq('is_deleted', false)
+        .single(),
+      this.db.rpc('resolve_user_work_shift_instance', {
+        p_user_id: actor.id,
+        p_at: new Date().toISOString(),
+      }),
+    ]);
+
+    if (sheetResult.error || !sheetResult.data || requesterResult.error
+        || !requesterResult.data || shiftResult.error || !shiftResult.data?.[0]) {
+      serviceError(403, 'Phiếu Order Ca không hợp lệ với tài khoản hiện tại');
+    }
+
+    let leaderId = requesterResult.data.managed_by_user_id as string | null;
+    if (!leaderId) {
+      const { count, error } = await this.db
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('managed_by_user_id', actor.id)
+        .eq('is_active', true)
+        .eq('is_deleted', false);
+      if (error) databaseError(error, 'Cannot validate Order hierarchy');
+      if ((count ?? 0) > 0) leaderId = actor.id;
+    }
+
+    const sheet = sheetResult.data;
+    const shift = shiftResult.data[0] as {
+      work_shift_id: string;
+      work_date: string;
+    };
+    if (!sheet.is_active || sheet.is_deleted
+        || sheet.area_id !== receivingAreaId
+        || sheet.leader_id !== leaderId
+        || sheet.work_shift_id !== shift.work_shift_id
+        || sheet.work_date !== shift.work_date) {
+      serviceError(403, 'Phiếu Order Ca không thuộc đúng Area, nhóm, ca hoặc ngày làm việc');
     }
   }
 
@@ -848,6 +995,9 @@ export class OrderService {
     if (body.to_area_id !== actor.areaId) {
       serviceError(400, 'to_area_id must equal the current user area_id');
     }
+    if (body.shift_order_sheet_id) {
+      await this.assertShiftSheetContext(actor, actor.areaId, body.shift_order_sheet_id);
+    }
 
     const items = await this.prepareOrderItems(body.order_list, sourceAreaId);
     const draftStatusId = await this.getStatusId(ORDER_STATUS.DRAFT);
@@ -921,7 +1071,7 @@ export class OrderService {
     return this.findOrder(orderId);
   }
 
-  async submit(actor: OrderActor, orderId: string) {
+  async submit(actor: OrderActor, orderId: string, body: SubmitOrderBody = {}) {
     const order = await this.findOrder(orderId);
     this.assertPackingOwner(actor, order);
     try {
@@ -931,14 +1081,14 @@ export class OrderService {
     }
     if (!order.order_items.length) serviceError(400, 'Order must contain at least one item');
 
-    const pendingStatusId = await this.getStatusId(ORDER_STATUS.PENDING);
-    const { error } = await this.db
-      .from('orders')
-      .update({ status_id: pendingStatusId, submitted_at: new Date().toISOString() })
-      .eq('id', orderId)
-      .eq('status_id', order.status_id);
-    if (error) databaseError(error, 'Cannot submit order');
-    return this.findOrder(orderId);
+    const { error } = await this.db.rpc('submit_order_to_pending', {
+      p_order_id: orderId,
+      p_actor_id: actor.id,
+      p_shift_order_sheet_id: body.shift_order_sheet_id ?? null,
+      p_submitted_at: new Date().toISOString(),
+    });
+    if (error) submitRpcError(error);
+    return this.finishStatusTransition(actor, order, NOTIFICATION_TYPE.ORDER_CREATED);
   }
 
   async list(actor: OrderActor, query: OrderListQuery = {}) {
@@ -953,11 +1103,7 @@ export class OrderService {
       .from('orders')
       .select(ORDER_LIST_SELECT, { count: 'exact' })
       .eq('is_deleted', false);
-    const isOwnerScoped = hasPermission(
-      actor,
-      PERMISSION_CODE.SUPPLY_ORDER_CREATE,
-    ) && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE);
-    if (!actor.isSystemAdmin && isOwnerScoped) {
+    if (isOrderAreaScoped(actor)) {
       request = request.eq('to_area_id', actor.areaId);
     }
     if (statusId) request = request.eq('status_id', statusId);
@@ -1062,7 +1208,7 @@ export class OrderService {
       p_note: body.note ?? null,
     });
     if (orderError) rpcError(orderError);
-    return this.findOrder(orderId);
+    return this.finishStatusTransition(actor, order);
   }
 
   async allocate(actor: OrderActor, orderId: string) {
@@ -1146,7 +1292,7 @@ export class OrderService {
     } catch (error) {
       translateRuleError(error);
     }
-    return this.findOrder(orderId);
+    return this.finishStatusTransition(actor, order);
   }
 
   async issue(actor: OrderActor, orderId: string, body: IssueOrderBody) {
@@ -1199,7 +1345,7 @@ export class OrderService {
     });
     if (error) issueRpcError(error);
 
-    const result = await this.findOrder(orderId);
+    const result = await this.finishStatusTransition(actor, order);
     const { data: transactions, error: transactionError } = await this.db
       .from('stock_transactions')
       .select('*')
@@ -1229,7 +1375,7 @@ export class OrderService {
       .eq('id', orderId)
       .eq('status_id', order.status_id);
     if (error) databaseError(error, 'Cannot receive order');
-    return this.findOrder(orderId);
+    return this.finishStatusTransition(actor, order);
   }
 
   async complete(actor: OrderActor, orderId: string) {
@@ -1257,7 +1403,7 @@ export class OrderService {
       .eq('id', orderId)
       .eq('status_id', order.status_id);
     if (error) databaseError(error, 'Cannot complete order');
-    return this.findOrder(orderId);
+    return this.finishStatusTransition(actor, order);
   }
 
   async cancel(actor: OrderActor, orderId: string, body: CancelOrderBody) {
@@ -1277,6 +1423,6 @@ export class OrderService {
     } catch (error) {
       translateRuleError(error);
     }
-    return this.findOrder(orderId);
+    return this.finishStatusTransition(actor, order);
   }
 }

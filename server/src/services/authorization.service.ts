@@ -23,6 +23,7 @@ interface RoleAccessRow {
 }
 
 interface UserRoleAccessRow {
+  user_id?: string;
   role_id: string;
   is_active: boolean;
   is_deleted: boolean;
@@ -184,6 +185,78 @@ export const getEffectivePermissions = async (
     userRoles,
     rolePermissionRows,
   );
+};
+
+/**
+ * Resolves all active application principals in three bounded database reads.
+ * Notification fan-out uses this instead of one permission query per user.
+ */
+export const getActiveAuthorizationContexts = async (
+  fastify: FastifyInstance,
+): Promise<AuthorizationContext[]> => {
+  const { data: usersData, error: usersError } = await fastify.supabaseAdmin
+    .from('users')
+    .select('id, email, area_id, is_active, is_verified, is_deleted')
+    .eq('is_active', true)
+    .eq('is_verified', true)
+    .eq('is_deleted', false);
+  if (usersError) databaseFailure('Không thể tải danh sách người dùng nhận thông báo');
+
+  const users = (usersData ?? []) as UserAccessRow[];
+  if (users.length === 0) return [];
+  const userIds = users.map((user) => user.id);
+
+  const { data: mappingsData, error: mappingsError } = await fastify.supabaseAdmin
+    .from('user_roles')
+    .select(`
+      user_id, role_id, is_active, is_deleted,
+      role:roles!user_roles_role_id_fkey!inner(
+        id, code, name, is_system, is_active, is_deleted
+      )
+    `)
+    .in('user_id', userIds)
+    .eq('is_active', true)
+    .eq('is_deleted', false)
+    .eq('role.is_active', true)
+    .eq('role.is_deleted', false);
+  if (mappingsError) databaseFailure('Không thể tải role của người nhận thông báo');
+
+  const mappings = (mappingsData ?? []) as unknown as UserRoleAccessRow[];
+  const roleIds = [...new Set(mappings.map((mapping) => mapping.role_id))];
+  let rolePermissions: RolePermissionAccessRow[] = [];
+  if (roleIds.length > 0) {
+    const { data, error } = await fastify.supabaseAdmin
+      .from('role_permissions')
+      .select(`
+        role_id, is_active, is_deleted,
+        permission:permissions!role_permissions_permission_id_fkey!inner(
+          code, is_active, is_deleted
+        )
+      `)
+      .in('role_id', roleIds)
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .eq('permission.is_active', true)
+      .eq('permission.is_deleted', false);
+    if (error) databaseFailure('Không thể tải permission của người nhận thông báo');
+    rolePermissions = (data ?? []) as unknown as RolePermissionAccessRow[];
+  }
+
+  const contexts: AuthorizationContext[] = [];
+  for (const user of users) {
+    const userMappings = mappings.filter((mapping) => mapping.user_id === user.id);
+    const userRoleIds = new Set(userMappings.map((mapping) => mapping.role_id));
+    try {
+      contexts.push(resolveEffectivePermissions(
+        user,
+        userMappings,
+        rolePermissions.filter((mapping) => userRoleIds.has(mapping.role_id)),
+      ));
+    } catch (error) {
+      if (!(error instanceof AuthorizationError) || error.statusCode >= 500) throw error;
+    }
+  }
+  return contexts;
 };
 
 export const hasPermission = (

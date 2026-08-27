@@ -14,8 +14,13 @@ export interface OrderListItemInput {
 export interface CreateOrderBody {
   from_area_id: string;
   to_area_id: string;
+  shift_order_sheet_id?: string;
   note?: string;
   order_list: OrderListItemInput[];
+}
+
+export interface SubmitOrderBody {
+  shift_order_sheet_id?: string;
 }
 
 export interface PatchOrderBody {

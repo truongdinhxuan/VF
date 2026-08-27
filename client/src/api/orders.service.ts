@@ -11,6 +11,7 @@ import type {
   OrderStatus,
   ReceiveOrderInput,
   RejectOrderInput,
+  SubmitOrderInput,
   UpdateOrderInput,
 } from "../types/orders";
 import type { PaginatedResponse } from '../types/pagination.types';
@@ -48,8 +49,12 @@ export const createOrder = async (input: CreateOrderInput): Promise<Order> =>
 export const updateOrder = async (id: string, input: UpdateOrderInput): Promise<Order> =>
   normalizeOrder(get(await instance.patch<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}`, input)));
 
-export const submitOrder = async (id: string): Promise<Order> =>
-  normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/submit`)));
+export const submitOrder = async (
+  id: string,
+  input: SubmitOrderInput = {},
+): Promise<Order> => normalizeOrder(get(
+  await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/submit`, input),
+));
 
 export const approveOrder = async (id: string, input: ApproveOrderInput): Promise<Order> =>
   normalizeOrder(get(await instance.post<ApiEnvelope<Order>, ApiEnvelope<Order>>(`orders/${id}/approve`, input)));

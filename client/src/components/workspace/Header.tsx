@@ -2,7 +2,8 @@ import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch } from "@fortawesome/free-solid-svg-icons/faSearch";
 import { AppTooltip } from "../common/AppTooltip";
-import { getButtonClassName, IconButton, TextButton } from "../common/Button";
+import { getButtonClassName, IconButton } from "../common/Button";
+import NotificationBell from "../notifications/NotificationBell";
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
@@ -79,44 +80,11 @@ const Header = ({
 
         <div className="hidden h-6 w-px bg-slate-300 md:block"></div>
 
-        {/* Nút Thông Báo */}
-        <div className="relative" ref={notificationRef}>
-          <AppTooltip content="Thông báo" side="bottom">
-            <button
-              type="button"
-              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              className={`${IconButton} relative`}
-              aria-label="Mở thông báo"
-              aria-expanded={isNotificationsOpen}
-              aria-haspopup="menu"
-            >
-              <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" aria-hidden="true"></span>
-              <i className="hgi-stroke hgi-notification-01 text-2xl" aria-hidden="true"></i>
-            </button>
-          </AppTooltip>
-
-          {/* Bảng Dropdown Thông Báo */}
-          {isNotificationsOpen && (
-            <div className="absolute right-0 top-full mt-3 w-[300px] sm:w-[360px] z-50 rounded-2xl border border-slate-100 bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-100 p-4">
-                <h3 className="font-bold text-slate-800">Notifications</h3>
-                <button type="button" className={TextButton}>Mark all as read</button>
-              </div>
-              <div className="max-h-80 overflow-y-auto p-2">
-                <div className="flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-slate-50 cursor-pointer">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <i className="hgi-stroke hgi-user text-lg"></i>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">New customer signed up</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Sarah Connor joined pro plan.</p>
-                    <p className="mt-1.5 text-[10px] font-bold text-slate-400">2 MINS AGO</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <NotificationBell
+          isOpen={isNotificationsOpen}
+          setIsOpen={setIsNotificationsOpen}
+          containerRef={notificationRef}
+        />
 
         {/* Profile Hình Tròn góc phải (Mobile) */}
         <div className="flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white p-1 transition-all hover:bg-slate-50 md:hidden">

@@ -60,9 +60,11 @@ const OVERVIEW_PERMISSIONS = [
   PERMISSION_CODE.ADMIN_USER_READ,
 ] as const;
 
-const ORDER_READ_PERMISSIONS = [
+export const ORDER_READ_PERMISSIONS = [
   PERMISSION_CODE.SUPPLY_ORDER_CREATE,
   PERMISSION_CODE.SUPPLY_ORDER_APPROVE,
+  PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE,
+  PERMISSION_CODE.SUPPLY_ORDER_CONFIRM_ALLOCATION,
   PERMISSION_CODE.SUPPLY_ORDER_ISSUE,
 ] as const;
 
@@ -85,6 +87,7 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
         label: 'Quản lý giao dịch',
         items: [
           { path: 'orders', label: 'Orders', icon: faClipboardList, anyPermissions: ORDER_READ_PERMISSIONS },
+          { path: 'shift-order-sheets', label: 'Phiếu order ca', icon: faClockRotateLeft, anyPermissions: ORDER_READ_PERMISSIONS },
           { path: 'orders/create', label: 'Tạo order', icon: faPlus, permission: PERMISSION_CODE.SUPPLY_ORDER_CREATE },
           { path: 'stock-balances', label: 'Vật tư tồn kho', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
           { path: 'stock-transactions', label: 'Giao dịch vật tư', icon: faClockRotateLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },

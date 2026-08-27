@@ -7,6 +7,7 @@ const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const orderService = read('src/services/orders.service.ts');
+const orderAccess = read('src/domain/order-access.ts');
 const createOrderPage = read('../client/src/pages/orders/CreateOrderPage.tsx');
 const orderDetailPage = read('../client/src/pages/orders/OrderDetailPage.tsx');
 
@@ -29,10 +30,11 @@ describe('order source and receiving area flow', () => {
 
   it('scopes order creators without approval permission by the receiving area', () => {
     assert.match(orderService, /order\.to_area_id !== actor\.areaId/);
-    assert.match(orderService, /const isOwnerScoped = hasPermission\(/);
-    assert.match(orderService, /PERMISSION_CODE\.SUPPLY_ORDER_CREATE/);
-    assert.match(orderService, /!hasPermission\(actor, PERMISSION_CODE\.SUPPLY_ORDER_APPROVE\)/);
+    assert.match(orderService, /isOrderAreaScoped\(actor\)/);
     assert.match(orderService, /request = request\.eq\('to_area_id', actor\.areaId\)/);
+    assert.match(orderAccess, /includesPermission\(access, PERMISSION_CODE\.SUPPLY_ORDER_CREATE\)/);
+    assert.match(orderAccess, /!includesPermission\(access, PERMISSION_CODE\.SUPPLY_ORDER_APPROVE\)/);
+    assert.match(orderAccess, /order\.to_area_id === access\.areaId/);
     assert.match(
       orderDetailPage,
       /user\?\.publicData\.area_id === order\.to_area_id/,

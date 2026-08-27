@@ -10,6 +10,7 @@ export default fp(async (fastify, opts) => {
     origin: process.env.ORIGIN_URL,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ['Content-Disposition'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   // console.log(process.env.ORIGIN_URL);

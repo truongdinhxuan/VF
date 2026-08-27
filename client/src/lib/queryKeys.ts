@@ -57,6 +57,8 @@ export const queryKeys = {
     detail: (id: string) => ['inventory-discrepancies', 'detail', id] as const,
   },
   orders: resourceKeys('orders'),
+  shiftOrderSheets: resourceKeys('shift-order-sheets'),
+  notifications: resourceKeys('notifications'),
   orderStatuses: resourceKeys('order-statuses'),
   stockTransactionTypes: resourceKeys('stock-transaction-types'),
   adjustmentReasons: resourceKeys('adjustment-reasons'),

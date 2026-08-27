@@ -146,16 +146,6 @@ begin
 
   drop trigger phase8_force_insert_failure on public.user_work_shift_assignments;
 
-  if to_regclass('public.supply_shift_order_sheets') is not null then
-    raise exception 'P8-022 Phase 9 table exists unexpectedly';
-  end if;
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'orders'
-      and column_name = 'shift_order_sheet_id'
-  ) then
-    raise exception 'P8-022 Phase 9 orders column exists unexpectedly';
-  end if;
 end;
 $$;
 

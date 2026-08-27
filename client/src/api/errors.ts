@@ -26,6 +26,14 @@ const businessErrorMessages: Record<string, string> = {
     "Không đủ số chồng tồn kho để phân bổ.",
   ACTUAL_STACK_EXCEEDS_EXPECTED:
     "Số chồng thực tế không được vượt số chồng dự kiến.",
+  ORDER_ITEM_ZERO_STOCK:
+    "Vật tư hiện không còn tồn tại khu vực cấp. Không thể gửi Order.",
+  WORK_SHIFT_ASSIGNMENT_NOT_FOUND:
+    "Tài khoản chưa có ca làm việc hiệu lực tại thời điểm submit.",
+  ORDER_SHIFT_LEADER_NOT_FOUND:
+    "Không xác định được Tổ trưởng phụ trách từ thông tin managed_by.",
+  ORDER_SHIFT_SHEET_CONTEXT_INVALID:
+    "Phiếu Order Ca không thuộc đúng Area, nhóm, ca hoặc ngày làm việc.",
 };
 
 const technicalErrorPattern = /SQLSTATE|PostgREST|PGRST\d+|duplicate key|violates .* constraint|relation .* does not exist|function .* does not exist/i;

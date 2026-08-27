@@ -25,6 +25,10 @@ const orderRoutes = readFileSync(
   resolve(process.cwd(), 'src/routes/orders/index.ts'),
   'utf8',
 );
+const orderAccess = readFileSync(
+  resolve(process.cwd(), 'src/domain/order-access.ts'),
+  'utf8',
+);
 
 describe('atomic order issue migration', () => {
   it('locks order, item and stock rows before issuing', () => {
@@ -133,7 +137,8 @@ describe('Supply stack Phase 6 issue finalization', () => {
     const readRequirement = orderRoutes.match(
       /const orderReadPermission =[\s\S]*?const orderReviewPermission/,
     )?.[0] ?? '';
-    assert.match(readRequirement, /SUPPLY_ORDER_ISSUE/);
+    assert.match(readRequirement, /ORDER_READ_PERMISSIONS/);
+    assert.match(orderAccess, /SUPPLY_ORDER_ISSUE/);
     assert.doesNotMatch(readRequirement, /role\s*===|DATA_MATERIAL/);
   });
 });

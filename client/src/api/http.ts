@@ -26,7 +26,9 @@ instance.interceptors.request.use(
 
 // 3. (Tùy chọn) TẠO RESPONSE INTERCEPTOR để xử lý lỗi văng ra login
 instance.interceptors.response.use(
-  (response) => response.data, // Tự động lấy data, mốt gọi API không cần .data nữa
+  (response) => response.config.responseType === 'blob'
+    ? response
+    : response.data, // Binary download cần giữ headers; JSON giữ contract data hiện tại.
   (error) => {
     // Nếu Backend báo lỗi 401 (Hết hạn hoặc sai token)
     if (error.response && error.response.status === 401) {
