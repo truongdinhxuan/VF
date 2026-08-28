@@ -63,6 +63,14 @@ export const streamNotifications = (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
+  const requestOrigin = request.headers.origin;
+  const allowedOrigin = process.env.ORIGIN_URL?.trim();
+  if (requestOrigin && allowedOrigin && requestOrigin === allowedOrigin) {
+    reply.raw.setHeader('Access-Control-Allow-Origin', requestOrigin);
+    reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+    reply.raw.setHeader('Vary', 'Origin');
+  }
+
   reply.hijack();
   reply.raw.statusCode = 200;
   reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');

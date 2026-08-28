@@ -130,10 +130,15 @@ try {
 
   streamController = new AbortController();
   const streamResponse = await fetch(`${runtime.baseUrl}/notifications/stream`, {
-    headers: { authorization: `Bearer ${signToken(ids.peer)}` },
+    headers: {
+      authorization: `Bearer ${signToken(ids.peer)}`,
+      origin: ORIGIN_URL,
+    },
     signal: streamController.signal,
   });
   assert.equal(streamResponse.status, 200);
+  assert.equal(streamResponse.headers.get('access-control-allow-origin'), ORIGIN_URL);
+  assert.equal(streamResponse.headers.get('access-control-allow-credentials'), 'true');
   assert.match(streamResponse.headers.get('content-type') ?? '', /text\/event-stream/);
   const reader = streamResponse.body.getReader();
   await readSseEvent(reader, 'connected');

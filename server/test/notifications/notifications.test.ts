@@ -59,4 +59,16 @@ describe('Phase 11 persistent Supply notifications', () => {
     assert.match(controller, /'stock_changed'/);
     assert.doesNotMatch(controller, /stock_changed[\s\S]{0,180}(quantity|stock_balance_id|supply_id)/);
   });
+
+  it('writes configured CORS headers before hijacking the SSE response', () => {
+    const controller = read('src/controllers/notifications/index.ts');
+    const corsHeaderIndex = controller.indexOf("setHeader('Access-Control-Allow-Origin'");
+    const hijackIndex = controller.indexOf('reply.hijack()');
+    assert.notEqual(corsHeaderIndex, -1);
+    assert.notEqual(hijackIndex, -1);
+    assert.ok(corsHeaderIndex < hijackIndex);
+    assert.match(controller, /requestOrigin === allowedOrigin/);
+    assert.match(controller, /Access-Control-Allow-Credentials/);
+    assert.match(controller, /setHeader\('Vary', 'Origin'\)/);
+  });
 });
