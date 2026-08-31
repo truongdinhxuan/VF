@@ -246,7 +246,7 @@ const CreateOrderPage = () => {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div><h2 className="font-bold text-slate-900">Vật tư yêu cầu</h2><p className="mt-1 text-xs text-slate-500">Mỗi dòng phải chọn Supply, Provider và có số lượng lớn hơn 0.</p></div>
             <button type="button" onClick={() => append(emptyItem())} className={SecondaryButton}>Thêm dòng</button>
           </div>
@@ -328,9 +328,9 @@ const CreateOrderPage = () => {
         </div>
 
         {submitError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{submitError}</div>}
-        <div className="flex justify-end gap-3">
-          <Link to={ordersPath} className={SecondaryButton}>Hủy</Link>
-          <button type="submit" disabled={isSubmitting || referenceUnavailable} className={InfoButton}>{isSubmitting ? 'Đang tạo...' : 'Lưu DRAFT'}</button>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Link to={ordersPath} className={`${SecondaryButton} w-full sm:w-auto`}>Hủy</Link>
+          <button type="submit" disabled={isSubmitting || referenceUnavailable} className={`${InfoButton} w-full sm:w-auto`}>{isSubmitting ? 'Đang tạo...' : 'Lưu DRAFT'}</button>
         </div>
       </form>
     </section>

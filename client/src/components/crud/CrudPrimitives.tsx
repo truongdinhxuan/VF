@@ -183,7 +183,7 @@ export const CrudModal = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="crud-modal-title"
-        className="my-auto max-h-[calc(100vh-1.5rem)] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[90vh]"
+        className="my-auto max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[90vh] sm:max-h-[90dvh]"
       >
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
           <h2
@@ -210,7 +210,7 @@ export const CrudModal = ({
           </AppTooltip>
         </div>
 
-        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:p-5">
+        <div className="max-h-[calc(100vh-6rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:max-h-[calc(90dvh-4.5rem)] sm:p-5">
           {children}
         </div>
       </div>

@@ -1,16 +1,12 @@
-import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
-  faChevronUp,
   faEllipsis,
-  faGear,
-  faRightFromBracket,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { AppTooltip } from "../common/AppTooltip";
-import { getButtonClassName, IconButton } from "../common/Button";
+import { IconButton } from "../common/Button";
 import { buildWorkspaceNavigation } from "../../constants/workspaceNavigation";
 import {
   getRoleHomePath,
@@ -24,9 +20,6 @@ interface SidebarProps {
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
   pathname: string;
-  isProfileDropdownOpen: boolean;
-  setIsProfileDropdownOpen: (open: boolean) => void;
-  profileRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const Sidebar = ({
@@ -35,13 +28,9 @@ const Sidebar = ({
   isMobileSidebarOpen,
   setIsMobileSidebarOpen,
   pathname,
-  isProfileDropdownOpen,
-  setIsProfileDropdownOpen,
-  profileRef,
 }: SidebarProps) => {
-  const navigate = useNavigate();
   const {
-    user, role, hasPermission, hasAnyPermission, hasAllPermissions, logoutContext,
+    user, role, hasPermission, hasAnyPermission, hasAllPermissions,
   } = useAuth();
   const navigation = buildWorkspaceNavigation(
     role,
@@ -78,97 +67,89 @@ const Sidebar = ({
     return pathname === to || pathname.startsWith(`${to}/`);
   };
 
-  const handleLogout = () => {
-    logoutContext();
-    navigate("/auth/login", { replace: true });
-  };
-
   return (
     <aside
       id="sidebar"
-      onClick={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
-      className={`z-50 flex h-screen h-dvh max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl transition-all duration-300 ease-in-out
-        fixed inset-y-0 left-0 rounded-r-3xl
-        ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        md:relative md:inset-y-auto md:m-4 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:rounded-3xl
-        ${isSidebarCollapsed ? "sidebar-collapsed cursor-pointer md:w-20" : "w-64"}`}
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl transition-[width,transform] duration-300 ease-in-out md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:rounded-3xl md:visible lg:m-4
+        ${isMobileSidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full"}
+        ${isSidebarCollapsed ? "md:w-[4.5rem]" : "md:w-64"}`}
     >
-      <div className="w-full shrink-0 px-6 pb-4 pt-6">
-        <div
-          onClick={(event) => event.stopPropagation()}
-          className="flex items-center justify-between px-2"
-        >
-          <Link to={homePath} className="flex items-center">
+      <div className={`w-full shrink-0 pb-4 pt-5 ${isSidebarCollapsed ? "px-3 md:px-2" : "px-5"}`}>
+        <div className={`flex items-center justify-between gap-2 ${isSidebarCollapsed ? "md:flex-col" : ""}`}>
+          <Link
+            to={homePath}
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="flex shrink-0 items-center rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            aria-label="Về trang tổng quan"
+          >
             <img
               className="w-9"
               src="https://upload.wikimedia.org/wikipedia/commons/4/43/VinFast_logo_%28simple_variant%29.svg"
               alt="VinFast"
             />
           </Link>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-1">
             <AppTooltip content="Đóng menu" side="bottom">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(false)}
                 className={`${IconButton} md:hidden`}
                 aria-label="Đóng menu"
+                aria-controls="sidebar"
               >
                 <FontAwesomeIcon icon={faXmark} className="text-xl" aria-hidden="true" />
               </button>
             </AppTooltip>
-            {!isSidebarCollapsed && (
-              <AppTooltip content="Thu gọn menu" side="bottom">
-                <button
-                  type="button"
-                  onClick={() => setIsSidebarCollapsed(true)}
-                  className={`${IconButton} hidden md:inline-flex`}
-                  aria-label="Thu gọn menu"
-                >
-                  <FontAwesomeIcon icon={faBars} className="text-xl" aria-hidden="true" />
-                </button>
-              </AppTooltip>
-            )}
+            <AppTooltip content={isSidebarCollapsed ? "Mở rộng menu" : "Thu gọn menu"} side="right">
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className={`${IconButton} !hidden md:!inline-flex`}
+                aria-label={isSidebarCollapsed ? "Mở rộng menu" : "Thu gọn menu"}
+                aria-expanded={!isSidebarCollapsed}
+              >
+                <FontAwesomeIcon icon={faBars} className="text-xl" aria-hidden="true" />
+              </button>
+            </AppTooltip>
           </div>
         </div>
       </div>
 
       <nav
-        className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto overscroll-contain px-6 pb-6 [scrollbar-gutter:stable]"
-        aria-label="Admin navigation"
+        className={`flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto overscroll-contain pb-6 [scrollbar-gutter:stable] ${isSidebarCollapsed ? "px-4 md:px-2" : "px-5"}`}
+        aria-label="Điều hướng workspace"
       >
         {navigation.map((catalog) => (
           <div key={catalog.label} className="space-y-3">
-            {!isSidebarCollapsed ? (
-              <p className="sidebar-text mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                {catalog.label}
-              </p>
-            ) : (
-              <div className="mb-2 flex justify-center text-slate-300">
+            <p className={`mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 ${isSidebarCollapsed ? "md:hidden" : ""}`}>
+              {catalog.label}
+            </p>
+            {isSidebarCollapsed && (
+              <div className="mb-2 hidden justify-center text-slate-300 md:flex">
                 <FontAwesomeIcon icon={faEllipsis} aria-hidden="true" />
               </div>
             )}
             {catalog.groups.map((group) => (
               <div key={`${catalog.label}-${group.label}`} className="space-y-1.5">
-                {!isSidebarCollapsed && (
-                  <p className="sidebar-text px-3 pt-1 text-[10px] font-semibold text-slate-400">
-                    {group.label}
-                  </p>
-                )}
+                <p className={`px-3 pt-1 text-[10px] font-semibold text-slate-400 ${isSidebarCollapsed ? "md:hidden" : ""}`}>
+                  {group.label}
+                </p>
                 {group.items.map((item) => (
                   <AppTooltip
                     key={`${catalog.label}-${group.label}-${item.label}`}
                     content={item.label}
                     side="right"
-                    disabled={!isSidebarCollapsed}
+                    disabled={!isSidebarCollapsed || isMobileSidebarOpen}
                   >
                     <Link
                       to={item.to}
                       onClick={() => setIsMobileSidebarOpen(false)}
-                      className={`sidebar-link w-full ${checkActive(item.to) ? "active" : ""}`}
+                      className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isSidebarCollapsed ? "md:mx-auto md:h-11 md:w-11 md:justify-center md:px-0" : ""} ${checkActive(item.to) ? "bg-blue-50 font-semibold text-blue-700" : ""}`}
                       aria-label={isSidebarCollapsed ? item.label : undefined}
+                      aria-current={checkActive(item.to) ? "page" : undefined}
                     >
                       <FontAwesomeIcon icon={item.icon} className="w-5 shrink-0 text-lg" aria-hidden="true" />
-                      <span className="sidebar-text min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm">
+                      <span className={`min-w-0 flex-1 truncate ${isSidebarCollapsed ? "md:hidden" : ""}`}>
                         {item.label}
                       </span>
                     </Link>
@@ -180,93 +161,25 @@ const Sidebar = ({
         ))}
       </nav>
 
-      <div className="w-full shrink-0 border-t border-slate-100 bg-white p-4">
-        <div className="relative" ref={profileRef}>
-          <AppTooltip
-            content={`${displayName} — ${roleDisplayName}`}
-            side="right"
-            disabled={!isSidebarCollapsed}
-          >
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsProfileDropdownOpen(!isProfileDropdownOpen);
-              }}
-              className={getButtonClassName({
-                variant: "ghost",
-                size: "sm",
-                block: true,
-                className: "!justify-start rounded-xl text-left",
-              })}
-              aria-label={isSidebarCollapsed ? `Mở menu tài khoản của ${displayName}` : undefined}
-              aria-expanded={isProfileDropdownOpen}
-              aria-haspopup="menu"
-            >
+      <div className={`w-full shrink-0 border-t border-slate-100 bg-white ${isSidebarCollapsed ? "p-3 md:px-2" : "p-4"}`}>
+        <AppTooltip
+          content={`${displayName} — ${roleDisplayName}`}
+          side="right"
+          disabled={!isSidebarCollapsed || isMobileSidebarOpen}
+        >
+          <div className={`flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 p-2 ${isSidebarCollapsed ? "md:justify-center" : ""}`}>
               <img
                 src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"}
                 alt=""
                 aria-hidden="true"
                 className="h-10 w-10 shrink-0 rounded-full border-slate-200 object-cover shadow"
               />
-              {!isSidebarCollapsed && (
-                <>
-                  <div className="flex flex-1 flex-col overflow-hidden">
-                    <span className="truncate text-sm font-bold text-slate-700">{displayName}</span>
-                    <span className="truncate text-[11px] text-slate-400">
-                      {roleDisplayName}
-                    </span>
-                  </div>
-                  <FontAwesomeIcon icon={faChevronUp} className="shrink-0 text-slate-400" aria-hidden="true" />
-                </>
-              )}
-            </button>
-          </AppTooltip>
-
-          {isProfileDropdownOpen && (
-            <div className="absolute bottom-full left-0 z-50 mb-2 w-full overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-xl">
-              <AppTooltip
-                content="Cài đặt"
-                side="right"
-                disabled={!isSidebarCollapsed}
-              >
-                <button
-                  type="button"
-                  className={getButtonClassName({
-                    variant: "ghost",
-                    size: "sm",
-                    block: true,
-                    className: "!justify-start",
-                  })}
-                  aria-label={isSidebarCollapsed ? "Cài đặt" : undefined}
-                >
-                  <FontAwesomeIcon icon={faGear} aria-hidden="true" />
-                  <span className="sidebar-text">Settings</span>
-                </button>
-              </AppTooltip>
-              <AppTooltip
-                content="Đăng xuất"
-                side="right"
-                disabled={!isSidebarCollapsed}
-              >
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className={getButtonClassName({
-                    variant: "textError",
-                    size: "sm",
-                    block: true,
-                    className: "!justify-start",
-                  })}
-                  aria-label={isSidebarCollapsed ? "Đăng xuất" : undefined}
-                >
-                  <FontAwesomeIcon icon={faRightFromBracket} aria-hidden="true" />
-                  <span className="sidebar-text">Logout</span>
-                </button>
-              </AppTooltip>
+            <div className={`min-w-0 flex-1 ${isSidebarCollapsed ? "md:hidden" : ""}`}>
+              <p className="truncate text-sm font-bold text-slate-700">{displayName}</p>
+              <p className="truncate text-[11px] text-slate-500">{roleDisplayName}</p>
             </div>
-          )}
-        </div>
+          </div>
+        </AppTooltip>
       </div>
     </aside>
   );

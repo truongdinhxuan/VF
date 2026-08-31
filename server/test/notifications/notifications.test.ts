@@ -63,11 +63,15 @@ describe('Phase 11 persistent Supply notifications', () => {
   it('writes configured CORS headers before hijacking the SSE response', () => {
     const controller = read('src/controllers/notifications/index.ts');
     const corsHeaderIndex = controller.indexOf("setHeader('Access-Control-Allow-Origin'");
-    const hijackIndex = controller.indexOf('reply.hijack()');
+    const hijackIndex = controller.indexOf('reply.hijack();');
     assert.notEqual(corsHeaderIndex, -1);
     assert.notEqual(hijackIndex, -1);
     assert.ok(corsHeaderIndex < hijackIndex);
-    assert.match(controller, /requestOrigin === allowedOrigin/);
+    assert.match(
+      controller,
+      /setHeader\('Access-Control-Allow-Origin', allowedOrigin\)/,
+    );
+    assert.doesNotMatch(controller, /requestOrigin === allowedOrigin/);
     assert.match(controller, /Access-Control-Allow-Credentials/);
     assert.match(controller, /setHeader\('Vary', 'Origin'\)/);
   });

@@ -60,7 +60,7 @@ export const DataTable = <T extends object>({
   }
 
   return (
-    <div className="relative w-full space-y-4" aria-busy={loading}>
+    <div className="relative min-w-0 w-full space-y-4" aria-busy={loading}>
       {loading && (
         <div
           role="status"
@@ -71,8 +71,8 @@ export const DataTable = <T extends object>({
         </div>
       )}
       {(onSearchChange || renderTopToolbar) && (
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
             {onSearchChange && (
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-slate-700">Search:</label>
@@ -91,7 +91,7 @@ export const DataTable = <T extends object>({
       )}
 
       <div
-        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+        className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
         aria-busy={loading}
       >
         <div className="overflow-x-auto">

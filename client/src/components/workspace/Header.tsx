@@ -4,9 +4,10 @@ import { faSearch } from "@fortawesome/free-solid-svg-icons/faSearch";
 import { AppTooltip } from "../common/AppTooltip";
 import { getButtonClassName, IconButton } from "../common/Button";
 import NotificationBell from "../notifications/NotificationBell";
+import UserMenu from "./UserMenu";
 
 interface HeaderProps {
-  isSidebarCollapsed: boolean;
+  isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -16,7 +17,7 @@ interface HeaderProps {
 }
 
 const Header = ({
-  isSidebarCollapsed,
+  isMobileSidebarOpen,
   setIsMobileSidebarOpen,
   searchQuery,
   setSearchQuery,
@@ -25,12 +26,8 @@ const Header = ({
   notificationRef,
 }: HeaderProps) => {
   return (
-     <header className={`z-20 mx-3 mt-4 duration-300 ease-in-out flex min-h-14 shrink-0 items-center justify-between rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 shadow-xl sm:mx-6 sm:mt-6 sm:min-h-16 sm:px-6
-
-      ${isSidebarCollapsed ? "md:mx-130 hover:scale-105 hover:bg-white" : "md:mx-10"}
-
-    `}>      
-      <div className="flex items-center gap-4">
+     <header className="z-20 mx-3 mt-3 flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 shadow-lg backdrop-blur-xl sm:mx-4 sm:mt-4 sm:min-h-16 sm:px-4 md:mx-6 lg:mx-8">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         {/* Nút Hamburger cho Mobile (< 768px) */}
         <AppTooltip content="Mở menu" side="bottom">
           <button
@@ -38,18 +35,19 @@ const Header = ({
             onClick={() => setIsMobileSidebarOpen(true)}
             className={`${IconButton} md:hidden`}
             aria-label="Mở menu"
+            aria-controls="sidebar"
+            aria-expanded={isMobileSidebarOpen}
           >
             <i className="hgi-stroke hgi-menu-05 text-2xl" aria-hidden="true"></i>
           </button>
         </AppTooltip>
-
-        {/* Tiêu đề hoặc Welcome Text (Tuỳ chọn cho mobile đỡ trống) */}
-        {/* <h2 className="hidden sm:block text-lg font-semibold text-slate-800">
-          Good Morning!
-        </h2> */}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-800 sm:text-base">VF Workspace</p>
+          <p className="hidden truncate text-xs text-slate-500 sm:block md:hidden">Quản lý vận hành</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2 lg:gap-3">
         {/* Thanh tìm kiếm (Ẩn ở mobile nhỏ, hiện ở màn hình vừa và lớn) */}
         <div className="relative hidden md:block">
           <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-400" aria-hidden="true" />
@@ -78,22 +76,14 @@ const Header = ({
           )}
         </div>
 
-        <div className="hidden h-6 w-px bg-slate-300 md:block"></div>
+        <div className="hidden h-6 w-px bg-slate-200 md:block"></div>
 
         <NotificationBell
           isOpen={isNotificationsOpen}
           setIsOpen={setIsNotificationsOpen}
           containerRef={notificationRef}
         />
-
-        {/* Profile Hình Tròn góc phải (Mobile) */}
-        <div className="flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white p-1 transition-all hover:bg-slate-50 md:hidden">
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"
-            alt="User Profile"
-            className="h-8 w-8 rounded-full object-cover"
-          />
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

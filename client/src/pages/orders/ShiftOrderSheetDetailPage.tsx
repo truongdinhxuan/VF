@@ -71,7 +71,7 @@ const ShiftOrderSheetDetailPage = () => {
           <h1 className="mt-3 text-2xl font-bold text-slate-900">Phiếu Order Ca</h1>
           <p className="mt-1 text-sm text-slate-500">Trạng thái Order được đọc trực tiếp từ Order hiện tại.</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:flex-wrap sm:items-center sm:justify-end">
           {hasAnyPermission(ORDER_READ_PERMISSIONS) && (
             <button
               type="button"

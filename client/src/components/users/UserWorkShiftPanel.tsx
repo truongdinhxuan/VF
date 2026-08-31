@@ -116,7 +116,7 @@ export const UserWorkShiftPanel = ({ userId, canAssign }: {
               required
             />
           </label>
-          <div className="sm:col-span-2 flex items-center justify-between gap-3">
+          <div className="flex flex-col items-stretch gap-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
             {feedback ? <p className="text-sm text-slate-700" role="status">{feedback}</p> : <span />}
             <button
               type="submit"

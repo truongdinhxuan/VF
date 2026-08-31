@@ -63,10 +63,14 @@ export const streamNotifications = (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
-  const requestOrigin = request.headers.origin;
   const allowedOrigin = process.env.ORIGIN_URL?.trim();
-  if (requestOrigin && allowedOrigin && requestOrigin === allowedOrigin) {
-    reply.raw.setHeader('Access-Control-Allow-Origin', requestOrigin);
+  if (allowedOrigin) {
+    // `reply.hijack()` bypasses Fastify's normal response lifecycle, so the
+    // CORS plugin cannot reliably add headers to this streamed response.
+    // Railway may also omit the forwarded Origin header on a long-lived GET.
+    // Returning the configured singleton origin is safe: browsers whose
+    // Origin differs from this value still reject access to the response.
+    reply.raw.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
     reply.raw.setHeader('Vary', 'Origin');
   }

@@ -88,7 +88,7 @@ const NotificationBell = ({ isOpen, setIsOpen, containerRef }: NotificationBellP
 
       {isOpen && (
         <section
-          className="absolute right-0 top-full z-50 mt-3 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+          className="fixed left-3 right-3 top-[4.75rem] z-[70] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[min(360px,calc(100vw-2rem))]"
           aria-label="Danh sách thông báo"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
