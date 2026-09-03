@@ -1,29 +1,44 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { createUnit, deactivateUnit, listUnits, updateUnit } from '../../api/units.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
 import {
-  ConfirmDialog,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+import { createUnit, deactivateUnit, listUnits, updateUnit } from '../../api/units.service';
+import { UnitForm } from '../../components/catalog/UnitForm';
+import { DataTable, type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
+import {
   CrudFeedbackToast,
-  CrudModal,
   CrudPageHeader,
   ErrorState,
-  FieldError,
-  FormActions,
   inputClassName,
-  labelClassName,
   RowActions,
   StatusBadge,
 } from '../../components/crud/CrudPrimitives';
+import { DrawerFormFooter } from '../../components/offcanvas';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
+import type { CrudOffcanvasMode } from '../../types/offcanvas.types';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { CreateUnitInput, Unit, UnitListParams } from '../../types/units';
 
 type UnitQuery = UnitListParams & PaginationParams;
+type UnitDrawerMode = Extract<CrudOffcanvasMode, 'create' | 'view' | 'edit'>;
+
+interface UnitDrawerState {
+  mode: UnitDrawerMode;
+  item: Unit | null;
+  formId: string;
+  formKey: string;
+}
+
 const initialQuery: UnitQuery = {
   page: 1,
   pageSize: 20,
@@ -32,63 +47,20 @@ const initialQuery: UnitQuery = {
   sortOrder: 'asc',
 };
 
-const UnitForm = ({ item, busy, onCancel, onSave }: {
-  item: Unit | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: CreateUnitInput) => Promise<void>;
-}) => {
-  const { register, handleSubmit, formState: { errors } } = useForm<CreateUnitInput>({
-    defaultValues: {
-      code: item?.code ?? '',
-      symbol: item?.symbol ?? '',
-      name: item?.name ?? '',
-      description: item?.description ?? '',
-      is_active: item?.is_active ?? true,
-    },
-  });
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className={labelClassName}>
-          <span>Mã đơn vị</span>
-          <input {...register('code', { required: 'Vui lòng nhập mã đơn vị.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />
-          <FieldError message={errors.code?.message} />
-        </label>
-        <label className={labelClassName}>
-          <span>Ký hiệu</span>
-          <input {...register('symbol', { required: 'Vui lòng nhập ký hiệu.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />
-          <FieldError message={errors.symbol?.message} />
-        </label>
-      </div>
-      <label className={labelClassName}>
-        <span>Tên đơn vị</span>
-        <input
-          {...register('name', {
-            required: 'Vui lòng nhập tên đơn vị.',
-            setValueAs: (value: string) => value.trim(),
-          })}
-          className={inputClassName}
-        />
-        <FieldError message={errors.name?.message} />
-      </label>
-      <label className={labelClassName}>
-        <span>Mô tả</span>
-        <textarea
-          rows={3}
-          {...register('description', {
-            setValueAs: (value: string) => value.trim() || null,
-          })}
-          className={inputClassName}
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <input type="checkbox" {...register('is_active')} className="h-4 w-4 rounded border-slate-300" />
-        Đang hoạt động
-      </label>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={item ? 'Lưu thay đổi' : 'Tạo đơn vị'} />
-    </form>
-  );
+const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+
+const formatDateTime = (value: string): string => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : dateTimeFormatter.format(date);
+};
+
+const getDrawerTitle = (mode: UnitDrawerMode): string => {
+  if (mode === 'create') return 'Tạo đơn vị';
+  if (mode === 'edit') return 'Chỉnh sửa đơn vị';
+  return 'Chi tiết đơn vị';
 };
 
 const UnitsPage = () => {
@@ -96,57 +68,286 @@ const UnitsPage = () => {
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
   const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
+  const {
+    openCrud,
+    openConfirm,
+    updatePrimary,
+    requestClosePrimary,
+    closePrimary,
+  } = useCrudOffcanvas();
   const loader = useCallback((query: UnitQuery, signal: AbortSignal) => listUnits(query, signal), []);
   const resource = usePaginatedResource<Unit, UnitQuery>({
     loader,
     initialQuery,
     loadErrorMessage: 'Không thể tải danh sách đơn vị.',
     queryKey: queryKeys.units.lists,
-    invalidateQueryKeys: [queryKeys.supplies.all],
+    mutationInvalidateQueryKey: queryKeys.units.lists,
   });
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
-  const [editing, setEditing] = useState<Unit | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Unit | null>(null);
+  const [drawer, setDrawer] = useState<UnitDrawerState | null>(null);
+  const [drawerDirty, setDrawerDirty] = useState(false);
+  const [drawerBusy, setDrawerBusy] = useState(false);
+  const drawerSequence = useRef(0);
+  const runMutation = resource.runMutation;
+  const setFeedback = resource.setFeedback;
+  const activeFilter = resource.query.isActive;
 
   useEffect(() => {
     const nextSearch = debouncedSearch.trim() || undefined;
     if (resourceSearch !== nextSearch) updateResourceQuery({ search: nextSearch });
   }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
-  const save = async (values: CreateUnitInput) => {
-    const ok = await resource.runMutation(
+  const resetDrawerState = useCallback(() => {
+    setDrawer(null);
+    setDrawerDirty(false);
+    setDrawerBusy(false);
+  }, []);
+
+  const saveUnit = useCallback(async (
+    mode: UnitDrawerMode,
+    item: Unit | null,
+    values: CreateUnitInput,
+  ): Promise<boolean> => {
+    if (mode === 'view') return false;
+    const editing = mode === 'edit' && item;
+    const ok = await runMutation(
       () => editing ? updateUnit(editing.id, values) : createUnit(values),
-      editing ? 'Đã cập nhật đơn vị.' : 'Đã tạo đơn vị.',
+      editing ? 'Cập nhật đơn vị thành công.' : 'Tạo đơn vị thành công.',
       editing ? 'Không thể cập nhật đơn vị.' : 'Không thể tạo đơn vị.',
     );
-    if (ok) setFormOpen(false);
-  };
+    if (ok) {
+      setDrawerDirty(false);
+      closePrimary();
+    }
+    return ok;
+  }, [closePrimary, runMutation]);
+
+  const switchViewToEdit = useCallback(() => {
+    setFeedback(null);
+    setDrawerDirty(false);
+    setDrawerBusy(false);
+    setDrawer((current) => current?.item ? {
+      ...current,
+      mode: 'edit',
+      formKey: `${current.item.id}-edit-${Date.now()}`,
+    } : current);
+  }, [setFeedback]);
+
+  const renderDrawerContent = useCallback((
+    current: UnitDrawerState,
+    serverError: string | null,
+  ): ReactNode => {
+    if (current.mode === 'view' && current.item) {
+      return (
+        <CrudEntityView
+          fields={[
+            { label: 'Mã đơn vị', value: current.item.code },
+            { label: 'Ký hiệu', value: current.item.symbol },
+            { label: 'Tên đơn vị', value: current.item.name },
+            { label: 'Trạng thái', value: <StatusBadge active={current.item.is_active} /> },
+            { label: 'Mô tả', value: current.item.description || '—', fullWidth: true },
+            { label: 'Ngày tạo', value: formatDateTime(current.item.created_at) },
+            { label: 'Cập nhật', value: formatDateTime(current.item.updated_at) },
+          ]}
+        />
+      );
+    }
+
+    return (
+      <UnitForm
+        key={current.formKey}
+        formId={current.formId}
+        item={current.item}
+        serverError={serverError}
+        onDirtyChange={setDrawerDirty}
+        onSubmittingChange={setDrawerBusy}
+        onSave={(values) => saveUnit(current.mode, current.item, values)}
+      />
+    );
+  }, [saveUnit]);
+
+  const renderDrawerFooter = useCallback((
+    current: UnitDrawerState,
+    busy: boolean,
+  ): ReactNode => {
+    const viewing = current.mode === 'view';
+    return (
+      <DrawerFormFooter
+        cancelLabel={viewing ? 'Đóng' : 'Hủy'}
+        submitLabel={viewing ? 'Chỉnh sửa' : current.mode === 'create' ? 'Tạo' : 'Lưu thay đổi'}
+        submittingLabel="Đang lưu..."
+        isSubmitting={busy}
+        formId={viewing ? undefined : current.formId}
+        showSubmit={!viewing || canUpdate}
+        onCancel={() => requestClosePrimary('cancel')}
+        onSubmit={viewing && canUpdate ? switchViewToEdit : undefined}
+      />
+    );
+  }, [canUpdate, requestClosePrimary, switchViewToEdit]);
+
+  useEffect(() => {
+    if (!drawer) return;
+    const serverError = resource.feedback?.type === 'error'
+      ? resource.feedback.message
+      : null;
+    updatePrimary({
+      mode: drawer.mode,
+      title: getDrawerTitle(drawer.mode),
+      description: drawer.mode === 'view'
+        ? 'Thông tin đơn vị tính hiện tại.'
+        : 'Nhập đầy đủ các trường bắt buộc.',
+      content: renderDrawerContent(drawer, serverError),
+      footer: renderDrawerFooter(drawer, drawerBusy),
+      isDirty: drawer.mode === 'view' ? false : drawerDirty,
+      isBusy: drawerBusy,
+      preventCloseWhileBusy: true,
+    });
+  }, [
+    drawer,
+    drawerBusy,
+    drawerDirty,
+    renderDrawerContent,
+    renderDrawerFooter,
+    resource.feedback,
+    updatePrimary,
+  ]);
+
+  const openUnitDrawer = useCallback((
+    mode: UnitDrawerMode,
+    item: Unit | null,
+    triggerElement: HTMLElement,
+  ) => {
+    drawerSequence.current += 1;
+    const next: UnitDrawerState = {
+      mode,
+      item,
+      formId: `unit-form-${drawerSequence.current}`,
+      formKey: `${item?.id ?? 'create'}-${mode}-${drawerSequence.current}`,
+    };
+    setFeedback(null);
+    setDrawerDirty(false);
+    setDrawerBusy(false);
+    setDrawer(next);
+    openCrud({
+      mode,
+      title: getDrawerTitle(mode),
+      description: mode === 'view'
+        ? 'Thông tin đơn vị tính hiện tại.'
+        : 'Nhập đầy đủ các trường bắt buộc.',
+      content: renderDrawerContent(next, null),
+      footer: renderDrawerFooter(next, false),
+      isDirty: false,
+      isBusy: false,
+      preventCloseWhileBusy: true,
+      triggerElement,
+      onClosed: resetDrawerState,
+    });
+  }, [
+    openCrud,
+    renderDrawerContent,
+    renderDrawerFooter,
+    resetDrawerState,
+    setFeedback,
+  ]);
+
+  const openDeactivate = useCallback((
+    item: Unit,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
+    openConfirm({
+      title: 'Ngừng sử dụng đơn vị?',
+      description: `Đơn vị “${item.symbol}” sẽ được chuyển sang inactive nếu chưa bị ràng buộc.`,
+      confirmLabel: 'Ngừng sử dụng',
+      cancelLabel: 'Hủy',
+      variant: 'warning',
+      triggerElement: event.currentTarget,
+      preventCloseWhileBusy: true,
+      onConfirm: async () => {
+        const ok = await runMutation(
+          () => deactivateUnit(item.id),
+          'Ngừng sử dụng đơn vị thành công.',
+          'Không thể ngừng sử dụng đơn vị.',
+          { removeCurrentItem: activeFilter === true },
+        );
+        return ok ? undefined : false;
+      },
+    });
+  }, [activeFilter, openConfirm, runMutation]);
 
   const columns: Column<Unit>[] = [
     { header: 'Mã', accessor: 'code', sortKey: 'code' },
     { header: 'Ký hiệu', accessor: 'symbol', sortKey: 'symbol' },
     { header: 'Tên', accessor: 'name', sortKey: 'name' },
-    { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
-    ...((canUpdate || canDelete) ? [{
+    {
+      header: 'Trạng thái',
+      accessor: 'is_active',
+      sortKey: 'is_active',
+      render: (item) => <StatusBadge active={item.is_active} />,
+    },
+    {
       header: 'Thao tác',
       accessor: 'actions',
-      render: (item: Unit) => <RowActions onEdit={canUpdate ? () => { setEditing(item); setFormOpen(true); } : undefined} onDelete={canDelete ? () => setDeleteTarget(item) : undefined} />,
-    }] : []),
+      render: (item) => (
+        <RowActions
+          onView={(event) => openUnitDrawer('view', item, event.currentTarget)}
+          onEdit={canUpdate
+            ? (event) => openUnitDrawer('edit', item, event.currentTarget)
+            : undefined}
+          onDelete={canDelete
+            ? (event) => openDeactivate(item, event)
+            : undefined}
+        />
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Units" description="Quản lý đơn vị tính dùng cho vật tư." createLabel="Thêm đơn vị" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
-      <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
-      {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
-        <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm mã hoặc ký hiệu..." searchValue={search} onSearchChange={setSearch} renderTopToolbar={() => <select value={String(resource.query.isActive ?? true)} onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })} className={inputClassName}><option value="true">Active</option><option value="false">Inactive</option></select>} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có đơn vị phù hợp." />
+      <CrudPageHeader
+        title="Units"
+        description="Quản lý đơn vị tính dùng cho vật tư."
+        createLabel="Thêm đơn vị"
+        onCreate={canCreate
+          ? (event) => openUnitDrawer('create', null, event.currentTarget)
+          : undefined}
+      />
+      <CrudFeedbackToast
+        feedback={resource.feedback}
+        onClose={() => resource.setFeedback(null)}
+      />
+      {resource.error ? (
+        <ErrorState message={resource.error} onRetry={() => void resource.reload()} />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={resource.items}
+          loading={resource.loading}
+          keyExtractor={(item) => item.id}
+          searchPlaceholder="Tìm mã hoặc ký hiệu..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          renderTopToolbar={() => (
+            <select
+              value={String(resource.query.isActive ?? true)}
+              onChange={(event) => resource.updateQuery({ isActive: event.target.value === 'true' })}
+              className={inputClassName}
+            >
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          )}
+          pagination={resource.pagination}
+          onPageChange={resource.setPage}
+          onPageSizeChange={resource.setPageSize}
+          sortBy={resource.query.sortBy}
+          sortOrder={resource.query.sortOrder}
+          onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
+          emptyText="Không có đơn vị phù hợp."
+        />
       )}
-      {formOpen && (editing ? canUpdate : canCreate) && <CrudModal title={editing ? 'Chỉnh sửa đơn vị' : 'Tạo đơn vị'} busy={resource.mutating} onClose={() => setFormOpen(false)}><UnitForm key={editing?.id ?? 'create'} item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} /></CrudModal>}
-      {deleteTarget && canDelete && <ConfirmDialog title="Ngừng hoạt động đơn vị?" message={`Đơn vị “${deleteTarget.symbol}” sẽ được chuyển sang inactive nếu chưa bị ràng buộc.`} confirmLabel="Deactivate" busy={resource.mutating} onCancel={() => setDeleteTarget(null)} onConfirm={() => void resource.runMutation(() => deactivateUnit(deleteTarget.id), 'Đã deactivate đơn vị.', 'Không thể deactivate đơn vị.', { removeCurrentItem: resource.query.isActive === true }).then((ok) => { if (ok) setDeleteTarget(null); })} />}
     </div>
   );
 };

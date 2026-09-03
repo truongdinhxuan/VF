@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import {useEffect} from 'react';
 import type { CrudFeedback } from '../../hooks/useCrudResource';
 import { AnimatePresence, motion } from 'motion/react';
@@ -34,7 +34,7 @@ export const CrudPageHeader = ({
 }: {
   title: string;
   description: string;
-  onCreate?: () => void;
+  onCreate?: (event: MouseEvent<HTMLButtonElement>) => void;
   createLabel?: string;
 }) => (
   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -298,15 +298,27 @@ export const StatusBadge = ({ active }: { active: boolean }) => (
 );
 
 export const RowActions = ({
+  onView,
   onEdit,
   onDelete,
   deleteLabel = 'Deactivate',
 }: {
-  onEdit?: () => void;
-  onDelete?: () => void;
+  onView?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onDelete?: (event: MouseEvent<HTMLButtonElement>) => void;
   deleteLabel?: string;
 }) => (
   <div className="flex flex-wrap justify-end gap-x-3 gap-y-2">
+    {onView && (
+      <button
+        type="button"
+        onClick={onView}
+        className={TextButton}
+      >
+        Xem
+      </button>
+    )}
+
     {onEdit && (
       <button
         type="button"

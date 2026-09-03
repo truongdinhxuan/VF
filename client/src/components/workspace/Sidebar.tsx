@@ -70,9 +70,10 @@ const Sidebar = ({
   return (
     <aside
       id="sidebar"
-      className={`fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl transition-[width,transform] duration-300 ease-in-out md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:rounded-3xl md:visible lg:m-4
-        ${isMobileSidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full"}
+      className={`workspace-sidebar fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-72 max-w-[calc(100vw-1rem)] shrink-0 flex-col overflow-hidden border-r border-slate-100 bg-white shadow-2xl md:relative md:inset-y-auto md:m-3 md:h-auto md:max-w-none md:self-stretch md:translate-x-0 md:rounded-3xl lg:m-4
+        ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}
         ${isSidebarCollapsed ? "md:w-[4.5rem]" : "md:w-64"}`}
+      data-mobile-open={isMobileSidebarOpen}
     >
       <div className={`w-full shrink-0 pb-4 pt-5 ${isSidebarCollapsed ? "px-3 md:px-2" : "px-5"}`}>
         <div className={`flex items-center justify-between gap-2 ${isSidebarCollapsed ? "md:flex-col" : ""}`}>

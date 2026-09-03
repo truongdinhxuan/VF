@@ -5,6 +5,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import { SelectSkeleton } from '../common/skeleton';
 
 interface OrderStackFieldsProps {
+  compact?: boolean;
   supplyId: string;
   providerId: string;
   areaId: string;
@@ -17,6 +18,7 @@ interface OrderStackFieldsProps {
 }
 
 export const OrderStackFields = ({
+  compact = false,
   supplyId,
   providerId,
   areaId,
@@ -51,7 +53,9 @@ export const OrderStackFields = ({
   );
 
   return (
-    <div className="grid gap-3 md:col-span-2 xl:col-span-3 xl:grid-cols-3">
+    <div className={compact
+      ? 'grid gap-3 sm:col-span-2 sm:grid-cols-2'
+      : 'grid gap-3 md:col-span-2 xl:col-span-3 xl:grid-cols-3'}>
       <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         SET / chồng
         {!enabled ? (

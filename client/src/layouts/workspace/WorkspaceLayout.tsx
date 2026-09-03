@@ -5,6 +5,8 @@ import Header from "../../components/workspace/Header";
 import Footer from "../../components/workspace/Footer";
 import { LiveNotificationToast } from "../../components/notifications/LiveNotificationToast";
 import { useSupplyRealtime } from "../../hooks/useSupplyRealtime";
+import { OffcanvasProvider } from "../../components/offcanvas";
+import { useBodyScrollLock } from "../../utils/bodyScrollLock";
 
 export const WorkspaceLayout = () => {
   const location = useLocation();
@@ -75,46 +77,35 @@ export const WorkspaceLayout = () => {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [isMobileSidebarOpen, setIsMobileSidebarOpen]);
 
-  useEffect(() => {
-    if (!isMobileSidebarOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    };
-  }, [isMobileSidebarOpen]);
+  useBodyScrollLock(isMobileSidebarOpen, "mobile-sidebar");
 
   return (
-    <div className="relative flex h-screen h-dvh min-h-0 w-full max-w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
-      <LiveNotificationToast notification={realtime.toast} onDismiss={realtime.dismissToast} />
+    <OffcanvasProvider onDrawerOpen={() => setIsMobileSidebarOpen(false)}>
+      <div className="relative flex h-screen h-dvh min-h-0 w-full max-w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
+        <LiveNotificationToast notification={realtime.toast} onDismiss={realtime.dismissToast} />
 
       {/* LỚP PHỦ MỜ KHI MỞ SIDEBAR TRÊN MOBILE */}
-      {isMobileSidebarOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-30 bg-slate-900/50 backdrop-blur-sm transition-opacity md:hidden"
+          className="workspace-sidebar-backdrop fixed inset-0 z-30 bg-slate-900/50 backdrop-blur-sm md:hidden"
+          data-open={isMobileSidebarOpen}
           onClick={() => setIsMobileSidebarOpen(false)}
           aria-label="Đóng menu"
+          aria-hidden={!isMobileSidebarOpen}
+          tabIndex={isMobileSidebarOpen ? 0 : -1}
         />
-      )}
 
       {/* SIDEBAR COMPONENT */}
-      <Sidebar 
-        isSidebarCollapsed={isSidebarCollapsed}
-        setIsSidebarCollapsed={setIsSidebarCollapsed}
-        isMobileSidebarOpen={isMobileSidebarOpen}
-        setIsMobileSidebarOpen={setIsMobileSidebarOpen}
-        pathname={pathname}
-      />
+        <Sidebar
+          isSidebarCollapsed={isSidebarCollapsed}
+          setIsSidebarCollapsed={setIsSidebarCollapsed}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+          pathname={pathname}
+        />
 
       {/* MAIN WORKSPACE */}
-      <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50">
+        <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50">
         {/* Background blobs */}
         <div className="pointer-events-none absolute right-0 top-0 -m-32 h-96 w-96 rounded-full bg-blue-100 opacity-40 mix-blend-multiply blur-3xl filter"></div>
         <div className="pointer-events-none absolute right-48 top-0 -m-32 h-96 w-96 rounded-full bg-purple-100 opacity-40 mix-blend-multiply blur-3xl filter"></div>
@@ -136,7 +127,8 @@ export const WorkspaceLayout = () => {
           </div>
         </div>
         <Footer />
-      </main>
-    </div>
+        </main>
+      </div>
+    </OffcanvasProvider>
   );
 }

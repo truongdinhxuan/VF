@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "test:permissions": "node --test test/permission-authorization.test.mjs",
     "test:notifications": "node --test test/notifications.test.mjs",
+    "test:offcanvas": "node --test test/offcanvas-foundation.test.mjs",
+    "test:units-offcanvas": "node --test test/units-offcanvas.test.mjs",
+    "test:create-order-offcanvas": "node --test test/create-order-offcanvas.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

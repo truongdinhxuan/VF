@@ -1,20 +1,33 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   exportShiftOrderSheet,
   getShiftOrderSheet,
 } from '../../api/shift-order-sheets.service';
-import { InfoButton, TextButton } from '../../components/common/Button';
+import { InfoButton, SecondaryButton, TextButton } from '../../components/common/Button';
 import { CardSkeleton } from '../../components/common/skeleton';
+import { CrudFeedbackToast } from '../../components/crud/CrudPrimitives';
+import { DrawerFormFooter } from '../../components/offcanvas';
+import { CreateOrderForm, type CreateOrderFormState } from '../../components/orders/CreateOrderForm';
 import { OrderStatusBadge } from '../../components/orders/OrderStatusBadge';
+import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { ORDER_READ_PERMISSIONS } from '../../constants/workspaceNavigation';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
+import type { CrudFeedback } from '../../hooks/useCrudResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { OrderStatus } from '../../types/orders';
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const INITIAL_CREATE_STATE: CreateOrderFormState = {
+  stage: 'editing',
+  draftOrder: null,
+  isDirty: false,
+  isBusy: false,
+};
 const formatDateTime = (value: string | null | undefined) => value
   ? new Intl.DateTimeFormat('vi-VN', {
     dateStyle: 'medium',
@@ -25,10 +38,22 @@ const formatDateTime = (value: string | null | undefined) => value
 
 const ShiftOrderSheetDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { role, hasAnyPermission } = useAuth();
+  const queryClient = useQueryClient();
+  const { role, hasPermission, hasAnyPermission } = useAuth();
+  const {
+    openCrud,
+    openConfirm,
+    updatePrimary,
+    requestClosePrimary,
+    closePrimary,
+  } = useCrudOffcanvas();
   const listPath = getWorkspacePath(role, 'shift-order-sheets');
-  const createPath = getWorkspacePath(role, 'orders/create');
   const ordersPath = getWorkspacePath(role, 'orders');
+  const [createDrawer, setCreateDrawer] = useState<{ formId: string; formKey: string } | null>(null);
+  const [createState, setCreateState] = useState<CreateOrderFormState>(INITIAL_CREATE_STATE);
+  const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
+  const createSequence = useRef(0);
+  const initialFocusRef = useRef<HTMLInputElement>(null);
   const query = useQuery({
     queryKey: queryKeys.shiftOrderSheets.detail(id ?? ''),
     queryFn: ({ signal }) => getShiftOrderSheet(id!, signal),
@@ -48,6 +73,104 @@ const ShiftOrderSheetDetailPage = () => {
     },
   });
 
+  const resetCreateDrawer = useCallback(() => {
+    setCreateDrawer(null);
+    setCreateState(INITIAL_CREATE_STATE);
+  }, []);
+
+  const handleCreateSuccess = useCallback(async () => {
+    if (!id) return;
+    await Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.detail(id) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.shiftOrderSheets.lists }),
+    ]);
+    setFeedback({ type: 'success', message: 'Order đã được gửi thành công.' });
+    closePrimary();
+  }, [closePrimary, id, queryClient]);
+
+  const sheet = query.data!;
+
+  const requestPersistedDraftClose = useCallback((): boolean => {
+    if (createState.stage !== 'submit-failed' || !createState.draftOrder) return true;
+    openConfirm({
+      title: 'Order nháp chưa được gửi',
+      description: `Order ${createState.draftOrder.code} đã được lưu ở trạng thái DRAFT. Đóng drawer sẽ không xóa Order này.`,
+      confirmLabel: 'Đóng',
+      cancelLabel: 'Tiếp tục xử lý',
+      variant: 'warning',
+      onConfirm: () => {
+        closePrimary();
+        return false;
+      },
+    });
+    return false;
+  }, [closePrimary, createState.draftOrder, createState.stage, openConfirm]);
+
+  const renderCreateContent = useCallback((current: { formId: string; formKey: string }): ReactNode => (
+    <CreateOrderForm
+      key={current.formKey}
+      formId={current.formId}
+      mode="shift-sheet-submit"
+      sheetContext={sheet}
+      compact
+      initialFocusRef={initialFocusRef}
+      onStateChange={setCreateState}
+      onSuccess={handleCreateSuccess}
+    />
+  ), [handleCreateSuccess, sheet]);
+
+  const renderCreateFooter = useCallback((
+    current: { formId: string; formKey: string },
+    state: CreateOrderFormState,
+  ): ReactNode => {
+    const retrying = state.stage === 'submit-failed';
+    const submittingLabel = state.stage === 'creating-draft'
+      ? 'Đang tạo Order...'
+      : 'Đang gửi Order...';
+    const draftLink = state.draftOrder && id
+      ? `${ordersPath}/${state.draftOrder.id}?shiftOrderSheetId=${id}`
+      : null;
+    return (
+      <DrawerFormFooter
+        cancelLabel={retrying ? 'Đóng' : 'Hủy'}
+        submitLabel={retrying ? 'Thử gửi lại' : 'Gửi Order'}
+        submittingLabel={submittingLabel}
+        isSubmitting={state.isBusy}
+        formId={current.formId}
+        onCancel={() => requestClosePrimary('cancel')}
+        secondaryAction={draftLink ? (
+          <Link to={draftLink} onClick={() => closePrimary()} className={`${SecondaryButton} min-h-11 w-full sm:w-auto`}>
+            Mở Order nháp
+          </Link>
+        ) : undefined}
+      />
+    );
+  }, [closePrimary, id, ordersPath, requestClosePrimary]);
+
+  useEffect(() => {
+    if (!createDrawer) return;
+    updatePrimary({
+      title: 'Tạo thêm Order',
+      description: 'Hệ thống tạo DRAFT trước, sau đó submit sang PENDING bằng hai bước backend hiện có.',
+      content: renderCreateContent(createDrawer),
+      footer: renderCreateFooter(createDrawer, createState),
+      size: 'lg',
+      isDirty: createState.isDirty,
+      isBusy: createState.isBusy,
+      preventCloseWhileBusy: true,
+      initialFocusRef,
+      onBeforeClose: requestPersistedDraftClose,
+    });
+  }, [
+    createDrawer,
+    createState,
+    renderCreateContent,
+    renderCreateFooter,
+    requestPersistedDraftClose,
+    updatePrimary,
+  ]);
+
   if (query.isPending) return <CardSkeleton lines={6} label="Đang tải Phiếu Order Ca" />;
   if (query.isError || !query.data) return (
     <section className="space-y-4">
@@ -58,13 +181,39 @@ const ShiftOrderSheetDetailPage = () => {
     </section>
   );
 
-  const sheet = query.data;
   const leaderName = sheet.leader
     ? `${sheet.leader.first_name} ${sheet.leader.last_name}`.trim()
     : 'Không xác định';
 
+  const openCreateOrder = (event: MouseEvent<HTMLButtonElement>) => {
+    createSequence.current += 1;
+    const next = {
+      formId: `shift-order-create-form-${createSequence.current}`,
+      formKey: `${sheet.id}-${createSequence.current}`,
+    };
+    setFeedback(null);
+    setCreateState(INITIAL_CREATE_STATE);
+    setCreateDrawer(next);
+    openCrud({
+      mode: 'create',
+      title: 'Tạo thêm Order',
+      description: 'Hệ thống tạo DRAFT trước, sau đó submit sang PENDING bằng hai bước backend hiện có.',
+      content: renderCreateContent(next),
+      footer: renderCreateFooter(next, INITIAL_CREATE_STATE),
+      size: 'lg',
+      isDirty: false,
+      isBusy: false,
+      preventCloseWhileBusy: true,
+      initialFocusRef,
+      triggerElement: event.currentTarget,
+      onBeforeClose: () => true,
+      onClosed: resetCreateDrawer,
+    });
+  };
+
   return (
     <section className="space-y-5">
+      <CrudFeedbackToast feedback={feedback} onClose={() => setFeedback(null)} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link to={listPath} className={TextButton}>← Danh sách Phiếu Order Ca</Link>
@@ -82,7 +231,9 @@ const ShiftOrderSheetDetailPage = () => {
               {exportMutation.isPending ? 'Đang xuất...' : 'Xuất Excel'}
             </button>
           )}
-          <Link to={`${createPath}?shiftOrderSheetId=${sheet.id}`} className={InfoButton}>+ Tạo thêm Order</Link>
+          {hasPermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE) && (
+            <button type="button" onClick={openCreateOrder} className={InfoButton}>+ Tạo thêm Order</button>
+          )}
         </div>
       </div>
 

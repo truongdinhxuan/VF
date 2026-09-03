@@ -8,7 +8,7 @@ const read = (path: string): string =>
 
 const orderService = read('src/services/orders.service.ts');
 const orderAccess = read('src/domain/order-access.ts');
-const createOrderPage = read('../client/src/pages/orders/CreateOrderPage.tsx');
+const createOrderForm = read('../client/src/components/orders/CreateOrderForm.tsx');
 const orderDetailPage = read('../client/src/pages/orders/OrderDetailPage.tsx');
 
 describe('order source and receiving area flow', () => {
@@ -24,8 +24,8 @@ describe('order source and receiving area flow', () => {
   it('uses the authenticated user area as the receiving area', () => {
     assert.match(orderService, /body\.to_area_id !== actor\.areaId/);
     assert.match(orderService, /to_area_id: actor\.areaId/);
-    assert.match(createOrderPage, /receivingAreaId = user\?\.publicData\.area_id/);
-    assert.match(createOrderPage, /to_area_id: receivingAreaId/);
+    assert.match(createOrderForm, /receivingAreaId = user\?\.publicData\.area_id/);
+    assert.match(createOrderForm, /to_area_id: receivingAreaId/);
   });
 
   it('scopes order creators without approval permission by the receiving area', () => {
@@ -42,9 +42,9 @@ describe('order source and receiving area flow', () => {
   });
 
   it('renders both order areas as fixed values in the create form', () => {
-    assert.match(createOrderPage, /area\.code === ORDER_SOURCE_AREA_CODE/);
-    assert.match(createOrderPage, /sourceArea\.code/);
-    assert.match(createOrderPage, /receivingArea\.code/);
-    assert.doesNotMatch(createOrderPage, /register\("to_area_id"/);
+    assert.match(createOrderForm, /area\.code === ORDER_SOURCE_AREA_CODE/);
+    assert.match(createOrderForm, /sourceArea\.code/);
+    assert.match(createOrderForm, /receivingArea\.code/);
+    assert.doesNotMatch(createOrderForm, /register\("to_area_id"/);
   });
 });

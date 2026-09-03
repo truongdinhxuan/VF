@@ -20,6 +20,81 @@ body,
   max-width: 100%;
 }
 
+.workspace-sidebar {
+  visibility: hidden;
+  transition:
+    width 300ms ease-in-out,
+    transform 300ms ease-in-out,
+    visibility 0s linear 300ms;
+}
+
+.workspace-sidebar[data-mobile-open="true"] {
+  visibility: visible;
+  transition:
+    width 300ms ease-in-out,
+    transform 300ms ease-in-out,
+    visibility 0s linear 0s;
+}
+
+.workspace-sidebar-backdrop {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 200ms ease-out,
+    visibility 0s linear 200ms;
+}
+
+.workspace-sidebar-backdrop[data-open="true"] {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transition:
+    opacity 200ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.offcanvas-backdrop {
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+
+.offcanvas-backdrop[data-state="open"] {
+  opacity: 1;
+}
+
+.offcanvas-backdrop[data-state="closing"] {
+  opacity: 0;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in;
+}
+
+.offcanvas-panel {
+  transform: translate3d(100%, 0, 0);
+  transition: transform 240ms ease-out;
+  will-change: transform;
+}
+
+.offcanvas-panel[data-state="open"] {
+  transform: translate3d(0, 0, 0);
+}
+
+.offcanvas-panel[data-state="closing"] {
+  transform: translate3d(100%, 0, 0);
+  transition-duration: 200ms;
+  transition-timing-function: ease-in;
+}
+
+@media (min-width: 48rem) {
+  .workspace-sidebar {
+    visibility: visible;
+    transition:
+      width 300ms ease-in-out,
+      transform 300ms ease-in-out,
+      visibility 0s linear 0s;
+  }
+}
+
 @keyframes app-tooltip-in {
   from {
     opacity: 0;
@@ -37,6 +112,14 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .workspace-sidebar,
+  .workspace-sidebar-backdrop,
+  .offcanvas-backdrop,
+  .offcanvas-panel {
+    transition-duration: 0.01ms;
+    transition-delay: 0s;
+  }
+
   .app-tooltip-content {
     animation: none;
   }
