@@ -112,8 +112,13 @@ export const OrderStackFields = ({
         {requestedStackQuantityError && (
           <span className="block normal-case text-rose-600">{requestedStackQuantityError}</span>
         )}
+        {selected && !exceedsSnapshot && (
+          <span className="block font-medium normal-case text-emerald-700">
+            Tồn khả dụng: {selected.available_stack_quantity} chồng
+          </span>
+        )}
         {exceedsSnapshot && (
-          <span className="block normal-case text-amber-700">
+          <span className="block font-medium normal-case text-amber-700">
             Cảnh báo: yêu cầu lớn hơn tồn hiện tại ({selected?.available_stack_quantity} chồng). Order vẫn có thể được gửi.
           </span>
         )}

@@ -43,6 +43,15 @@ export const queryKeys = {
       areaId,
     ] as const,
   },
+  supplyAvailability: {
+    all: ['supply-availability'] as const,
+    list: (supplyId: string, providerId: string, areaId: string) => [
+      'supply-availability',
+      supplyId,
+      providerId,
+      areaId,
+    ] as const,
+  },
   storageLocations: resourceKeys('storage-locations'),
   stockBalances: resourceKeys('stock-balances'),
   stockTransactions: resourceKeys('stock-transactions'),
@@ -57,7 +66,11 @@ export const queryKeys = {
     detail: (id: string) => ['inventory-discrepancies', 'detail', id] as const,
   },
   orders: resourceKeys('orders'),
-  shiftOrderSheets: resourceKeys('shift-order-sheets'),
+  shiftOrderSheets: {
+    ...resourceKeys('shift-order-sheets'),
+    current: ['shift-order-sheets', 'current'] as const,
+    history: (query: QueryParameters = {}) => ['shift-order-sheets', 'history', query] as const,
+  },
   notifications: resourceKeys('notifications'),
   orderStatuses: resourceKeys('order-statuses'),
   stockTransactionTypes: resourceKeys('stock-transaction-types'),

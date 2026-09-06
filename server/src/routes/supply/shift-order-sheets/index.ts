@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   exportShiftOrderSheet,
+  getCurrentShiftOrderSheet,
   getShiftOrderSheet,
   listShiftOrderSheets,
 } from '../../../controllers/shift-order-sheets';
@@ -8,6 +9,7 @@ import { ORDER_READ_PERMISSIONS } from '../../../domain/order-access';
 import { requirePermission, verifyToken } from '../../../middleware/auth';
 import {
   shiftOrderSheetDetailSchema,
+  shiftOrderSheetCurrentSchema,
   shiftOrderSheetExportSchema,
   shiftOrderSheetListSchema,
 } from '../../../schemas/shift-order-sheets';
@@ -26,6 +28,11 @@ const routes: FastifyPluginAsync = async (fastify) => {
     preHandler: readPermission,
     schema: shiftOrderSheetListSchema,
   }, listShiftOrderSheets);
+
+  fastify.get('/current', {
+    preHandler: readPermission,
+    schema: shiftOrderSheetCurrentSchema,
+  }, getCurrentShiftOrderSheet);
 
   fastify.get('/:id', {
     preHandler: readPermission,

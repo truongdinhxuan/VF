@@ -3,6 +3,7 @@ import instance from './http';
 import type { PaginatedResponse } from '../types/pagination.types';
 import type {
   ShiftOrderSheetDetail,
+  CurrentShiftOrderSheetResponse,
   ShiftOrderSheetListParams,
   ShiftOrderSheetSummary,
 } from '../types/shift-order-sheets';
@@ -51,6 +52,16 @@ export const getShiftOrderSheet = async (
     ApiEnvelope<ShiftOrderSheetDetail>,
     ApiEnvelope<ShiftOrderSheetDetail>
   >(`supply/shift-order-sheets/${id}`, { signal });
+  return response.data;
+};
+
+export const getCurrentShiftOrderSheet = async (
+  signal?: AbortSignal,
+): Promise<CurrentShiftOrderSheetResponse> => {
+  const response = await instance.get<
+    ApiEnvelope<CurrentShiftOrderSheetResponse>,
+    ApiEnvelope<CurrentShiftOrderSheetResponse>
+  >('supply/shift-order-sheets/current', { signal });
   return response.data;
 };
 

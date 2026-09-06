@@ -9,23 +9,22 @@ import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
 import { createOrder, submitOrder } from '../../api/orders.service';
-import { listSupplies } from '../../api/supplies.service';
 import { useAuth } from '../../context/AuthContext';
 import { useCrudResource } from '../../hooks/useCrudResource';
-import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
 import type { AreaOption, SupplyOption } from '../../types/catalog';
 import type { CreateOrderInput, Order } from '../../types/orders';
-import type { ShiftOrderSheetDetail } from '../../types/shift-order-sheets';
+import type { ShiftOrderSheetCreateContext } from '../../types/shift-order-sheets';
 import { InfoButton, SecondaryButton, TextErrorButton } from '../common/Button';
-import { SelectSkeleton } from '../common/skeleton';
 import { SupplyProviderSelect } from '../common/SupplyProviderSelect';
 import {
   createAndSubmitOrder,
   DraftSubmitError,
   type CreateOrderStage,
 } from './createOrderOrchestration';
+import { OrderItemAvailability } from './OrderItemAvailability';
 import { OrderStackFields } from './OrderStackFields';
+import { SupplyCombobox } from './SupplyCombobox';
 
 interface CreateOrderFormValues {
   note: string;
@@ -51,7 +50,7 @@ export interface CreateOrderFormState {
 interface CreateOrderFormProps {
   formId: string;
   mode?: 'draft-only' | 'shift-sheet-submit';
-  sheetContext?: ShiftOrderSheetDetail | null;
+  sheetContext?: ShiftOrderSheetCreateContext | null;
   compact?: boolean;
   showInlineActions?: boolean;
   initialFocusRef?: RefObject<HTMLInputElement | null>;
@@ -99,37 +98,15 @@ export const CreateOrderForm = ({
 }: CreateOrderFormProps) => {
   const { user } = useAuth();
   const receivingAreaId = user?.publicData.area_id ?? '';
-  const supplyLoader = useCallback(
-    (search: string | undefined, signal: AbortSignal) => listSupplies(
-      {
-        page: 1,
-        pageSize: 20,
-        search,
-        isActive: true,
-        isDeleted: false,
-        sortBy: 'code',
-        sortOrder: 'asc',
-      },
-      signal,
-    ),
-    [],
-  );
-  const {
-    items: supplies,
-    loading: suppliesLoading,
-    error: suppliesError,
-    search: supplySearch,
-    setSearch: setSupplySearch,
-  } = useServerLookup<SupplyOption>({
-    loader: supplyLoader,
-    queryKey: (search) => queryKeys.supplies.lookup({
-      search,
-      pageSize: 20,
-      isActive: true,
-      isDeleted: false,
-    }),
-    errorMessage: 'Không thể tải danh sách vật tư.',
-  });
+  // Each SupplyCombobox owns its own server search; we only need to remember the
+  // full option for supplies the operator has actually picked, so unit/category
+  // derivation and the payload builder can resolve them without a shared list.
+  const [resolvedSupplies, setResolvedSupplies] = useState<Record<string, SupplyOption>>({});
+  const rememberSupply = useCallback((supply: SupplyOption | null) => {
+    if (!supply) return;
+    setResolvedSupplies((current) =>
+      current[supply.id] ? current : { ...current, [supply.id]: supply });
+  }, []);
   const areaResource = useCrudResource<AreaOption>(
     loadAreas,
     'Không thể tải danh sách area.',
@@ -187,9 +164,9 @@ export const CreateOrderForm = ({
     previousSourceAreaId.current = nextAreaId;
   }, [fields, resetStackFields, sourceArea?.id]);
 
-  const changeSupply = (index: number, supplyId: string) => {
-    const supply = supplies.find((item) => item.id === supplyId);
-    setValue(`order_list.${index}.supply_id`, supplyId, { shouldValidate: true, shouldDirty: true });
+  const changeSupply = (index: number, supply: SupplyOption | null) => {
+    rememberSupply(supply);
+    setValue(`order_list.${index}.supply_id`, supply?.id ?? '', { shouldValidate: true, shouldDirty: true });
     setValue(`order_list.${index}.provider_id`, '', { shouldValidate: false, shouldDirty: true });
     setValue(`order_list.${index}.unit_id`, supply?.unit_id ?? '', { shouldValidate: true, shouldDirty: true });
     setValue(
@@ -224,10 +201,10 @@ export const CreateOrderForm = ({
   const buildPayload = (values: CreateOrderFormValues): CreateOrderInput => ({
     from_area_id: sourceArea!.id,
     to_area_id: receivingAreaId,
-    ...(sheetContext ? { shift_order_sheet_id: sheetContext.id } : {}),
+    ...(sheetContext?.id ? { shift_order_sheet_id: sheetContext.id } : {}),
     note: values.note.trim() || undefined,
     order_list: values.order_list.map((item) => {
-      const supply = supplies.find((candidate) => candidate.id === item.supply_id);
+      const supply = resolvedSupplies[item.supply_id];
       const isStack = supply?.category?.code === 'KIEN_SAT_TC';
       const setPerQty = Number(item.set_per_qty);
       const requestedStacks = Number(item.requested_stack_quantity);
@@ -249,9 +226,6 @@ export const CreateOrderForm = ({
 
   const validateReferences = (): string | null => {
     if (!receivingAreaId) return 'Tài khoản chưa có area_id nên không thể tạo order.';
-    if (suppliesLoading || suppliesError || supplies.length === 0) {
-      return 'Danh sách vật tư chưa sẵn sàng. Vui lòng tải lại và thử lại.';
-    }
     if (areaResource.loading || areaResource.error || areas.length === 0) {
       return 'Danh sách area chưa sẵn sàng. Vui lòng tải lại và thử lại.';
     }
@@ -288,9 +262,10 @@ export const CreateOrderForm = ({
       const submitted = await createAndSubmitOrder({
         draft: draftOrder,
         createDraft: () => createOrder(buildPayload(values)),
-        submitDraft: (draft) => submitOrder(draft.id, {
-          shift_order_sheet_id: sheetContext!.id,
-        }),
+        submitDraft: (draft) => submitOrder(
+          draft.id,
+          sheetContext?.id ? { shift_order_sheet_id: sheetContext.id } : {},
+        ),
         onDraftCreated: setDraftOrder,
         onStageChange: setStage,
       });
@@ -309,11 +284,8 @@ export const CreateOrderForm = ({
     }
   };
 
-  const referenceUnavailable = suppliesLoading
-    || areaResource.loading
-    || Boolean(suppliesError)
+  const referenceUnavailable = areaResource.loading
     || Boolean(areaResource.error)
-    || supplies.length === 0
     || areas.length === 0
     || !sourceArea
     || !receivingAreaId
@@ -368,34 +340,26 @@ export const CreateOrderForm = ({
             <button type="button" onClick={() => append(emptyItem())} className={SecondaryButton}>Thêm dòng</button>
           </div>
 
-          <input
-            ref={initialFocusRef}
-            type="search"
-            value={supplySearch}
-            onChange={(event) => setSupplySearch(event.target.value)}
-            placeholder="Tìm vật tư trên server..."
-            className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-          />
-          {suppliesError && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{suppliesError}</div>}
-          {!suppliesLoading && !suppliesError && supplies.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Không có vật tư active.</div>}
-
           <div className="mt-4 space-y-3">
             {fields.map((field, index) => {
               const current = orderItems[index] ?? emptyItem();
-              const selectedSupply = supplies.find((supply) => supply.id === current.supply_id);
+              const selectedSupply = current.supply_id
+                ? resolvedSupplies[current.supply_id] ?? null
+                : null;
               const isStack = selectedSupply?.category?.code === 'KIEN_SAT_TC';
               return (
                 <div key={field.id} className={`grid gap-3 rounded-xl border border-slate-200 p-4 ${compact ? 'sm:grid-cols-2' : 'md:grid-cols-2 xl:grid-cols-6'}`}>
                   <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Vật tư
-                    {suppliesLoading && supplies.length === 0 ? <SelectSkeleton label="Đang tải danh mục vật tư" /> : (
-                      <select value={current.supply_id} onChange={(event) => changeSupply(index, event.target.value)} disabled={Boolean(suppliesError) || supplies.length === 0} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100">
-                        <option value="">Chọn vật tư</option>
-                        {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.code}{supply.description ? ` — ${supply.description}` : ''}</option>)}
-                      </select>
-                    )}
+                    <SupplyCombobox
+                      value={current.supply_id}
+                      selectedSupply={selectedSupply}
+                      onChange={(supply) => changeSupply(index, supply)}
+                      ariaLabel={`Chọn vật tư cho dòng ${index + 1}`}
+                      inputRef={index === 0 ? initialFocusRef : undefined}
+                      error={errors.order_list?.[index]?.supply_id?.message}
+                    />
                     <input type="hidden" {...register(`order_list.${index}.supply_id`, { required: 'Chọn vật tư.' })} />
-                    {errors.order_list?.[index]?.supply_id && <span className="block normal-case text-rose-600">{errors.order_list[index]?.supply_id?.message}</span>}
                   </label>
                   <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Provider
@@ -403,6 +367,7 @@ export const CreateOrderForm = ({
                       supplyId={current.supply_id}
                       value={current.provider_id}
                       onChange={(providerId) => changeProvider(index, providerId)}
+                      autoSelectSingle
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
                       ariaLabel={`Chọn Provider cho dòng ${index + 1}`}
                     />
@@ -439,6 +404,13 @@ export const CreateOrderForm = ({
                       Số lượng
                       <input type="number" step="any" min="0.000001" {...register(`order_list.${index}.quantity_requested`, { valueAsNumber: true, required: 'Nhập số lượng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800" />
                       {errors.order_list?.[index]?.quantity_requested && <span className="block normal-case text-rose-600">{errors.order_list[index]?.quantity_requested?.message}</span>}
+                      <OrderItemAvailability
+                        supplyId={current.supply_id}
+                        providerId={current.provider_id}
+                        areaId={sourceArea?.id ?? ''}
+                        quantityRequested={current.quantity_requested}
+                        enabled={!isStack}
+                      />
                     </label>
                   )}
                   <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">

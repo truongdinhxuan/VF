@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { PERMISSION_CODE } from '../domain/permission-codes';
 import type { ShiftOrderSheetListQuery } from '../interfaces/shift-order-sheets';
 import { SHIFT_ORDER_SHEET_SORT_FIELDS } from '../schemas/shift-order-sheets';
-import { hasPermission } from './authorization.service';
+import { isOrderAreaScoped } from '../domain/order-access';
 import type { OrderActor } from './orders.service';
 import {
   createShiftOrderSheetExportFilename,
@@ -49,8 +48,20 @@ interface SheetRow {
     id: string;
     created_at?: string;
     is_deleted?: boolean;
+    order_items?: Array<{ id: string; is_deleted?: boolean; [key: string]: unknown }>;
     [key: string]: unknown;
   }>;
+}
+
+interface ResolvedShiftRow {
+  assignment_id: string;
+  work_shift_id: string;
+  work_shift_code: string;
+  work_shift_name: string;
+  work_date: string;
+  shift_start_at: string;
+  shift_end_at: string;
+  is_overtime: boolean;
 }
 
 interface ExportRelation {
@@ -132,7 +143,10 @@ const SHEET_BASE_SELECT = `
 
 const SHEET_LIST_SELECT = `
   ${SHEET_BASE_SELECT},
-  orders:orders!orders_shift_order_sheet_id_fkey(id)
+  orders:orders!orders_shift_order_sheet_id_fkey(
+    id, is_deleted,
+    order_items(id, is_deleted)
+  )
 `;
 
 const SHEET_DETAIL_SELECT = `
@@ -147,7 +161,18 @@ const SHEET_DETAIL_SELECT = `
     ),
     from_area:areas!orders_from_area_id_fkey(id, code, name),
     to_area:areas!orders_to_area_id_fkey(id, code, name),
-    order_items(id)
+    order_items(
+      id, order_id, supply_id, provider_id, unit_id,
+      quantity_requested, set_per_qty, requested_stack_quantity,
+      requested_total_set_quantity, quantity_approved, quantity_issued,
+      note, is_active, is_deleted, created_at, updated_at,
+      supply:supplies!order_items_supply_id_fkey(
+        id, code, description,
+        category:supply_categories!supplies_category_id_fkey(id, code, name)
+      ),
+      provider:providers!order_items_provider_id_fkey(id, code, name, description),
+      unit:units!order_items_unit_id_fkey(id, code, symbol)
+    )
   )
 `;
 
@@ -175,11 +200,7 @@ export class ShiftOrderSheetsService {
   }
 
   private isAreaScoped(actor: OrderActor): boolean {
-    return !actor.isSystemAdmin
-      && hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_CREATE)
-      && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_APPROVE)
-      && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ALLOCATE)
-      && !hasPermission(actor, PERMISSION_CODE.SUPPLY_ORDER_ISSUE);
+    return isOrderAreaScoped(actor);
   }
 
   private normalize(row: SheetRow) {
@@ -191,7 +212,53 @@ export class ShiftOrderSheetsService {
       leader: firstRelation(row.leader as object | object[] | null),
       ...shiftBounds(row.work_date, shift),
       order_count: (row.orders ?? []).length,
+      item_count: (row.orders ?? []).reduce(
+        (total, order) => total + (order.order_items ?? []).filter((item) => !item.is_deleted).length,
+        0,
+      ),
       business_time_zone: BUSINESS_TIME_ZONE,
+    };
+  }
+
+  private normalizeDetail(row: SheetRow & { orders: Array<Record<string, unknown>> }) {
+    const normalized = this.normalize(row);
+    return {
+      ...normalized,
+      orders: (row.orders ?? [])
+        .filter((order) => !order.is_deleted)
+        .map((order): Record<string, unknown> => ({
+          ...order,
+          status_lookup: firstRelation(
+            (order.status_lookup ?? null) as object | object[] | null,
+          ),
+          requester: firstRelation(
+            (order.requester ?? null) as object | object[] | null,
+          ),
+          from_area: firstRelation(
+            (order.from_area ?? null) as object | object[] | null,
+          ),
+          to_area: firstRelation(
+            (order.to_area ?? null) as object | object[] | null,
+          ),
+          order_items: ((order.order_items ?? []) as Array<Record<string, unknown>>)
+            .filter((item) => !item.is_deleted)
+            .map((item): Record<string, unknown> => ({
+              ...item,
+              supply: firstRelation((item.supply ?? null) as object | object[] | null),
+              provider: firstRelation((item.provider ?? null) as object | object[] | null),
+              unit: firstRelation((item.unit ?? null) as object | object[] | null),
+            }))
+            .sort((left, right) => {
+              const time = String(right['created_at']).localeCompare(String(left['created_at']));
+              return time || String(right['id']).localeCompare(String(left['id']));
+            }),
+        }))
+        .sort((left, right) => {
+          const leftTime = String(left['submitted_at'] ?? left['created_at']);
+          const rightTime = String(right['submitted_at'] ?? right['created_at']);
+          const time = rightTime.localeCompare(leftTime);
+          return time || String(right['id']).localeCompare(String(left['id']));
+        }),
     };
   }
 
@@ -294,29 +361,71 @@ export class ShiftOrderSheetsService {
     if (error || !data) databaseError(error, 'Không thể tải Phiếu Order Ca');
     const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
     this.assertReadable(actor, row);
+    return this.normalizeDetail(row);
+  }
 
-    const normalized = this.normalize(row);
-    return {
-      ...normalized,
-      orders: (row.orders ?? [])
-        .filter((order) => !order.is_deleted)
-        .map((order) => ({
-          ...order,
-          status_lookup: firstRelation(
-            (order.status_lookup ?? null) as object | object[] | null,
-          ),
-          requester: firstRelation(
-            (order.requester ?? null) as object | object[] | null,
-          ),
-          from_area: firstRelation(
-            (order.from_area ?? null) as object | object[] | null,
-          ),
-          to_area: firstRelation(
-            (order.to_area ?? null) as object | object[] | null,
-          ),
-        }))
-      .sort((left, right) => String(left.created_at).localeCompare(String(right.created_at))),
-    };
+  async getCurrent(actor: OrderActor) {
+    if (!actor.areaId) fail(409, 'Bạn chưa được gán khu vực làm việc.');
+
+    const now = new Date().toISOString();
+    const [areaResult, shiftResult] = await Promise.all([
+      this.db
+        .from('areas')
+        .select('id, code, name')
+        .eq('id', actor.areaId)
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .maybeSingle(),
+      this.db.rpc('resolve_user_work_shift_instance', {
+        p_user_id: actor.id,
+        p_at: now,
+      }),
+    ]);
+
+    if (areaResult.error || !areaResult.data) {
+      fail(409, 'Bạn chưa được gán khu vực làm việc.');
+    }
+    if (shiftResult.error) {
+      if (/WORK_SHIFT_ASSIGNMENT_NOT_FOUND|WORK_SHIFT_NOT_AVAILABLE/.test(shiftResult.error.message)) {
+        fail(409, 'Bạn chưa được gán ca làm việc hiện tại.');
+      }
+      databaseError(shiftResult.error, 'Không thể xác định ca làm việc hiện tại');
+    }
+
+    const shift = (shiftResult.data as ResolvedShiftRow[] | null)?.[0];
+    if (!shift) return fail(409, 'Bạn chưa được gán ca làm việc hiện tại.');
+
+    const context = {
+      area_id: actor.areaId,
+      work_shift_id: shift.work_shift_id,
+      work_date: shift.work_date,
+      area: areaResult.data,
+      work_shift: {
+        id: shift.work_shift_id,
+        code: shift.work_shift_code,
+        name: shift.work_shift_name,
+      },
+      shift_start_at: shift.shift_start_at,
+      shift_end_at: shift.shift_end_at,
+      business_time_zone: BUSINESS_TIME_ZONE,
+    } as const;
+
+    const { data, error } = await this.db
+      .from('supply_shift_order_sheets')
+      .select(SHEET_DETAIL_SELECT)
+      .eq('area_id', actor.areaId)
+      .eq('work_shift_id', shift.work_shift_id)
+      .eq('work_date', shift.work_date)
+      .eq('is_deleted', false)
+      .eq('orders.is_deleted', false)
+      .maybeSingle();
+
+    if (error) databaseError(error, 'Không thể tải Phiếu Order Ca hiện tại');
+    if (!data) return { context, sheet: null };
+
+    const row = data as unknown as SheetRow & { orders: Array<Record<string, unknown>> };
+    this.assertReadable(actor, row);
+    return { context, sheet: this.normalizeDetail(row) };
   }
 
   async export(actor: OrderActor, sheetId: string) {

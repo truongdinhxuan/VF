@@ -3,6 +3,7 @@ import {
   createSupply,
   deleteSupply,
   getSupply,
+  getSupplyAvailability,
   listSupplies,
   listSupplyProviders,
   listSupplyStackOptions,
@@ -44,6 +45,17 @@ const supplyRoutes: FastifyPluginAsync = async (fastify) => {
       schema: supplyStackOptionsSchema,
     },
     listSupplyStackOptions,
+  );
+  fastify.get(
+    '/:id/availability',
+    {
+      preHandler: [
+        verifyToken,
+        requirePermission(PERMISSION_CODE.SUPPLY_ORDER_CREATE),
+      ],
+      schema: supplyStackOptionsSchema,
+    },
+    getSupplyAvailability,
   );
   fastify.get(
     '/:id',

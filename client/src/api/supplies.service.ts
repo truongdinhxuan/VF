@@ -2,6 +2,8 @@ import type { ApiEnvelope } from '../types/api';
 import type {
   CreateSupplyInput,
   Supply,
+  SupplyAvailability,
+  SupplyAvailabilityParams,
   SupplyListParams,
   SupplyStackOption,
   SupplyStackOptionsParams,
@@ -43,6 +45,18 @@ export const getSupplyStackOptions = async (
   unwrapData(
     await instance.get<ApiEnvelope<SupplyStackOption[]>, ApiEnvelope<SupplyStackOption[]>>(
       `supplies/${id}/stack-options`,
+      { params, signal },
+    ),
+  );
+
+export const getSupplyAvailability = async (
+  id: string,
+  params: SupplyAvailabilityParams,
+  signal?: AbortSignal,
+): Promise<SupplyAvailability> =>
+  unwrapData(
+    await instance.get<ApiEnvelope<SupplyAvailability>, ApiEnvelope<SupplyAvailability>>(
+      `supplies/${id}/availability`,
       { params, signal },
     ),
   );

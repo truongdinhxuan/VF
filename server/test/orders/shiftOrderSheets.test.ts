@@ -48,7 +48,22 @@ test('Shift sheet queries are paginated, scoped and relation-based', () => {
   assert.match(sheetService, /parsePagination/);
   assert.match(sheetService, /\.range\(pagination\.from, pagination\.to\)/);
   assert.match(sheetService, /orders!orders_shift_order_sheet_id_fkey/);
+  assert.match(sheetService, /isOrderAreaScoped\(actor\)/);
   assert.match(sheetService, /request = request\.eq\('area_id', actor\.areaId\)/);
+  assert.match(sheetService, /order_items\([\s\S]*supply:supplies!/);
+  assert.match(sheetService, /provider:providers!order_items_provider_id_fkey/);
+  assert.match(sheetService, /unit:units!order_items_unit_id_fkey/);
+});
+
+test('Current Shift Sheet resolves authenticated Area and canonical work shift instance', () => {
+  assert.match(sheetRoutes, /fastify\.get\('\/current'/);
+  assert.match(sheetService, /resolve_user_work_shift_instance/);
+  assert.match(sheetService, /p_user_id: actor\.id/);
+  assert.match(sheetService, /\.eq\('area_id', actor\.areaId\)/);
+  assert.match(sheetService, /\.eq\('work_shift_id', shift\.work_shift_id\)/);
+  assert.match(sheetService, /\.eq\('work_date', shift\.work_date\)/);
+  assert.match(sheetService, /return \{ context, sheet: null \}/);
+  assert.doesNotMatch(sheetService, /new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)/);
 });
 
 test('Phase 10 export reuses Sheet read guard and relational historical data', () => {

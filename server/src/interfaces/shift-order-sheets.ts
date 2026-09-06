@@ -41,5 +41,16 @@ export interface ShiftOrderSheetSummary {
   shift_start_at: string;
   shift_end_at: string;
   order_count: number;
+  item_count: number;
 }
 
+export interface CurrentShiftOrderSheetContext {
+  area_id: string;
+  work_shift_id: string;
+  work_date: string;
+  area: ShiftOrderSheetRelation;
+  work_shift: ShiftOrderSheetRelation;
+  shift_start_at: string;
+  shift_end_at: string;
+  business_time_zone: 'Asia/Ho_Chi_Minh';
+}

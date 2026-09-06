@@ -84,3 +84,13 @@ export interface SupplyStackOptionsParams {
   provider_id: string;
   area_id: string;
 }
+
+export type SupplyAvailabilityParams = SupplyStackOptionsParams;
+
+export interface SupplyAvailability {
+  supply_id: string;
+  provider_id: string;
+  area_id: string;
+  category_code: string;
+  available_quantity: number;
+}

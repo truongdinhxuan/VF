@@ -53,6 +53,11 @@ export const getShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply)
     (request.params as { id: string }).id,
   ));
 
+export const getCurrentShiftOrderSheet = (request: FastifyRequest, reply: FastifyReply) =>
+  respond(request, reply, () => new ShiftOrderSheetsService(request.server).getCurrent(
+    actorFrom(request),
+  ));
+
 export const exportShiftOrderSheet = async (
   request: FastifyRequest,
   reply: FastifyReply,

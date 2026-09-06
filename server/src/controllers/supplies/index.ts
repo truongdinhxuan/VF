@@ -48,6 +48,15 @@ export const listSupplyStackOptions = (
     request.query as SupplyStackOptionsQuery,
   ));
 
+export const getSupplyAvailability = (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => respondWithData(request, reply, () =>
+  new SuppliesService(request.server).getAvailability(
+    (request.params as { id: string }).id,
+    request.query as SupplyStackOptionsQuery,
+  ));
+
 export const createSupply = (request: FastifyRequest, reply: FastifyReply) =>
   respondWithData(
     request,

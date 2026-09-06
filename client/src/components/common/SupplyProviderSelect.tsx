@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { getSupplyProviders } from '../../api/supplies.service';
@@ -12,6 +13,12 @@ interface SupplyProviderSelectProps {
   disabled?: boolean;
   className?: string;
   ariaLabel?: string;
+  /**
+   * When the Supply exposes exactly one active Provider, pick it automatically
+   * so the operator skips a redundant selection. The field stays visible and
+   * editable; the backend still validates the link on create/submit.
+   */
+  autoSelectSingle?: boolean;
 }
 
 export const SupplyProviderSelect = ({
@@ -22,6 +29,7 @@ export const SupplyProviderSelect = ({
   disabled = false,
   className = '',
   ariaLabel = 'Chọn Provider',
+  autoSelectSingle = false,
 }: SupplyProviderSelectProps) => {
   const query = useQuery({
     queryKey: queryKeys.supplyProviders.list(supplyId),
@@ -30,14 +38,34 @@ export const SupplyProviderSelect = ({
     staleTime: 30 * 60 * 1000,
   });
 
-  if (supplyId && query.isPending) {
-    return <SelectSkeleton label="Đang tải Provider của vật tư" />;
-  }
-
-  const providers = query.data ?? [];
+  const providers = useMemo(() => query.data ?? [], [query.data]);
   const error = query.isError
     ? getApiErrorMessage(query.error, 'Không thể tải Provider của vật tư.')
     : null;
+
+  const autoAppliedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoSelectSingle || disabled || !supplyId) return;
+    if (query.isPending || query.isError) return;
+    if (providers.length !== 1) return;
+    if (value === providers[0].id) return;
+    if (autoAppliedForRef.current === supplyId) return;
+    autoAppliedForRef.current = supplyId;
+    onChange(providers[0].id);
+  }, [
+    autoSelectSingle,
+    disabled,
+    supplyId,
+    value,
+    providers,
+    query.isPending,
+    query.isError,
+    onChange,
+  ]);
+
+  if (supplyId && query.isPending) {
+    return <SelectSkeleton label="Đang tải Provider của vật tư" />;
+  }
 
   return (
     <div className="space-y-1">

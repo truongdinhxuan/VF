@@ -1,4 +1,11 @@
-import type { Order, OrderAreaSummary, OrderUserSummary } from './orders';
+import type {
+  Order,
+  OrderAreaSummary,
+  OrderSupplySummary,
+  OrderUnitSummary,
+  OrderUserSummary,
+} from './orders';
+import type { Provider } from './providers';
 import type { PaginatedListParams } from './pagination.types';
 
 export interface ShiftOrderSheetWorkShift {
@@ -26,11 +33,61 @@ export interface ShiftOrderSheetSummary {
   shift_start_at: string;
   shift_end_at: string;
   order_count: number;
+  item_count: number;
   business_time_zone: 'Asia/Ho_Chi_Minh';
 }
 
+export interface ShiftOrderSheetCreateContext {
+  id: string | null;
+  area_id: string;
+  work_shift_id: string;
+  work_date: string;
+  area: OrderAreaSummary | null;
+  work_shift: Pick<ShiftOrderSheetWorkShift, 'id' | 'code' | 'name'> | null;
+  leader?: OrderUserSummary | null;
+}
+
+export interface ShiftOrderSheetOrderItem {
+  id: string;
+  order_id: string;
+  supply_id: string;
+  provider_id: string;
+  unit_id: string;
+  quantity_requested: number;
+  set_per_qty: number | null;
+  requested_stack_quantity: number | null;
+  requested_total_set_quantity: number | null;
+  quantity_approved: number | null;
+  quantity_issued: number | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  supply: (OrderSupplySummary & {
+    category?: { id: string; code: string; name: string } | null;
+  }) | null;
+  provider: Pick<Provider, 'id' | 'code' | 'name' | 'description'> | null;
+  unit: OrderUnitSummary | null;
+}
+
+export interface ShiftOrderSheetOrder extends Omit<Order, 'order_items'> {
+  order_items: ShiftOrderSheetOrderItem[];
+}
+
 export interface ShiftOrderSheetDetail extends ShiftOrderSheetSummary {
-  orders: Array<Order & { order_items?: Array<{ id: string }> }>;
+  orders: ShiftOrderSheetOrder[];
+}
+
+export interface CurrentShiftOrderSheetContext extends Omit<ShiftOrderSheetCreateContext, 'id' | 'area' | 'work_shift'> {
+  area: OrderAreaSummary;
+  work_shift: Pick<ShiftOrderSheetWorkShift, 'id' | 'code' | 'name'>;
+  shift_start_at: string;
+  shift_end_at: string;
+  business_time_zone: 'Asia/Ho_Chi_Minh';
+}
+
+export interface CurrentShiftOrderSheetResponse {
+  context: CurrentShiftOrderSheetContext;
+  sheet: ShiftOrderSheetDetail | null;
 }
 
 export interface ShiftOrderSheetListParams extends PaginatedListParams {
@@ -39,4 +96,3 @@ export interface ShiftOrderSheetListParams extends PaginatedListParams {
   leaderId?: string;
   areaId?: string;
 }
-

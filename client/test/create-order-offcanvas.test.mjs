@@ -102,7 +102,7 @@ describe('Phase 3 Create Order offcanvas contract', () => {
   });
 
   it('opens creation on the Sheet through shared offcanvas without route navigation', () => {
-    const sheet = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
+    const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(sheet, /openCrud\(/);
     assert.match(sheet, /mode="shift-sheet-submit"/);
     assert.match(sheet, /Gửi Order/);
@@ -111,18 +111,19 @@ describe('Phase 3 Create Order offcanvas contract', () => {
   });
 
   it('uses effective permission and targeted query invalidation', () => {
-    const sheet = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
+    const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(sheet, /hasPermission\(PERMISSION_CODE\.SUPPLY_ORDER_CREATE\)/);
     assert.doesNotMatch(sheet, /role\s*===|role\.includes|switch\s*\(\s*role/);
     assert.match(sheet, /queryKeys\.orders\.lists/);
-    assert.match(sheet, /queryKeys\.shiftOrderSheets\.detail\(id\)/);
+    assert.match(sheet, /queryKeys\.shiftOrderSheets\.detail\(sheetId\)/);
+    assert.match(sheet, /queryKeys\.shiftOrderSheets\.current/);
     assert.match(sheet, /queryKeys\.shiftOrderSheets\.lists/);
     assert.doesNotMatch(sheet, /queryKeys\.stockBalances|queryClient\.clear/);
   });
 
   it('locks persisted Draft values and exposes explicit recovery actions', () => {
     const form = read('src/components/orders/CreateOrderForm.tsx');
-    const sheet = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
+    const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(form, /const formLocked = Boolean\(draftOrder\)/);
     assert.match(form, /Order nháp .* đã được tạo nhưng chưa thể gửi/);
     assert.doesNotMatch(form, /reset\(/);
@@ -143,7 +144,7 @@ describe('Phase 3 Create Order offcanvas contract', () => {
 
   it('keeps busy close protection, dirty state and focus integration', () => {
     const form = read('src/components/orders/CreateOrderForm.tsx');
-    const sheet = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
+    const sheet = read('src/components/orders/ShiftOrderSheetWorkspace.tsx');
     assert.match(form, /if \(isBusy\) return/);
     assert.match(form, /isDirty: isDirty && !draftOrder/);
     assert.match(sheet, /preventCloseWhileBusy: true/);

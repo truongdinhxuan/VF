@@ -27,6 +27,13 @@ export const shiftOrderSheetDetailSchema = {
   },
 };
 
+export const shiftOrderSheetCurrentSchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+  },
+};
+
 export const shiftOrderSheetExportSchema = {
   params: shiftOrderSheetDetailSchema.params,
   produces: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
