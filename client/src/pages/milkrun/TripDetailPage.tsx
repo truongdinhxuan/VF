@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { createRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   arriveMilkrunTrip,
@@ -8,11 +8,12 @@ import {
   startMilkrunTrip,
 } from '../../api/milkrun-trips.service';
 import { getApiErrorMessage } from '../../api/errors';
-import { ErrorButton, InfoButton, SecondaryButton, TextButton } from '../../components/common/Button';
+import { ErrorButton, InfoButton, TextButton } from '../../components/common/Button';
 import { PageSkeleton } from '../../components/common/skeleton';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { getWorkspacePath } from '../../constants/workspaces';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { queryKeys } from '../../lib/queryKeys';
 import { MILKRUN_TRIP_STATUS, type MilkrunTrip } from '../../types/milkrun';
 
@@ -21,13 +22,12 @@ const formatDate = (value: string | null) => value
   : '—';
 
 const TripDetailPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { id } = useParams<{ id: string }>();
   const { role, hasPermission } = useAuth();
   const tripsPath = getWorkspacePath(role, 'milkrun/trips');
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
   const tripQuery = useQuery({
     queryKey: queryKeys.milkrunTrips.detail(id ?? ''),
     queryFn: ({ signal }) => getMilkrunTrip(id!, signal),
@@ -39,8 +39,6 @@ const TripDetailPage = () => {
       queryClient.setQueryData(queryKeys.milkrunTrips.detail(trip.id), trip);
       await queryClient.invalidateQueries({ queryKey: queryKeys.milkrunTrips.lists });
       setFeedback('Cập nhật trạng thái Trip thành công.');
-      setCancelOpen(false);
-      setCancelReason('');
     },
     onError: (error) => setFeedback(getApiErrorMessage(error, 'Không thể cập nhật trạng thái Trip.')),
   });
@@ -61,6 +59,34 @@ const TripDetailPage = () => {
   const status = trip.status?.code;
   const canCancel = hasPermission(PERMISSION_CODE.MILKRUN_TRIP_CREATE)
     && (status === MILKRUN_TRIP_STATUS.REGISTERED || status === MILKRUN_TRIP_STATUS.STARTED);
+
+  const openCancelConfirmation = (event: MouseEvent<HTMLButtonElement>) => {
+    const reasonRef = createRef<HTMLInputElement>();
+    openConfirm({
+      title: 'Hủy Trip?',
+      description: `Trip “${trip.code}” sẽ được gửi qua action CANCEL hiện có.`,
+      confirmLabel: 'Hủy Trip',
+      cancelLabel: 'Quay lại',
+      variant: 'danger',
+      size: 'md',
+      triggerElement: event.currentTarget,
+      content: (
+        <label className="block space-y-1.5 text-sm font-semibold text-slate-700">
+          Lý do hủy (lưu vào ghi chú Trip)
+          <input ref={reasonRef} maxLength={2000} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" />
+        </label>
+      ),
+      onConfirm: async () => {
+        try {
+          await actionMutation.mutateAsync(
+            () => cancelMilkrunTrip(trip.id, reasonRef.current?.value.trim() ?? ''),
+          );
+        } catch (error) {
+          throw new Error(getApiErrorMessage(error, 'Không thể hủy Trip.'), { cause: error });
+        }
+      },
+    });
+  };
 
   return (
     <section className="space-y-5">
@@ -104,20 +130,10 @@ const TripDetailPage = () => {
               <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate(() => arriveMilkrunTrip(trip.id))} className={InfoButton}>ARRIVE</button>
             )}
             {canCancel && (
-              <button type="button" disabled={actionMutation.isPending} onClick={() => setCancelOpen(true)} className={ErrorButton}>CANCEL</button>
+              <button type="button" disabled={actionMutation.isPending} onClick={openCancelConfirmation} className={ErrorButton}>CANCEL</button>
             )}
           </div>
         </div>
-        {cancelOpen && (
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:flex-row sm:items-end">
-            <label className="flex-1 space-y-1 text-sm font-semibold text-slate-700">
-              Lý do hủy (lưu vào ghi chú Trip)
-              <input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} maxLength={2000} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" />
-            </label>
-            <button type="button" onClick={() => setCancelOpen(false)} className={SecondaryButton}>Bỏ qua</button>
-            <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate(() => cancelMilkrunTrip(trip.id, cancelReason))} className={ErrorButton}>Xác nhận hủy</button>
-          </div>
-        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

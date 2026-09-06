@@ -110,13 +110,14 @@ describe('Phase 2 Units CRUD offcanvas contract', () => {
     assert.match(units, /confirmLabel: 'Ngừng sử dụng'/);
     assert.match(units, /cancelLabel: 'Hủy'/);
     assert.match(units, /return ok \? undefined : false/);
+    assert.match(units, /throwOnError: true/);
     assert.match(units, /triggerElement: event\.currentTarget/);
   });
 
-  it('retains legacy modal exports for resources that have not migrated', () => {
+  it('retains the legacy form modal but removes the unused centered confirmation', () => {
     const primitives = read('src/components/crud/CrudPrimitives.tsx');
     assert.match(primitives, /export const CrudModal/);
-    assert.match(primitives, /export const ConfirmDialog/);
+    assert.doesNotMatch(primitives, /export const ConfirmDialog/);
   });
 
   it('does not touch backend, routing, SSE or other resource invalidation from Units', () => {

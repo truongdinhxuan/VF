@@ -265,7 +265,7 @@ export const OffcanvasProvider = ({
       focusedEntries.current.add(topEntry.id);
       const preferred = topEntry.kind === 'crud'
         ? topEntry.initialFocusRef?.current
-        : null;
+        : panel.querySelector<HTMLElement>('[data-confirm-cancel="true"]');
       focusFirstElement(panel, preferred);
     });
     return () => window.cancelAnimationFrame(frame);

@@ -6,13 +6,14 @@ import cors from "@fastify/cors";
  * Cho phép Frontend ở port khác gọi được API của Backend
  */
 export default fp(async (fastify, opts) => {
+  const origin = process.env.ORIGIN_URL;
+
   await fastify.register(cors, {
-    origin: process.env.ORIGIN_URL,
+    origin,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
     exposedHeaders: ['Content-Disposition'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
-  // console.log(process.env.ORIGIN_URL);
-  fastify.log.info("Cors is actived on http://localhost:5173");
+  fastify.log.info({ origin }, "CORS is active for the configured frontend origin");
 });

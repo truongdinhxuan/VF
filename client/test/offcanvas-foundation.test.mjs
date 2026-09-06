@@ -59,7 +59,19 @@ describe('Phase 1 Offcanvas foundation contract', () => {
     assert.match(footer, /disabled=\{isSubmitting \|\| isDisabled\}/);
     assert.match(confirmation, /setPending\(true\);\s*onBusyChange\(true\)/);
     assert.match(confirmation, /onBusyChange\(false\);\s*setPending\(false\)/);
+    assert.match(confirmation, /if \(busy \|\| pendingRef\.current\) return/);
+    assert.match(confirmation, /pendingRef\.current = true/);
+    assert.match(confirmation, /disabled=\{busy\}/);
     assert.doesNotMatch(confirmation, /useEffect\([\s\S]*?onBusyChange\(busy\)/);
+  });
+
+  it('keeps a failed confirmation open and renders a retryable inline error', () => {
+    const confirmation = read('src/components/offcanvas/ConfirmOffcanvas.tsx');
+    assert.match(confirmation, /catch \(confirmationError\)/);
+    assert.match(confirmation, /setError\(/);
+    assert.match(confirmation, /role="alert"/);
+    assert.match(confirmation, /setError\(null\)/);
+    assert.doesNotMatch(confirmation, /catch[\s\S]*?onConfirmed\(\)/);
   });
 
   it('uses one centralized keyboard listener and traps focus in the top panel', () => {
@@ -77,8 +89,18 @@ describe('Phase 1 Offcanvas foundation contract', () => {
     assert.match(focus, /autoFocusTarget\.focus\(\)/);
     assert.match(focus, /event\.shiftKey/);
     assert.match(focus, /restoreFocus/);
+    assert.match(focus, /document\.querySelector<HTMLElement>\('main'\)/);
+    assert.match(focus, /element\?\.isConnected/);
     assert.match(provider, /focusFirstElement\(panel, preferred\)/);
     assert.match(provider, /focusedEntries\.current\.has\(topEntry\.id\)/);
+  });
+
+  it('uses the safe cancel action as initial focus for confirmations', () => {
+    const provider = read('src/components/offcanvas/OffcanvasProvider.tsx');
+    const confirmation = read('src/components/offcanvas/ConfirmOffcanvas.tsx');
+    assert.match(confirmation, /data-confirm-cancel="true"/);
+    assert.match(provider, /panel\.querySelector<HTMLElement>\('\[data-confirm-cancel="true"\]'\)/);
+    assert.match(provider, /focusFirstElement\(panel, preferred\)/);
   });
 
   it('uses reference-counted body scroll owners shared with the mobile sidebar', () => {
@@ -109,11 +131,11 @@ describe('Phase 1 Offcanvas foundation contract', () => {
     assert.doesNotMatch(css, /offcanvas-panel[^{]*\{[^}]*transition:\s*width/);
   });
 
-  it('keeps legacy modal primitives and defines semantic application layers', () => {
+  it('keeps only the legacy form modal and defines semantic application layers', () => {
     const crud = read('src/components/crud/CrudPrimitives.tsx');
     const layers = read('src/constants/layers.ts');
     assert.match(crud, /export const CrudModal/);
-    assert.match(crud, /export const ConfirmDialog/);
+    assert.doesNotMatch(crud, /export const ConfirmDialog/);
     for (const value of [80, 81, 90, 91, 100, 200]) {
       assert.match(layers, new RegExp(`: ${value}`));
     }

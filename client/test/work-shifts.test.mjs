@@ -24,7 +24,7 @@ describe('Phase 8 work-shift UI', () => {
     const usersPage = read('src/pages/management/UsersPage.tsx');
     const panel = read('src/components/users/UserWorkShiftPanel.tsx');
     assert.match(usersPage, /hasPermission\(PERMISSION_CODE\.ADMIN_USER_UPDATE\)/);
-    assert.match(usersPage, /<UserWorkShiftPanel[\s\S]*canAssign=\{canUpdate\}/);
+    assert.match(usersPage, /<UserWorkShiftPanel[\s\S]*canAssign=\{!viewing && canUpdate\}/);
     assert.doesNotMatch(panel, /role\s*===|role\.includes/);
   });
 

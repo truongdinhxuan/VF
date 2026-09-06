@@ -1,35 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback,useEffect,useState,type MouseEvent } from 'react';
 import {
-  createProvider,
-  deactivateProvider,
-  getProviders,
-  updateProvider,
+createProvider,
+deactivateProvider,
+getProviders,
+updateProvider,
 } from '../../api/providers.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  ConfirmDialog,
-  CrudFeedbackToast,
-  CrudModal,
-  CrudPageHeader,
-  ErrorState,
-  FieldError,
-  FormActions,
-  inputClassName,
-  labelClassName,
-  RowActions,
-  StatusBadge,
+CrudFeedbackToast,
+CrudPageHeader,
+ErrorState,
+inputClassName,
+RowActions,
+StatusBadge
 } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { ProviderForm } from '../../components/forms/ProviderForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type {
-  CreateProviderInput,
-  Provider,
-  ProviderListParams,
+CreateProviderInput,
+Provider,
+ProviderListParams,
 } from '../../types/providers';
 
 const UNKNOWN_PROVIDER_CODE = 'UNKNOW';
@@ -69,96 +67,13 @@ const formatDate = (value: string): string => {
     }).format(date);
 };
 
-const ProviderForm = ({
-  item,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  item: Provider | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: CreateProviderInput) => Promise<void>;
-}) => {
-  const isUnknown = item?.code === UNKNOWN_PROVIDER_CODE;
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<CreateProviderInput>({
-    defaultValues: {
-      code: item?.code ?? '',
-      name: item?.name ?? '',
-      description: item?.description ?? '',
-      is_active: item?.is_active ?? true,
-    },
-  });
-
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      {isUnknown && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          UNKNOW — Chưa rõ là Provider hệ thống. Không thể đổi code hoặc deactivate.
-        </div>
-      )}
-      <label className={labelClassName}>
-        <span>Code</span>
-        <input
-          {...register('code', {
-            required: 'Vui lòng nhập Provider code.',
-            setValueAs: (value: string) => value.trim(),
-          })}
-          readOnly={isUnknown}
-          aria-readonly={isUnknown}
-          className={`${inputClassName} ${isUnknown ? 'cursor-not-allowed bg-slate-100' : ''}`}
-        />
-        <FieldError message={errors.code?.message} />
-      </label>
-      <label className={labelClassName}>
-        <span>Tên Provider</span>
-        <input
-          {...register('name', {
-            required: 'Vui lòng nhập tên Provider.',
-            setValueAs: (value: string) => value.trim(),
-          })}
-          className={inputClassName}
-        />
-        <FieldError message={errors.name?.message} />
-      </label>
-      <label className={labelClassName}>
-        <span>Mô tả</span>
-        <textarea
-          rows={4}
-          {...register('description', {
-            setValueAs: (value: string) => value.trim() || null,
-          })}
-          className={inputClassName}
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <input
-          type="checkbox"
-          {...register('is_active')}
-          disabled={isUnknown}
-          className="h-4 w-4 rounded border-slate-300"
-        />
-        Đang hoạt động
-      </label>
-      <FormActions
-        busy={busy}
-        onCancel={onCancel}
-        submitLabel={item ? 'Lưu thay đổi' : 'Tạo Provider'}
-      />
-    </form>
-  );
-};
-
 const ProvidersPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_UPDATE);
   const canDelete = hasPermission(PERMISSION_CODE.SUPPLY_CATALOG_DELETE);
-  const hasActions = canUpdate || canDelete;
+  const hasActions = true; // Read access is already enforced by the page guard.
   const loader = useCallback(
     (query: ProviderQuery, signal: AbortSignal) => getProviders(query, signal),
     [],
@@ -178,7 +93,11 @@ const ProvidersPage = () => {
   const debouncedSearch = useDebounce(search);
   const [editing, setEditing] = useState<Provider | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<Provider | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openView = useCallback((item: Provider) => {
+    setEditing(item); setViewing(true); setFormError(null); setFormOpen(true);
+  }, []);
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
 
@@ -190,24 +109,51 @@ const ProvidersPage = () => {
   }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: CreateProviderInput) => {
-    const input = {
-      ...values,
-      code: values.code.trim(),
-      name: values.name.trim(),
-      description: values.description?.trim() || null,
-    };
-    const ok = await resource.runMutation(
-      () => editing
-        ? updateProvider(editing.id, input)
-        : createProvider(input),
-      editing ? 'Đã cập nhật Provider.' : 'Đã tạo Provider.',
-      editing ? 'Không thể cập nhật Provider.' : 'Không thể tạo Provider.',
-    );
-    if (ok) {
-      setFormOpen(false);
-      setEditing(null);
+    setFormError(null);
+    try {
+      const input = {
+        ...values,
+        code: values.code.trim(),
+        name: values.name.trim(),
+        description: values.description?.trim() || null,
+      };
+      const ok = await resource.runMutation(
+        () => editing
+          ? updateProvider(editing.id, input)
+          : createProvider(input),
+        editing ? 'Đã cập nhật Provider.' : 'Đã tạo Provider.',
+        editing ? 'Không thể cập nhật Provider.' : 'Không thể tạo Provider.',
+        { throwOnError: true },
+      );
+      if (ok) {
+        setFormOpen(false);
+        setEditing(null);
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
     }
   };
+
+  const confirmDeactivate = (
+    item: Provider,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => openConfirm({
+    title: 'Ngừng sử dụng Provider?',
+    description: `Provider “${item.code} — ${item.name}” sẽ ngừng hoạt động và bị soft delete.`,
+    confirmLabel: 'Ngừng sử dụng',
+    cancelLabel: 'Quay lại',
+    variant: 'warning',
+    triggerElement: event.currentTarget,
+    onConfirm: () => resource.runMutation(
+      () => deactivateProvider(item.id),
+      'Đã ngừng sử dụng Provider.',
+      'Không thể ngừng sử dụng Provider.',
+      {
+        removeCurrentItem: resolveStatusFilter(resource.query) === 'active',
+        throwOnError: true,
+      },
+    ),
+  });
 
   const columns: Column<Provider>[] = [
     {
@@ -241,13 +187,15 @@ const ProvidersPage = () => {
       accessor: 'actions',
       render: (item: Provider) => (
         <RowActions
+          onView={() => openView(item)}
           onEdit={canUpdate ? () => {
             setEditing(item);
-            setFormOpen(true);
+            setViewing(false); setFormError(null); setFormOpen(true);
           } : undefined}
           onDelete={!canDelete || item.code === UNKNOWN_PROVIDER_CODE
             ? undefined
-            : () => setDeactivateTarget(item)}
+            : (event) => confirmDeactivate(item, event)}
+          deleteLabel="Ngừng sử dụng"
         />
       ),
     }] : []),
@@ -261,7 +209,7 @@ const ProvidersPage = () => {
         createLabel="Thêm Provider"
         onCreate={canCreate ? () => {
           setEditing(null);
-          setFormOpen(true);
+          setViewing(false); setFormError(null); setFormOpen(true);
         } : undefined}
       />
       <CrudFeedbackToast
@@ -305,38 +253,27 @@ const ProvidersPage = () => {
         />
       )}
 
-      {formOpen && (editing ? canUpdate : canCreate) && (
-        <CrudModal
-          title={editing ? 'Chỉnh sửa Provider' : 'Tạo Provider'}
+      {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError}
+          title={viewing ? 'Chi tiết nhà cung cấp' : (editing ? 'Chỉnh sửa Provider' : 'Tạo Provider')}
           busy={resource.mutating}
           onClose={() => setFormOpen(false)}
         >
-          <ProviderForm
+          {viewing && editing ? <CrudEntityView fields={[
+            { label: 'Mã', value: editing.code },
+            { label: 'Tên', value: editing.name },
+            { label: 'Mô tả', value: editing.description, fullWidth: true },
+            { label: 'Trạng thái', value: <StatusBadge active={editing.is_active && !editing.is_deleted} /> },
+            { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
+            { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
+          ]} /> : (<ProviderForm
             key={editing?.id ?? 'create'}
             item={editing}
             busy={resource.mutating}
-            onCancel={() => setFormOpen(false)}
-            onSave={save}
-          />
-        </CrudModal>
-      )}
 
-      {deactivateTarget && canDelete && (
-        <ConfirmDialog
-          title="Deactivate Provider?"
-          message={`Provider “${deactivateTarget.code} — ${deactivateTarget.name}” sẽ ngừng hoạt động và bị soft delete.`}
-          confirmLabel="Deactivate"
-          busy={resource.mutating}
-          onCancel={() => setDeactivateTarget(null)}
-          onConfirm={() => void resource.runMutation(
-            () => deactivateProvider(deactivateTarget.id),
-            'Đã deactivate Provider.',
-            'Không thể deactivate Provider.',
-            { removeCurrentItem: resolveStatusFilter(resource.query) === 'active' },
-          ).then((ok) => {
-            if (ok) setDeactivateTarget(null);
-          })}
-        />
+            onSave={save}
+          />)}
+        </PrimaryCrudDrawer>
       )}
     </div>
   );

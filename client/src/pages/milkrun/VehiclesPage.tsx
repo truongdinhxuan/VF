@@ -1,33 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { listMilkrunVehicles, updateMilkrunVehicle } from '../../api/milkrun-master-data.service';
+import { useCallback,useEffect,useMemo,useState } from 'react';
+import { listMilkrunVehicles,updateMilkrunVehicle } from '../../api/milkrun-master-data.service';
 import { getUsers } from '../../api/users.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  CrudFeedbackToast,
-  CrudModal,
-  CrudPageHeader,
-  ErrorState,
-  FormActions,
-  RowActions,
-  StatusBadge,
-  inputClassName,
-  labelClassName,
+CrudFeedbackToast,
+CrudPageHeader,
+ErrorState,
+RowActions,
+StatusBadge,
+inputClassName
 } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { VehicleAssignmentForm,type AssignmentFormValues } from '../../components/forms/VehicleAssignmentForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
-import type { MilkrunLookupListParams, MilkrunVehicle } from '../../types/milkrun';
+import type { MilkrunLookupListParams,MilkrunVehicle } from '../../types/milkrun';
 import type { PaginationParams } from '../../types/pagination.types';
 
 type VehicleQuery = MilkrunLookupListParams & PaginationParams;
 
-interface AssignmentFormValues {
-  driver_id: string;
-}
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', {
   dateStyle: 'short',
@@ -42,6 +38,7 @@ const VehiclesPage = () => {
   const [searchInput, setSearchInput] = useState('');
   const search = useDebounce(searchInput, 400);
   const [assignmentTarget, setAssignmentTarget] = useState<MilkrunVehicle | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const loader = useCallback(
     (query: VehicleQuery, signal: AbortSignal) => listMilkrunVehicles(query, signal),
     [],
@@ -67,9 +64,7 @@ const VehiclesPage = () => {
     enabled: canOpenAssignment,
     staleTime: 5 * 60 * 1000,
   });
-  const { register, handleSubmit, reset } = useForm<AssignmentFormValues>({
-    defaultValues: { driver_id: '' },
-  });
+  const [viewing, setViewing] = useState(false);
 
   useEffect(() => {
     const normalized = search.trim() || undefined;
@@ -77,18 +72,29 @@ const VehiclesPage = () => {
   }, [resourceSearch, search, updateResourceQuery]);
 
   const openAssignment = useCallback((vehicle: MilkrunVehicle) => {
-    reset({ driver_id: vehicle.driver_id ?? '' });
+    setFormError(null);
+    setViewing(false);
     setAssignmentTarget(vehicle);
-  }, [reset]);
+  }, []);
+  const openView = useCallback((vehicle: MilkrunVehicle) => {
+    setFormError(null);
+    setViewing(true); setAssignmentTarget(vehicle);
+  }, []);
 
   const saveAssignment = async (values: AssignmentFormValues) => {
     if (!assignmentTarget) return;
-    const ok = await resource.runMutation(
-      () => updateMilkrunVehicle(assignmentTarget.id, { driver_id: values.driver_id || null }),
-      'Đã cập nhật tài xế cho xe.',
-      'Không thể gán hoặc đổi xe cho tài xế.',
-    );
-    if (ok) setAssignmentTarget(null);
+    setFormError(null);
+    try {
+      const ok = await resource.runMutation(
+        () => updateMilkrunVehicle(assignmentTarget.id, { driver_id: values.driver_id || null }),
+        'Đã cập nhật tài xế cho xe.',
+        'Không thể gán hoặc đổi xe cho tài xế.',
+        { throwOnError: true },
+      );
+      if (ok) setAssignmentTarget(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu phân công.');
+    }
   };
 
   const columns = useMemo<Column<MilkrunVehicle>[]>(() => [
@@ -104,12 +110,12 @@ const VehiclesPage = () => {
     },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
     { header: 'Cập nhật', accessor: 'updated_at', sortKey: 'updated_at', render: (item) => formatDate(item.updated_at) },
-    ...(canOpenAssignment ? [{
+    ...[{
       header: 'Thao tác',
       accessor: 'actions',
-      render: (item: MilkrunVehicle) => <RowActions onEdit={() => openAssignment(item)} />,
-    }] : []),
-  ], [canOpenAssignment, openAssignment]);
+      render: (item: MilkrunVehicle) => <RowActions onView={() => openView(item)} onEdit={canOpenAssignment ? () => openAssignment(item) : undefined} />,
+    }],
+  ], [canOpenAssignment, openAssignment, openView]);
 
   return (
     <section className="space-y-6">
@@ -152,26 +158,17 @@ const VehiclesPage = () => {
           emptyText="Không có xe phù hợp."
         />
       )}
-      {assignmentTarget && canOpenAssignment && (
-        <CrudModal title={`Gán tài xế — ${assignmentTarget.code}`} busy={resource.mutating} onClose={() => setAssignmentTarget(null)}>
-          <form onSubmit={handleSubmit(saveAssignment)}>
-            <label className={labelClassName}>
-              Tài xế
-              <select {...register('driver_id')} className={inputClassName} disabled={usersQuery.isPending || usersQuery.isError}>
-                <option value="">Chưa gán</option>
-                {(usersQuery.data?.data ?? [])
-                  .filter((user) => user.is_verified && user.is_active && !user.is_deleted)
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.first_name} {user.last_name} — {user.vinfast_id}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            {usersQuery.isError && <p role="alert" className="mt-2 text-sm text-rose-600">Không thể tải danh sách tài xế.</p>}
-            <FormActions busy={resource.mutating} onCancel={() => setAssignmentTarget(null)} submitLabel="Lưu phân công" />
-          </form>
-        </CrudModal>
+      {assignmentTarget && (viewing || canOpenAssignment) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : 'edit'} onEdit={viewing && canOpenAssignment ? () => setViewing(false) : undefined} error={formError} title={`${viewing ? 'Chi tiết xe' : 'Gán tài xế'} — ${assignmentTarget.code}`} busy={resource.mutating} onClose={() => setAssignmentTarget(null)}>
+          {viewing ? <CrudEntityView fields={[
+            { label: 'Mã xe', value: assignmentTarget.code },
+            { label: 'Biển số', value: assignmentTarget.plate_number },
+            { label: 'Tên xe', value: assignmentTarget.name },
+            { label: 'Tài xế', value: assignmentTarget.driver ? `${assignmentTarget.driver.first_name} ${assignmentTarget.driver.last_name}` : 'Chưa gán' },
+            { label: 'Trạng thái', value: <StatusBadge active={assignmentTarget.is_active} /> },
+            { label: 'Cập nhật', value: formatDate(assignmentTarget.updated_at) },
+          ]} /> : <VehicleAssignmentForm vehicle={assignmentTarget} users={usersQuery.data?.data ?? []} loading={usersQuery.isPending} failed={usersQuery.isError} busy={resource.mutating} onSave={saveAssignment} />}
+        </PrimaryCrudDrawer>
       )}
     </section>
   );

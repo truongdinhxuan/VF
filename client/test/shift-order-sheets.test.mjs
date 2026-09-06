@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const createOrder = read('src/pages/orders/CreateOrderPage.tsx');
+const createOrderForm = read('src/components/orders/CreateOrderForm.tsx');
 const orderDetail = read('src/pages/orders/OrderDetailPage.tsx');
 const sheetList = read('src/pages/orders/ShiftOrderSheetsPage.tsx');
 const sheetDetail = read('src/pages/orders/ShiftOrderSheetDetailPage.tsx');
@@ -25,8 +26,8 @@ describe('Supply Phase 9 shift-order-sheet UI', () => {
   it('registers list/detail routes and preserves the sheet context for Create More', () => {
     assert.match(routes, /path: 'shift-order-sheets'/);
     assert.match(routes, /path: 'shift-order-sheets\/:id'/);
-    assert.match(sheetDetail, /shiftOrderSheetId=\$\{sheet\.id\}/);
-    assert.match(createOrder, /shift_order_sheet_id: shiftOrderSheetId/);
+    assert.match(sheetDetail, /shiftOrderSheetId=\$\{id\}/);
+    assert.match(createOrderForm, /shift_order_sheet_id: sheetContext\.id/);
   });
 
   it('shows current Order status from related backend data', () => {

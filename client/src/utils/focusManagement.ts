@@ -54,7 +54,20 @@ export const trapTabKey = (event: KeyboardEvent, container: HTMLElement): void =
 };
 
 export const restoreFocus = (element: HTMLElement | null): void => {
-  if (element?.isConnected && !element.hasAttribute('disabled')) {
-    window.requestAnimationFrame(() => element.focus());
-  }
+  window.requestAnimationFrame(() => {
+    if (element?.isConnected && !element.hasAttribute('disabled') && isFocusable(element)) {
+      element.focus();
+      return;
+    }
+    const fallback = document.querySelector<HTMLElement>(
+      '[data-offcanvas-panel="true"][data-state="open"]:not([aria-hidden="true"])',
+    ) ?? document.querySelector<HTMLElement>('main');
+    if (!fallback) return;
+    const [first] = getFocusableElements(fallback);
+    if (first) first.focus();
+    else {
+      if (!fallback.hasAttribute('tabindex')) fallback.tabIndex = -1;
+      fallback.focus();
+    }
+  });
 };

@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const createPage = read('src/pages/orders/CreateOrderPage.tsx');
+const createForm = read('src/components/orders/CreateOrderForm.tsx');
 const stackFields = read('src/components/orders/OrderStackFields.tsx');
 const queryKeys = read('src/lib/queryKeys.ts');
 const orderDetail = read('src/pages/orders/OrderDetailPage.tsx');
@@ -17,15 +18,15 @@ const apiErrors = read('src/api/errors.ts');
 
 describe('Supply stack Phase 3 frontend (T-017 to T-019)', () => {
   it('resets stale stack fields after Supply or Provider changes (T-017)', () => {
-    assert.match(createPage, /const resetStackFields/);
-    assert.match(createPage, /changeSupply[\s\S]*resetStackFields\(index\)/);
-    assert.match(createPage, /changeProvider[\s\S]*resetStackFields\(index\)/);
+    assert.match(createForm, /const resetStackFields/);
+    assert.match(createForm, /changeSupply[\s\S]*resetStackFields\(index\)/);
+    assert.match(createForm, /changeProvider[\s\S]*resetStackFields\(index\)/);
   });
 
   it('keys and resets availability by Supply, Provider and source Area (T-018)', () => {
     assert.match(queryKeys, /supplyStackOptions/);
     assert.match(queryKeys, /supplyId,[\s\S]*providerId,[\s\S]*areaId/);
-    assert.match(createPage, /previousSourceAreaId/);
+    assert.match(createForm, /previousSourceAreaId/);
     assert.match(stackFields, /staleTime: 15_000/);
     assert.match(stackFields, /refetchOnWindowFocus: true/);
   });

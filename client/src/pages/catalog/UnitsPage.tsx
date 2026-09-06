@@ -270,7 +270,7 @@ const UnitsPage = () => {
           () => deactivateUnit(item.id),
           'Ngừng sử dụng đơn vị thành công.',
           'Không thể ngừng sử dụng đơn vị.',
-          { removeCurrentItem: activeFilter === true },
+          { removeCurrentItem: activeFilter === true, throwOnError: true },
         );
         return ok ? undefined : false;
       },

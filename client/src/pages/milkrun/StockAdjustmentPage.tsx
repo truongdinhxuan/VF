@@ -12,7 +12,6 @@ import {
   listMilkrunStockBalances,
 } from '../../api/milkrun-stock.service';
 import {
-  ConfirmDialog,
   CrudFeedbackToast,
   CrudPageHeader,
   FieldError,
@@ -22,6 +21,7 @@ import {
 import { InfoButton } from '../../components/common/Button';
 import { SelectSkeleton } from '../../components/common/skeleton';
 import type { CrudFeedback } from '../../hooks/useCrudResource';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { queryKeys } from '../../lib/queryKeys';
 import type { CreateMilkrunStockAdjustmentInput } from '../../types/milkrun';
 
@@ -34,9 +34,9 @@ interface AdjustmentFormValues {
 }
 
 const StockAdjustmentPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
-  const [confirmation, setConfirmation] = useState<CreateMilkrunStockAdjustmentInput | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<AdjustmentFormValues>({
     defaultValues: {
@@ -104,27 +104,30 @@ const StockAdjustmentPage = () => {
       quantity: Number(values.quantity),
       reason_note: values.reason_note.trim() || null,
     };
-    setConfirmation(payload);
+    openConfirm({
+      title: 'Xác nhận điều chỉnh tồn?',
+      description: `Hệ thống sẽ tạo giao dịch ${selectedType?.code ?? ''} với số lượng ${payload.quantity}. Giao dịch sau khi tạo không thể sửa hoặc xóa.`,
+      confirmLabel: 'Xác nhận điều chỉnh',
+      cancelLabel: 'Quay lại',
+      variant: 'danger',
+      onConfirm: () => submit(payload),
+    });
   };
 
-  const submit = async () => {
-    if (!confirmation) return;
+  const submit = async (payload: CreateMilkrunStockAdjustmentInput) => {
     setSubmitting(true);
     try {
-      await createMilkrunStockAdjustment(confirmation);
+      await createMilkrunStockAdjustment(payload);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.milkrunStockBalances.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.milkrunStockTransactions.all }),
       ]);
       setFeedback({ type: 'success', message: 'Đã tạo giao dịch điều chỉnh tồn.' });
-      setConfirmation(null);
       reset();
     } catch (error) {
-      setFeedback({
-        type: 'error',
-        message: getApiErrorMessage(error, 'Không thể điều chỉnh tồn Rack.'),
-      });
-      setConfirmation(null);
+      const message = getApiErrorMessage(error, 'Không thể điều chỉnh tồn Rack.');
+      setFeedback({ type: 'error', message });
+      throw new Error(message, { cause: error });
     } finally {
       setSubmitting(false);
     }
@@ -230,16 +233,6 @@ const StockAdjustmentPage = () => {
           </p>
         </aside>
       </form>
-      {confirmation && (
-        <ConfirmDialog
-          title="Xác nhận điều chỉnh tồn?"
-          message={`Hệ thống sẽ tạo giao dịch ${selectedType?.code ?? ''} với số lượng ${confirmation.quantity}. Giao dịch sau khi tạo không thể sửa hoặc xóa.`}
-          confirmLabel="Xác nhận"
-          busy={submitting}
-          onCancel={() => setConfirmation(null)}
-          onConfirm={() => void submit()}
-        />
-      )}
     </section>
   );
 };

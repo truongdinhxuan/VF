@@ -1,34 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback,useEffect,useMemo,useState,type MouseEvent } from 'react';
 import {
-  createMilkrunShop,
-  deactivateMilkrunShop,
-  listMilkrunShops,
-  updateMilkrunShop,
+createMilkrunShop,
+deactivateMilkrunShop,
+listMilkrunShops,
+updateMilkrunShop,
 } from '../../api/milkrun-master-data.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  ConfirmDialog,
-  CrudFeedbackToast,
-  CrudModal,
-  CrudPageHeader,
-  ErrorState,
-  FieldError,
-  FormActions,
-  RowActions,
-  StatusBadge,
-  inputClassName,
-  labelClassName,
+CrudFeedbackToast,
+CrudPageHeader,
+ErrorState,
+RowActions,
+StatusBadge,
+inputClassName
 } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { ShopForm } from '../../components/forms/ShopForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type {
-  MilkrunLookupListParams,
-  MilkrunShop,
-  MilkrunShopInput,
+MilkrunLookupListParams,
+MilkrunShop,
+MilkrunShopInput,
 } from '../../types/milkrun';
 import type { PaginationParams } from '../../types/pagination.types';
 
@@ -39,83 +37,8 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', {
   timeStyle: 'short',
 }).format(new Date(value));
 
-const ShopForm = ({
-  item,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  item: MilkrunShop | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: MilkrunShopInput) => Promise<void>;
-}) => {
-  const { register, handleSubmit, formState: { errors } } = useForm<MilkrunShopInput>({
-    defaultValues: {
-      code: item?.code ?? '',
-      name: item?.name ?? '',
-      description: item?.description ?? '',
-      is_active: item?.is_active ?? true,
-    },
-  });
-
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      <label className={labelClassName}>
-        Code *
-        <input
-          {...register('code', {
-            required: 'Vui lòng nhập code.',
-            maxLength: { value: 100, message: 'Code tối đa 100 ký tự.' },
-            pattern: {
-              value: /^[A-Za-z][A-Za-z0-9_]*$/,
-              message: 'Code phải bắt đầu bằng chữ và chỉ gồm chữ, số hoặc dấu gạch dưới.',
-            },
-          })}
-          className={inputClassName}
-          autoFocus
-        />
-        <FieldError message={errors.code?.message} />
-      </label>
-
-      <label className={labelClassName}>
-        Tên Shop *
-        <input
-          {...register('name', {
-            required: 'Vui lòng nhập tên Shop.',
-            maxLength: { value: 255, message: 'Tên Shop tối đa 255 ký tự.' },
-          })}
-          className={inputClassName}
-        />
-        <FieldError message={errors.name?.message} />
-      </label>
-
-      <label className={labelClassName}>
-        Mô tả
-        <textarea
-          {...register('description', {
-            maxLength: { value: 2000, message: 'Mô tả tối đa 2000 ký tự.' },
-          })}
-          className={`${inputClassName} min-h-28 resize-y`}
-        />
-        <FieldError message={errors.description?.message} />
-      </label>
-
-      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-        <input type="checkbox" {...register('is_active')} />
-        Đang hoạt động
-      </label>
-
-      <FormActions
-        busy={busy}
-        onCancel={onCancel}
-        submitLabel={item ? 'Lưu thay đổi' : 'Tạo Shop'}
-      />
-    </form>
-  );
-};
-
 const ShopsPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.MILKRUN_SHOP_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.MILKRUN_SHOP_UPDATE);
@@ -124,7 +47,11 @@ const ShopsPage = () => {
   const search = useDebounce(searchInput, 400);
   const [editing, setEditing] = useState<MilkrunShop | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<MilkrunShop | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openView = useCallback((item: MilkrunShop) => {
+    setEditing(item); setViewing(true); setFormError(null); setFormOpen(true);
+  }, []);
   const loader = useCallback(
     (query: ShopQuery, signal: AbortSignal) => listMilkrunShops(query, signal),
     [],
@@ -151,21 +78,45 @@ const ShopsPage = () => {
   }, [resourceSearch, search, updateResourceQuery]);
 
   const save = async (values: MilkrunShopInput) => {
-    const input: MilkrunShopInput = {
-      ...values,
-      code: values.code.trim().toUpperCase(),
-      name: values.name.trim(),
-      description: values.description?.trim() || null,
-    };
-    const ok = await resource.runMutation(
-      () => editing
-        ? updateMilkrunShop(editing.id, input)
-        : createMilkrunShop(input),
-      editing ? 'Đã cập nhật Shop.' : 'Đã tạo Shop.',
-      editing ? 'Không thể cập nhật Shop.' : 'Không thể tạo Shop.',
-    );
-    if (ok) setFormOpen(false);
+    setFormError(null);
+    try {
+      const input: MilkrunShopInput = {
+        ...values,
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        description: values.description?.trim() || null,
+      };
+      const ok = await resource.runMutation(
+        () => editing
+          ? updateMilkrunShop(editing.id, input)
+          : createMilkrunShop(input),
+        editing ? 'Đã cập nhật Shop.' : 'Đã tạo Shop.',
+        editing ? 'Không thể cập nhật Shop.' : 'Không thể tạo Shop.',
+        { throwOnError: true },
+      );
+      if (ok) setFormOpen(false);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
+    }
   };
+
+  const confirmDeactivate = useCallback((
+    shop: MilkrunShop,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => openConfirm({
+    title: 'Ngừng sử dụng Shop?',
+    description: `Shop “${shop.code}” sẽ không còn xuất hiện trong dropdown active. Các Trip cũ vẫn giữ liên kết tới Shop này.`,
+    confirmLabel: 'Ngừng sử dụng',
+    cancelLabel: 'Quay lại',
+    variant: 'warning',
+    triggerElement: event.currentTarget,
+    onConfirm: () => resource.runMutation(
+      () => deactivateMilkrunShop(shop.id),
+      'Đã ngừng sử dụng Shop.',
+      'Không thể ngừng sử dụng Shop.',
+      { removeCurrentItem: resource.query.isActive === true, throwOnError: true },
+    ),
+  }), [openConfirm, resource]);
 
   const columns = useMemo<Column<MilkrunShop>[]>(() => [
     { header: 'Code', accessor: 'code', sortKey: 'code' },
@@ -193,23 +144,23 @@ const ShopsPage = () => {
       sortKey: 'updated_at',
       render: (shop) => formatDate(shop.updated_at),
     },
-    ...(canUpdate || canDeactivate ? [{
+    ...[{
       header: 'Thao tác',
       accessor: 'actions',
       render: (shop: MilkrunShop) => (
         <RowActions
-          onEdit={canUpdate ? () => {
+          onView={() => openView(shop)} onEdit={canUpdate ? () => {
             setEditing(shop);
-            setFormOpen(true);
+            setViewing(false); setFormError(null); setFormOpen(true);
           } : undefined}
           onDelete={canDeactivate && shop.is_active
-            ? () => setDeactivateTarget(shop)
+            ? (event) => confirmDeactivate(shop, event)
             : undefined}
-          deleteLabel="Deactivate"
+          deleteLabel="Ngừng sử dụng"
         />
       ),
-    }] : []),
-  ], [canDeactivate, canUpdate]);
+    }],
+  ], [canDeactivate, canUpdate, confirmDeactivate, openView]);
 
   return (
     <section className="space-y-6">
@@ -219,7 +170,7 @@ const ShopsPage = () => {
         createLabel="Thêm Shop"
         onCreate={canCreate ? () => {
           setEditing(null);
-          setFormOpen(true);
+          setViewing(false); setFormError(null); setFormOpen(true);
         } : undefined}
       />
 
@@ -262,38 +213,27 @@ const ShopsPage = () => {
         />
       )}
 
-      {formOpen && (editing ? canUpdate : canCreate) && (
-        <CrudModal
-          title={editing ? 'Chỉnh sửa Shop' : 'Tạo Shop'}
+      {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError}
+          title={viewing ? 'Chi tiết Shop' : (editing ? 'Chỉnh sửa Shop' : 'Tạo Shop')}
           busy={resource.mutating}
           onClose={() => setFormOpen(false)}
         >
-          <ShopForm
+          {viewing && editing ? <CrudEntityView fields={[
+            { label: 'Mã', value: editing.code },
+            { label: 'Tên', value: editing.name },
+            { label: 'Mô tả', value: editing.description, fullWidth: true },
+            { label: 'Trạng thái', value: <StatusBadge active={editing.is_active && !editing.is_deleted} /> },
+            { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
+            { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
+          ]} /> : (<ShopForm
             item={editing}
             busy={resource.mutating}
-            onCancel={() => setFormOpen(false)}
             onSave={save}
-          />
-        </CrudModal>
+          />)}
+        </PrimaryCrudDrawer>
       )}
 
-      {deactivateTarget && canDeactivate && (
-        <ConfirmDialog
-          title="Deactivate Shop?"
-          message={`Shop “${deactivateTarget.code}” sẽ không còn xuất hiện trong dropdown active. Các Trip cũ vẫn giữ liên kết tới Shop này.`}
-          confirmLabel="Deactivate"
-          busy={resource.mutating}
-          onCancel={() => setDeactivateTarget(null)}
-          onConfirm={() => void resource.runMutation(
-            () => deactivateMilkrunShop(deactivateTarget.id),
-            'Đã deactivate Shop.',
-            'Không thể deactivate Shop.',
-            { removeCurrentItem: resource.query.isActive === true },
-          ).then((ok) => {
-            if (ok) setDeactivateTarget(null);
-          })}
-        />
-      )}
     </section>
   );
 };

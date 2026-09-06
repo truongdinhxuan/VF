@@ -85,7 +85,10 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
     action: () => Promise<unknown>,
     successMessage: string,
     failureMessage: string,
-    options: { removeCurrentItem?: boolean } = {},
+    options: {
+      removeCurrentItem?: boolean;
+      throwOnError?: boolean;
+    } = {},
   ): Promise<boolean> => {
     setFeedback(null);
     try {
@@ -100,10 +103,9 @@ export const usePaginatedResource = <T, Q extends PaginationParams>({
       ]);
       return true;
     } catch (requestError) {
-      setFeedback({
-        type: 'error',
-        message: getApiErrorMessage(requestError, failureMessage),
-      });
+      const message = getApiErrorMessage(requestError, failureMessage);
+      setFeedback({ type: 'error', message });
+      if (options.throwOnError) throw new Error(message, { cause: requestError });
       return false;
     }
   }, [

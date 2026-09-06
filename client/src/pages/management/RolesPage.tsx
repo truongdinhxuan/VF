@@ -1,78 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback,useEffect,useState,type MouseEvent } from 'react';
 import { listPermissions } from '../../api/permissions.service';
 import {
-  createRole, deleteRole, getRolePermissions, listRoles,
-  replaceRolePermissions, updateRole,
+createRole,deleteRole,getRolePermissions,listRoles,
+replaceRolePermissions,updateRole,
 } from '../../api/roles.service';
 import { TextButton } from '../../components/common/Button';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  ConfirmDialog, CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState,
-  FieldError, FormActions, inputClassName, labelClassName, RowActions, StatusBadge,
+CrudFeedbackToast,CrudModal,CrudPageHeader,ErrorState,
+FormActions,
+RowActions,StatusBadge
 } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { RoleForm,type RoleFormValues } from '../../components/forms/RoleForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
 import type { Permission } from '../../types/permissions';
-import type { CreateRoleInput, Role, RoleListParams, UpdateRoleInput } from '../../types/roles';
-
-interface RoleFormValues {
-  code: string;
-  name: string;
-  description: string;
-  is_active: boolean;
-}
+import type { CreateRoleInput,Role,RoleListParams,UpdateRoleInput } from '../../types/roles';
 
 type RoleQuery = RoleListParams & PaginationParams;
 const initialQuery: RoleQuery = { page: 1, pageSize: 20, sortBy: 'code', sortOrder: 'asc' };
 
-const RoleForm = ({ role, busy, onCancel, onSave }: {
-  role: Role | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: RoleFormValues) => Promise<void>;
-}) => {
-  const { register, handleSubmit, formState: { errors } } = useForm<RoleFormValues>({
-    defaultValues: {
-      code: role?.code ?? '', name: role?.name ?? '',
-      description: role?.description ?? '', is_active: role?.is_active ?? true,
-    },
-  });
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      <label className={labelClassName}>
-        <span>Code</span>
-        <input {...register('code', {
-          required: 'Vui lòng nhập role code.',
-          pattern: { value: /^[A-Z][A-Z0-9_]*$/, message: 'Code chỉ gồm A-Z, số và dấu gạch dưới.' },
-          setValueAs: (value: string) => value.trim().toUpperCase(),
-        })} disabled={Boolean(role?.is_system)} className={inputClassName} />
-        <FieldError message={errors.code?.message} />
-      </label>
-      <label className={labelClassName}>
-        <span>Tên hiển thị</span>
-        <input {...register('name', { required: 'Vui lòng nhập tên role.', setValueAs: (value: string) => value.trim() })} className={inputClassName} />
-        <FieldError message={errors.name?.message} />
-      </label>
-      <label className={labelClassName}>
-        <span>Mô tả</span>
-        <textarea {...register('description', { setValueAs: (value: string) => value.trim() })} rows={3} className={inputClassName} />
-      </label>
-      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <input type="checkbox" {...register('is_active')} disabled={Boolean(role?.is_system)} className="h-4 w-4 rounded border-slate-300" />
-        Đang hoạt động
-      </label>
-      {role?.is_system && <p className="text-xs text-slate-500">Role hệ thống không cho phép đổi code hoặc xóa.</p>}
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={role ? 'Lưu thay đổi' : 'Tạo role'} />
-    </form>
-  );
-};
-
 const RolesPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.ADMIN_ROLE_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.ADMIN_ROLE_UPDATE);
@@ -87,7 +43,11 @@ const RolesPage = () => {
   const debouncedSearch = useDebounce(search);
   const [editing, setEditing] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openView = useCallback((item: Role) => {
+    setEditing(item); setViewing(true); setFormError(null); setFormOpen(true);
+  }, []);
   const [permissionTarget, setPermissionTarget] = useState<Role | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
@@ -102,17 +62,38 @@ const RolesPage = () => {
   }, [debouncedSearch, resourceSearch, updateResourceQuery]);
 
   const save = async (values: RoleFormValues) => {
-    const input: CreateRoleInput = {
-      code: values.code, name: values.name,
-      description: values.description || null, is_active: values.is_active,
-    };
-    const ok = await resource.runMutation(
-      editing ? () => updateRole(editing.id, input satisfies UpdateRoleInput) : () => createRole(input),
-      editing ? 'Đã cập nhật role.' : 'Đã tạo role.',
-      editing ? 'Không thể cập nhật role.' : 'Không thể tạo role.',
-    );
-    if (ok) setFormOpen(false);
+    setFormError(null);
+    try {
+      const input: CreateRoleInput = {
+        code: values.code, name: values.name,
+        description: values.description || null, is_active: values.is_active,
+      };
+      const ok = await resource.runMutation(
+        editing ? () => updateRole(editing.id, input satisfies UpdateRoleInput) : () => createRole(input),
+        editing ? 'Đã cập nhật role.' : 'Đã tạo role.',
+        editing ? 'Không thể cập nhật role.' : 'Không thể tạo role.',
+        { throwOnError: true },
+      );
+      if (ok) setFormOpen(false);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
+    }
   };
+
+  const confirmDelete = (role: Role, event: MouseEvent<HTMLButtonElement>) => openConfirm({
+    title: 'Xóa role?',
+    description: `Role “${role.name}” chỉ được xóa khi chưa được sử dụng.`,
+    confirmLabel: 'Xóa role',
+    cancelLabel: 'Quay lại',
+    variant: 'danger',
+    triggerElement: event.currentTarget,
+    onConfirm: () => resource.runMutation(
+      () => deleteRole(role.id),
+      'Đã xóa role.',
+      'Không thể xóa role.',
+      { removeCurrentItem: true, throwOnError: true },
+    ),
+  });
 
   const openPermissionMatrix = async (target: Role) => {
     setPermissionTarget(target);
@@ -138,22 +119,23 @@ const RolesPage = () => {
     { header: 'Mô tả', accessor: 'description', render: (item) => item.description || '—' },
     { header: 'Loại', accessor: 'is_system', render: (item) => item.is_system ? 'Hệ thống' : 'Tùy chỉnh' },
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active && !item.is_deleted} /> },
-    ...((canUpdate || canAssign) ? [{
+    ...[{
       header: 'Thao tác', accessor: 'actions', render: (item: Role) => (
         <div className="flex justify-end gap-2">
           {canAssign && <button type="button" className={TextButton} onClick={() => void openPermissionMatrix(item)}>Permissions</button>}
-          {canUpdate && <RowActions
-            onEdit={() => { setEditing(item); setFormOpen(true); }}
-            onDelete={item.is_system ? undefined : () => setDeleteTarget(item)}
-          />}
+          <RowActions
+            onView={() => openView(item)} onEdit={canUpdate ? () => { setEditing(item); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
+            onDelete={!canUpdate || item.is_system ? undefined : (event) => confirmDelete(item, event)}
+            deleteLabel="Xóa"
+          />
         </div>
       ),
-    }] : []),
+    }],
   ];
 
   return (
     <div className="space-y-6">
-      <CrudPageHeader title="Roles" description="Role động và permission matrix theo catalog hệ thống." createLabel="Thêm role" onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined} />
+      <CrudPageHeader title="Roles" description="Role động và permission matrix theo catalog hệ thống." createLabel="Thêm role" onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined} />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
         <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id}
@@ -163,15 +145,18 @@ const RolesPage = () => {
           onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })}
           emptyText="Không có role phù hợp." />
       )}
-      {formOpen && (editing ? canUpdate : canCreate) && (
-        <CrudModal title={editing ? 'Chỉnh sửa role' : 'Tạo role'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
-          <RoleForm key={editing?.id ?? 'create'} role={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
-        </CrudModal>
-      )}
-      {deleteTarget && canUpdate && (
-        <ConfirmDialog title="Xóa role?" message={`Role “${deleteTarget.name}” chỉ được xóa khi chưa được sử dụng.`}
-          confirmLabel="Xóa role" busy={resource.mutating} onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => void resource.runMutation(() => deleteRole(deleteTarget.id), 'Đã xóa role.', 'Không thể xóa role.', { removeCurrentItem: true }).then((ok) => { if (ok) setDeleteTarget(null); })} />
+      {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết role' : (editing ? 'Chỉnh sửa role' : 'Tạo role')} busy={resource.mutating} onClose={() => setFormOpen(false)}>
+          {viewing && editing ? <CrudEntityView fields={[
+            { label: 'Mã', value: editing.code },
+            { label: 'Tên', value: editing.name },
+            { label: 'Mô tả', value: editing.description, fullWidth: true },
+            { label: 'Loại', value: editing.is_system ? 'Hệ thống' : 'Tùy chỉnh' },
+            { label: 'Trạng thái', value: <StatusBadge active={editing.is_active && !editing.is_deleted} /> },
+            { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
+            { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
+          ]} /> : (<RoleForm key={editing?.id ?? 'create'} role={editing} busy={resource.mutating} onSave={save} />)}
+        </PrimaryCrudDrawer>
       )}
       {permissionTarget && canAssign && (
         <CrudModal title={`Permissions — ${permissionTarget.name}`} busy={resource.mutating || permissionLoading} onClose={() => setPermissionTarget(null)}>

@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import { listAreas } from '../../api/areas.service';
 import { getApiErrorMessage } from '../../api/errors';
+import { createStockAdjustment,getStockTransaction,listStockTransactions } from '../../api/stock-transactions.service';
 import { listStorageLocations } from '../../api/storage-locations.service';
-import { createStockAdjustment, getStockTransaction, listStockTransactions } from '../../api/stock-transactions.service';
 import { listSupplies } from '../../api/supplies.service';
 import { TextButton } from '../../components/common/Button';
-import { DataTable, type Column } from '../../components/common/DataTable';
-import { CardSkeleton, SelectSkeleton } from '../../components/common/skeleton';
-import { CrudFeedbackToast, CrudModal, CrudPageHeader, ErrorState, inputClassName } from '../../components/crud/CrudPrimitives';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CardSkeleton,SelectSkeleton } from '../../components/common/skeleton';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
+import { CrudFeedbackToast,CrudPageHeader,ErrorState,inputClassName } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
 import { StockAdjustmentModal } from '../../components/stock/StockAdjustmentModal';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -19,7 +21,7 @@ import { useProviderLookup } from '../../hooks/useProviderLookup';
 import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
 import type { PaginationParams } from '../../types/pagination.types';
-import type { CreateStockAdjustmentInput, StockTransaction, StockTransactionListParams, StockTransactionType } from '../../types/stock-transactions';
+import type { CreateStockAdjustmentInput,StockTransaction,StockTransactionListParams,StockTransactionType } from '../../types/stock-transactions';
 import { STOCK_TRANSACTION_TYPES } from '../../types/stock-transactions';
 
 type StockTransactionQuery = StockTransactionListParams & PaginationParams;
@@ -168,7 +170,7 @@ const StockTransactionsPage = () => {
     </div>
     {[supplies.error, providers.error, areas.error, locations.error].some(Boolean) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Một số bộ lọc không tải được. Danh sách transaction vẫn được hiển thị nếu API chính hoạt động.</p>}
     {resource.error ? <ErrorState message={resource.error} onRetry={resource.reload} /> : <DataTable columns={columns} data={resource.items} loading={resource.loading} keyExtractor={(item) => item.id} searchPlaceholder="Tìm transaction, vật tư, lý do..." searchValue={searchInput} onSearchChange={setSearchInput} pagination={resource.pagination} onPageChange={resource.setPage} onPageSizeChange={resource.setPageSize} sortBy={resource.query.sortBy} sortOrder={resource.query.sortOrder} onSortChange={(sortBy, sortOrder) => resource.updateQuery({ sortBy, sortOrder })} emptyText="Không có transaction phù hợp với bộ lọc." />}
-    {detailId && <CrudModal title="Chi tiết stock transaction" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết transaction.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">{detailFields.map(([label, value]) => <div key={label}><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm text-slate-800">{value}</dd></div>)}</dl> : null}</CrudModal>}
+    {detailId && <PrimaryCrudDrawer mode="view" title="Chi tiết stock transaction" onClose={() => setDetailId(null)}>{detailQuery.isPending ? <CardSkeleton lines={6} label="Đang tải chi tiết transaction" /> : detailQuery.isError ? <ErrorState message={getApiErrorMessage(detailQuery.error, 'Không thể tải chi tiết transaction.')} onRetry={() => void detailQuery.refetch()} /> : detail ? <CrudEntityView fields={detailFields.map(([label, value]) => ({ label, value }))} /> : null}</PrimaryCrudDrawer>}
     {adjustmentOpen && canAdjust && <StockAdjustmentModal busy={resource.mutating} onClose={() => setAdjustmentOpen(false)} onSubmit={createAdjustment} />}
   </div>;
 };

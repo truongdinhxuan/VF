@@ -191,6 +191,24 @@ export const Harness = () => {
           >
             Deactivate test
           </button>
+          <button
+            type="button"
+            className="rounded-lg bg-red-600 px-4 py-3 text-white"
+            onClick={(event) => openConfirm({
+              title: 'Phase 4.1 long error',
+              description: 'Test-only controlled error using the production ConfirmOffcanvas.',
+              variant: 'danger',
+              triggerElement: event.currentTarget,
+              confirmLabel: 'Thử lỗi',
+              cancelLabel: 'Quay lại',
+              onConfirm: () => {
+                setFeedback({ type: 'error', message: 'Phase 4.1 toast above confirmation' });
+                throw new Error('Thông báo lỗi kiểm thử dài cần xuống dòng an toàn. '.repeat(80));
+              },
+            })}
+          >
+            Long error test
+          </button>
         </div>
         <div
           data-testid="list-scroll-owner"

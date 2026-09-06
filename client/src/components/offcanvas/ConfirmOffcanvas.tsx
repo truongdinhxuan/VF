@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import type {
   ConfirmDrawerEntry,
   OffcanvasCloseReason,
@@ -31,16 +31,27 @@ export const ConfirmOffcanvas = ({
   onBusyChange: (busy: boolean) => void;
 }) => {
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
   const busy = Boolean(entry.isBusy || pending);
 
   const confirm = async () => {
-    if (busy) return;
+    if (busy || pendingRef.current) return;
+    pendingRef.current = true;
+    setError(null);
     setPending(true);
     onBusyChange(true);
     try {
       const result = await entry.onConfirm();
       if (result !== false) onConfirmed();
+    } catch (confirmationError) {
+      setError(
+        confirmationError instanceof Error && confirmationError.message.trim()
+          ? confirmationError.message
+          : 'Không thể hoàn thành thao tác. Vui lòng thử lại.',
+      );
     } finally {
+      pendingRef.current = false;
       onBusyChange(false);
       setPending(false);
     }
@@ -55,6 +66,7 @@ export const ConfirmOffcanvas = ({
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
       <button
         type="button"
+        data-confirm-cancel="true"
         disabled={busy}
         onClick={cancel}
         className={`${SecondaryButton} min-h-11 w-full sm:w-auto`}
@@ -87,7 +99,14 @@ export const ConfirmOffcanvas = ({
       panelRef={panelRef}
       onRequestClose={onRequestClose}
     >
-      {entry.content}
+      <div className="space-y-4">
+        {entry.content}
+        {error && (
+          <div role="alert" className="break-words rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+            {error}
+          </div>
+        )}
+      </div>
     </Offcanvas>
   );
 };

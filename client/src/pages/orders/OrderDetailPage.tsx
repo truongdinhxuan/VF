@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { createRef, useCallback, useMemo, useState, type MouseEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from "../../api/errors";
 import { listStorageLocations } from "../../api/storage-locations.service";
@@ -34,6 +34,7 @@ import { PERMISSION_CODE } from "../../constants/permissions";
 import { getWorkspacePath } from "../../constants/workspaces";
 import { useAuth } from "../../context/AuthContext";
 import { useServerLookup } from "../../hooks/useServerLookup";
+import { useCrudOffcanvas } from "../../hooks/useCrudOffcanvas";
 import { queryKeys } from "../../lib/queryKeys";
 import type { StorageLocationOption } from "../../types/catalog";
 import type {
@@ -45,7 +46,7 @@ import type {
   ZeroStockErrorDetails,
 } from "../../types/orders";
 
-type ActionPanel = "approve" | "reject" | "issue" | "cancel" | null;
+type ActionPanel = "approve" | "issue" | null;
 type ItemValues = Record<string, { quantity: string; note?: string; storageLocationId?: string }>;
 
 const formatDate = (value: string | null) =>
@@ -111,6 +112,7 @@ const getStackIssueReadiness = (item: OrderItem): StackIssueReadiness => {
 };
 
 const OrderDetailPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const shiftOrderSheetContextId = searchParams.get('shiftOrderSheetId') ?? undefined;
@@ -153,7 +155,6 @@ const OrderDetailPage = () => {
     useState<ZeroStockErrorDetails | null>(null);
   const mutating = orderMutation.isPending || confirmationMutation.isPending;
   const [panel, setPanel] = useState<ActionPanel>(null);
-  const [reason, setReason] = useState("");
   const [itemValues, setItemValues] = useState<ItemValues>({});
   const [editing, setEditing] = useState(false);
   const [confirmationTarget, setConfirmationTarget] = useState<{
@@ -284,6 +285,7 @@ const OrderDetailPage = () => {
     operation: () => Promise<Order>,
     affectsStock = false,
     onError?: (error: unknown) => void,
+    throwOnError = false,
   ) => {
     setActionError(null);
     setAllocationErrorDetails(null);
@@ -309,11 +311,79 @@ const OrderDetailPage = () => {
       }
       setPanel(null);
       setEditing(false);
-      setReason("");
+      return updated;
     } catch (requestError) {
-      setActionError(getApiErrorMessage(requestError, "Không thể cập nhật order."));
+      const message = getApiErrorMessage(requestError, "Không thể cập nhật order.");
+      setActionError(message);
       onError?.(requestError);
+      if (throwOnError) throw new Error(message, { cause: requestError });
+      return undefined;
     }
+  };
+
+  const openRejectConfirmation = (event: MouseEvent<HTMLButtonElement>) => {
+    if (!id) return;
+    const reasonRef = createRef<HTMLTextAreaElement>();
+    openConfirm({
+      title: 'Từ chối Order?',
+      description: `Order “${order?.code ?? ''}” sẽ chuyển sang trạng thái REJECTED.`,
+      confirmLabel: 'Từ chối',
+      cancelLabel: 'Quay lại',
+      variant: 'danger',
+      size: 'md',
+      triggerElement: event.currentTarget,
+      content: (
+        <label className={labelClassName}>
+          Lý do từ chối *
+          <textarea ref={reasonRef} rows={4} maxLength={2000} className={inputClassName} placeholder="Nhập lý do từ chối" />
+        </label>
+      ),
+      onConfirm: async () => {
+        const rejectedReason = reasonRef.current?.value.trim() ?? '';
+        if (!rejectedReason) throw new Error('Lý do từ chối là bắt buộc.');
+        await runMutation(
+          () => rejectOrder(id, { rejected_reason: rejectedReason }),
+          false,
+          undefined,
+          true,
+        );
+      },
+    });
+  };
+
+  const openCancelConfirmation = (event: MouseEvent<HTMLButtonElement>) => {
+    if (!id || !order) return;
+    const reasonRef = createRef<HTMLTextAreaElement>();
+    const reasonRequired = order.status === 'PENDING';
+    openConfirm({
+      title: 'Hủy Order?',
+      description: reasonRequired
+        ? `Order “${order.code}” đang PENDING; cancel_reason là bắt buộc.`
+        : `Order DRAFT “${order.code}” có thể hủy không cần lý do.`,
+      confirmLabel: 'Hủy Order',
+      cancelLabel: 'Quay lại',
+      variant: 'danger',
+      size: 'md',
+      triggerElement: event.currentTarget,
+      content: (
+        <label className={labelClassName}>
+          Lý do hủy{reasonRequired ? ' *' : ''}
+          <textarea ref={reasonRef} rows={4} maxLength={2000} className={inputClassName} placeholder="Nhập lý do hủy" />
+        </label>
+      ),
+      onConfirm: async () => {
+        const cancelReason = reasonRef.current?.value.trim() ?? '';
+        if (reasonRequired && !cancelReason) {
+          throw new Error('Lý do hủy là bắt buộc với Order PENDING.');
+        }
+        await runMutation(
+          () => cancelOrder(id, { cancel_reason: cancelReason || undefined }),
+          false,
+          undefined,
+          true,
+        );
+      },
+    });
   };
 
   const openConfirmation = (
@@ -373,7 +443,6 @@ const OrderDetailPage = () => {
   const openPanel = (nextPanel: Exclude<ActionPanel, null>) => {
     setActionError(null);
     setStackIssueErrorDetails(null);
-    setReason("");
     setPanel(nextPanel);
     if (nextPanel === "approve") {
       setItemValues(Object.fromEntries(items.map((item) => [item.id, {
@@ -618,7 +687,7 @@ const OrderDetailPage = () => {
               }
             })} className={WarningButton}>Submit → PENDING</button>}
             {canApprove && <button type="button" title="PENDING → APPROVED; không làm thay đổi tồn kho" onClick={() => openPanel("approve")} className={InfoButton}>Approve → APPROVED</button>}
-            {canApprove && <button type="button" onClick={() => openPanel("reject")} className={ErrorButton}>Reject</button>}
+            {canApprove && <button type="button" onClick={openRejectConfirmation} className={ErrorButton}>Reject</button>}
             {canAllocate && <button type="button" title="Tạo đề xuất vị trí; không trừ hoặc giữ tồn kho" disabled={mutating} onClick={() => void runMutation(() => allocateOrder(id), false, (error) => setAllocationErrorDetails(getApiErrorDetails<StackAllocationErrorDetails>(error)))} className={InfoButton}>Phân bổ vị trí</button>}
             {hasIssueAction && (
               <button
@@ -635,7 +704,7 @@ const OrderDetailPage = () => {
             )}
             {canReceive && <button type="button" disabled={mutating} onClick={() => void runMutation(() => receiveOrder(id))} className={CyanButton}>Xác nhận nhận</button>}
             {canComplete && <button type="button" disabled={mutating} onClick={() => void runMutation(() => completeOrder(id))} className={SuccessButton}>Complete</button>}
-            {canCancel && <button type="button" onClick={() => openPanel("cancel")} className={SecondaryButton}>Hủy order</button>}
+            {canCancel && <button type="button" onClick={openCancelConfirmation} className={SecondaryButton}>Hủy order</button>}
           </div>
         </div>
         {!hasActions && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Không có thao tác phù hợp với role và trạng thái hiện tại.</p>}
@@ -671,26 +740,6 @@ const OrderDetailPage = () => {
             ))}
           </div>
           <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={confirmApprove} confirmLabel="Xác nhận approve" />
-        </ActionCard>
-      )}
-
-      {panel === "reject" && (
-        <ActionCard title="Từ chối order" note="rejected_reason là bắt buộc.">
-          <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} className="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-blue-500" placeholder="Lý do từ chối" />
-          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={() => {
-            if (!reason.trim()) return setActionError("Lý do từ chối là bắt buộc.");
-            void runMutation(() => rejectOrder(id, { rejected_reason: reason.trim() }));
-          }} confirmLabel="Xác nhận reject" danger />
-        </ActionCard>
-      )}
-
-      {panel === "cancel" && (
-        <ActionCard title="Hủy order" note={order.status === "PENDING" ? "cancel_reason là bắt buộc với order PENDING." : "Order DRAFT có thể hủy không cần lý do."}>
-          <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} className="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-blue-500" placeholder="Lý do hủy" />
-          <PanelButtons disabled={mutating} onCancel={() => setPanel(null)} onConfirm={() => {
-            if (order.status === "PENDING" && !reason.trim()) return setActionError("Lý do hủy là bắt buộc với order PENDING.");
-            void runMutation(() => cancelOrder(id, { cancel_reason: reason.trim() || undefined }));
-          }} confirmLabel="Xác nhận hủy" danger />
         </ActionCard>
       )}
 

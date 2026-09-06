@@ -5,7 +5,6 @@ import type { CrudFeedback } from '../../hooks/useCrudResource';
 import { AnimatePresence, motion } from 'motion/react';
 import { AppTooltip } from '../common/AppTooltip';
 import {
-  ErrorButton,
   getButtonClassName,
   InfoButton,
   SecondaryButton,
@@ -212,74 +211,6 @@ export const CrudModal = ({
 
         <div className="max-h-[calc(100vh-6rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto p-4 sm:max-h-[calc(90vh-4.5rem)] sm:max-h-[calc(90dvh-4.5rem)] sm:p-5">
           {children}
-        </div>
-      </div>
-    </div>,
-  );
-
-export const ConfirmDialog = ({
-  title,
-  message,
-  confirmLabel = 'Xác nhận',
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  message: string;
-  confirmLabel?: string;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) =>
-  renderPortal(
-    <div
-      className="fixed inset-0 z-[95] flex items-center justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-sm sm:p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) {
-          onCancel();
-        }
-      }}
-    >
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-description"
-        className="w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl sm:p-5"
-      >
-        <h2
-          id="confirm-dialog-title"
-          className="break-words text-lg font-bold text-slate-900"
-        >
-          {title}
-        </h2>
-
-        <p
-          id="confirm-dialog-description"
-          className="mt-2 break-words text-sm leading-6 text-slate-600"
-        >
-          {message}
-        </p>
-
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onCancel}
-            className={`${SecondaryButton} w-full sm:w-auto`}
-          >
-            Bỏ qua
-          </button>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirm}
-            className={`${ErrorButton} w-full sm:w-auto`}
-          >
-            {busy ? 'Đang xử lý...' : confirmLabel}
-          </button>
         </div>
       </div>
     </div>,

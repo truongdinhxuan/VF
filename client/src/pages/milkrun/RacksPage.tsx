@@ -1,31 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback,useEffect,useMemo,useState,type MouseEvent } from 'react';
 import {
-  createMilkrunRack,
-  deactivateMilkrunRack,
-  listMilkrunRacks,
-  updateMilkrunRack,
+createMilkrunRack,
+deactivateMilkrunRack,
+listMilkrunRacks,
+updateMilkrunRack,
 } from '../../api/milkrun-master-data.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  ConfirmDialog,
-  CrudFeedbackToast,
-  CrudModal,
-  CrudPageHeader,
-  ErrorState,
-  FieldError,
-  FormActions,
-  RowActions,
-  StatusBadge,
-  inputClassName,
-  labelClassName,
+CrudFeedbackToast,
+CrudPageHeader,
+ErrorState,
+RowActions,
+StatusBadge,
+inputClassName
 } from '../../components/crud/CrudPrimitives';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { RackForm } from '../../components/forms/RackForm';
 import { PERMISSION_CODE } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
-import type { MilkrunLookupListParams, MilkrunRack, MilkrunRackInput } from '../../types/milkrun';
+import type { MilkrunLookupListParams,MilkrunRack,MilkrunRackInput } from '../../types/milkrun';
 import type { PaginationParams } from '../../types/pagination.types';
 
 type RackQuery = MilkrunLookupListParams & PaginationParams;
@@ -35,59 +33,8 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', {
   timeStyle: 'short',
 }).format(new Date(value));
 
-const RackForm = ({
-  item,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  item: MilkrunRack | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: MilkrunRackInput) => Promise<void>;
-}) => {
-  const { register, handleSubmit, formState: { errors } } = useForm<MilkrunRackInput>({
-    defaultValues: {
-      code: item?.code ?? '',
-      name: item?.name ?? '',
-      image_url: item?.image_url ?? '',
-      is_active: item?.is_active ?? true,
-    },
-  });
-
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      <label className={labelClassName}>
-        Code *
-        <input
-          {...register('code', { required: 'Vui lòng nhập code.' })}
-          className={inputClassName}
-          autoFocus
-        />
-        <FieldError message={errors.code?.message} />
-      </label>
-      <label className={labelClassName}>
-        Tên rack *
-        <input
-          {...register('name', { required: 'Vui lòng nhập tên rack.' })}
-          className={inputClassName}
-        />
-        <FieldError message={errors.name?.message} />
-      </label>
-      <label className={labelClassName}>
-        Image URL
-        <input {...register('image_url')} className={inputClassName} placeholder="https://..." />
-      </label>
-      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-        <input type="checkbox" {...register('is_active')} />
-        Đang hoạt động
-      </label>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={item ? 'Lưu thay đổi' : 'Tạo rack'} />
-    </form>
-  );
-};
-
 const RacksPage = () => {
+  const { openConfirm } = useCrudOffcanvas();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSION_CODE.MILKRUN_RACK_CREATE);
   const canUpdate = hasPermission(PERMISSION_CODE.MILKRUN_RACK_UPDATE);
@@ -95,7 +42,11 @@ const RacksPage = () => {
   const search = useDebounce(searchInput, 400);
   const [editing, setEditing] = useState<MilkrunRack | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<MilkrunRack | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openView = useCallback((item: MilkrunRack) => {
+    setEditing(item); setViewing(true); setFormError(null); setFormOpen(true);
+  }, []);
   const loader = useCallback(
     (query: RackQuery, signal: AbortSignal) => listMilkrunRacks(query, signal),
     [],
@@ -122,19 +73,43 @@ const RacksPage = () => {
   }, [resourceSearch, search, updateResourceQuery]);
 
   const save = async (values: MilkrunRackInput) => {
-    const input: MilkrunRackInput = {
-      ...values,
-      code: values.code.trim().toUpperCase(),
-      name: values.name.trim(),
-      image_url: values.image_url?.trim() || null,
-    };
-    const ok = await resource.runMutation(
-      () => editing ? updateMilkrunRack(editing.id, input) : createMilkrunRack(input),
-      editing ? 'Đã cập nhật Rack.' : 'Đã tạo Rack.',
-      editing ? 'Không thể cập nhật Rack.' : 'Không thể tạo Rack.',
-    );
-    if (ok) setFormOpen(false);
+    setFormError(null);
+    try {
+      const input: MilkrunRackInput = {
+        ...values,
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        image_url: values.image_url?.trim() || null,
+      };
+      const ok = await resource.runMutation(
+        () => editing ? updateMilkrunRack(editing.id, input) : createMilkrunRack(input),
+        editing ? 'Đã cập nhật Rack.' : 'Đã tạo Rack.',
+        editing ? 'Không thể cập nhật Rack.' : 'Không thể tạo Rack.',
+        { throwOnError: true },
+      );
+      if (ok) setFormOpen(false);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
+    }
   };
+
+  const confirmDeactivate = useCallback((
+    rack: MilkrunRack,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => openConfirm({
+    title: 'Ngừng sử dụng Rack?',
+    description: `Rack “${rack.code}” sẽ không còn xuất hiện trong dropdown active.`,
+    confirmLabel: 'Ngừng sử dụng',
+    cancelLabel: 'Quay lại',
+    variant: 'warning',
+    triggerElement: event.currentTarget,
+    onConfirm: () => resource.runMutation(
+      () => deactivateMilkrunRack(rack.id),
+      'Đã ngừng sử dụng Rack.',
+      'Không thể ngừng sử dụng Rack.',
+      { removeCurrentItem: resource.query.isActive === true, throwOnError: true },
+    ),
+  }), [openConfirm, resource]);
 
   const columns = useMemo<Column<MilkrunRack>[]>(() => [
     { header: 'Code', accessor: 'code', sortKey: 'code' },
@@ -149,18 +124,18 @@ const RacksPage = () => {
     { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (rack) => <StatusBadge active={rack.is_active} /> },
     { header: 'Ngày tạo', accessor: 'created_at', sortKey: 'created_at', render: (rack) => formatDate(rack.created_at) },
     { header: 'Cập nhật', accessor: 'updated_at', sortKey: 'updated_at', render: (rack) => formatDate(rack.updated_at) },
-    ...(canUpdate ? [{
+    ...[{
       header: 'Thao tác',
       accessor: 'actions',
       render: (rack: MilkrunRack) => (
         <RowActions
-          onEdit={() => { setEditing(rack); setFormOpen(true); }}
-          onDelete={rack.is_active ? () => setDeactivateTarget(rack) : undefined}
-          deleteLabel="Deactivate"
+          onView={() => openView(rack)} onEdit={canUpdate ? () => { setEditing(rack); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
+          onDelete={canUpdate && rack.is_active ? (event) => confirmDeactivate(rack, event) : undefined}
+          deleteLabel="Ngừng sử dụng"
         />
       ),
-    }] : []),
-  ], [canUpdate]);
+    }],
+  ], [canUpdate, confirmDeactivate, openView]);
 
   return (
     <section className="space-y-6">
@@ -168,7 +143,7 @@ const RacksPage = () => {
         title="Rack"
         description="Danh mục Rack dùng riêng cho nghiệp vụ Milkrun."
         createLabel="Thêm rack"
-        onCreate={canCreate ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        onCreate={canCreate ? () => { setEditing(null); setViewing(false); setFormError(null); setFormOpen(true); } : undefined}
       />
       <CrudFeedbackToast feedback={resource.feedback} onClose={() => resource.setFeedback(null)} />
       {resource.error ? <ErrorState message={resource.error} onRetry={() => void resource.reload()} /> : (
@@ -200,25 +175,17 @@ const RacksPage = () => {
           emptyText="Không có Rack phù hợp."
         />
       )}
-      {formOpen && (editing ? canUpdate : canCreate) && (
-        <CrudModal title={editing ? 'Chỉnh sửa Rack' : 'Tạo Rack'} busy={resource.mutating} onClose={() => setFormOpen(false)}>
-          <RackForm item={editing} busy={resource.mutating} onCancel={() => setFormOpen(false)} onSave={save} />
-        </CrudModal>
-      )}
-      {deactivateTarget && canUpdate && (
-        <ConfirmDialog
-          title="Deactivate Rack?"
-          message={`Rack “${deactivateTarget.code}” sẽ không còn xuất hiện trong dropdown active.`}
-          confirmLabel="Deactivate"
-          busy={resource.mutating}
-          onCancel={() => setDeactivateTarget(null)}
-          onConfirm={() => void resource.runMutation(
-            () => deactivateMilkrunRack(deactivateTarget.id),
-            'Đã deactivate Rack.',
-            'Không thể deactivate Rack.',
-            { removeCurrentItem: resource.query.isActive === true },
-          ).then((ok) => { if (ok) setDeactivateTarget(null); })}
-        />
+      {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError} title={viewing ? 'Chi tiết rack' : (editing ? 'Chỉnh sửa Rack' : 'Tạo Rack')} busy={resource.mutating} onClose={() => setFormOpen(false)}>
+          {viewing && editing ? <CrudEntityView fields={[
+            { label: 'Mã', value: editing.code },
+            { label: 'Tên', value: editing.name },
+            { label: 'Ảnh', value: editing.image_url, fullWidth: true },
+            { label: 'Trạng thái', value: <StatusBadge active={editing.is_active && !editing.is_deleted} /> },
+            { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
+            { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
+          ]} /> : (<RackForm item={editing} busy={resource.mutating} onSave={save} />)}
+        </PrimaryCrudDrawer>
       )}
     </section>
   );

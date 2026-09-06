@@ -1,50 +1,40 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback,useEffect,useMemo,useState,type MouseEvent } from 'react';
 import {
-  createMilkrunTripStatus,
-  createMilkrunTripType,
-  deactivateMilkrunTripStatus,
-  deactivateMilkrunTripType,
-  listMilkrunTripStatuses,
-  listMilkrunTripTypes,
-  updateMilkrunTripStatus,
-  updateMilkrunTripType,
+createMilkrunTripStatus,
+createMilkrunTripType,
+deactivateMilkrunTripStatus,
+deactivateMilkrunTripType,
+listMilkrunTripStatuses,
+listMilkrunTripTypes,
+updateMilkrunTripStatus,
+updateMilkrunTripType,
 } from '../../api/milkrun-master-data.service';
-import { DataTable, type Column } from '../../components/common/DataTable';
+import { DataTable,type Column } from '../../components/common/DataTable';
+import { CrudEntityView } from '../../components/crud/CrudEntityView';
 import {
-  ConfirmDialog,
-  CrudFeedbackToast,
-  CrudModal,
-  CrudPageHeader,
-  ErrorState,
-  FieldError,
-  FormActions,
-  RowActions,
-  StatusBadge,
-  inputClassName,
-  labelClassName,
+CrudFeedbackToast,
+CrudPageHeader,
+ErrorState,
+RowActions,
+StatusBadge,
+inputClassName
 } from '../../components/crud/CrudPrimitives';
-import { PERMISSION_CODE, type PermissionCode } from '../../constants/permissions';
+import { PrimaryCrudDrawer } from '../../components/crud/PrimaryCrudDrawer';
+import { CatalogForm,type CatalogFormValues,type CatalogItem,type ResourceName } from '../../components/forms/CatalogForm';
+import { PERMISSION_CODE,type PermissionCode } from '../../constants/permissions';
 import { useAuth } from '../../context/AuthContext';
+import { useCrudOffcanvas } from '../../hooks/useCrudOffcanvas';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
 import { queryKeys } from '../../lib/queryKeys';
 import type {
-  MilkrunLookupListParams,
-  MilkrunTripStatusInput,
-  MilkrunTripStatusRecord,
-  MilkrunTripType,
-  MilkrunTripTypeInput,
+MilkrunLookupListParams,
+MilkrunTripStatusInput,
+MilkrunTripTypeInput
 } from '../../types/milkrun';
-import type { PaginatedResponse, PaginationParams } from '../../types/pagination.types';
+import type { PaginatedResponse,PaginationParams } from '../../types/pagination.types';
 
-type ResourceName = 'trip-types' | 'trip-statuses';
-type CatalogItem = MilkrunTripType | MilkrunTripStatusRecord;
 type CatalogQuery = MilkrunLookupListParams & PaginationParams;
-
-interface CatalogFormValues extends MilkrunTripTypeInput {
-  sort_order?: number;
-}
 
 interface CatalogDefinition {
   title: string;
@@ -85,115 +75,8 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', {
   timeStyle: 'short',
 }).format(new Date(value));
 
-const CatalogForm = ({
-  resourceName,
-  item,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  resourceName: ResourceName;
-  item: CatalogItem | null;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (values: CatalogFormValues) => Promise<void>;
-}) => {
-  const isStatus = resourceName === 'trip-statuses';
-  const statusItem = item && 'sort_order' in item ? item : null;
-  const { register, handleSubmit, formState: { errors } } = useForm<CatalogFormValues>({
-    defaultValues: {
-      code: item?.code ?? '',
-      name: item?.name ?? '',
-      description: item?.description ?? '',
-      is_active: item?.is_active ?? true,
-      sort_order: statusItem?.sort_order ?? 0,
-    },
-  });
-
-  return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-      <label className={labelClassName}>
-        Code *
-        <input
-          {...register('code', {
-            required: 'Vui lòng nhập code.',
-            maxLength: { value: 100, message: 'Code tối đa 100 ký tự.' },
-            pattern: {
-              value: /^[A-Za-z][A-Za-z0-9_]*$/,
-              message: 'Code phải bắt đầu bằng chữ và chỉ gồm chữ, số hoặc dấu gạch dưới.',
-            },
-          })}
-          className={`${inputClassName} ${item?.is_system ? 'bg-slate-100' : ''}`}
-          readOnly={item?.is_system}
-          aria-readonly={item?.is_system}
-          autoFocus={!item?.is_system}
-        />
-        <FieldError message={errors.code?.message} />
-        {item?.is_system && (
-          <span className="text-xs font-normal text-slate-500">Code hệ thống không thể thay đổi.</span>
-        )}
-      </label>
-
-      <label className={labelClassName}>
-        Tên *
-        <input
-          {...register('name', {
-            required: 'Vui lòng nhập tên.',
-            maxLength: { value: 255, message: 'Tên tối đa 255 ký tự.' },
-          })}
-          className={inputClassName}
-        />
-        <FieldError message={errors.name?.message} />
-      </label>
-
-      <label className={labelClassName}>
-        Mô tả
-        <textarea
-          {...register('description', {
-            maxLength: { value: 2000, message: 'Mô tả tối đa 2000 ký tự.' },
-          })}
-          className={`${inputClassName} min-h-28 resize-y`}
-        />
-        <FieldError message={errors.description?.message} />
-      </label>
-
-      {isStatus && (
-        <label className={labelClassName}>
-          Thứ tự *
-          <input
-            type="number"
-            min={0}
-            step={1}
-            {...register('sort_order', {
-              required: 'Vui lòng nhập thứ tự.',
-              valueAsNumber: true,
-              min: { value: 0, message: 'Thứ tự không được âm.' },
-            })}
-            className={inputClassName}
-          />
-          <FieldError message={errors.sort_order?.message} />
-        </label>
-      )}
-
-      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-        <input
-          type="checkbox"
-          {...register('is_active')}
-          disabled={item?.is_system}
-        />
-        Đang hoạt động
-      </label>
-
-      <FormActions
-        busy={busy}
-        onCancel={onCancel}
-        submitLabel={item ? 'Lưu thay đổi' : `Tạo ${definitions[resourceName].singular}`}
-      />
-    </form>
-  );
-};
-
 const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
+  const { openConfirm } = useCrudOffcanvas();
   const definition = definitions[resourceName];
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(definition.createPermission);
@@ -203,7 +86,11 @@ const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
   const search = useDebounce(searchInput, 400);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<CatalogItem | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openView = useCallback((item: CatalogItem) => {
+    setEditing(item); setViewing(true); setFormError(null); setFormOpen(true);
+  }, []);
 
   const loader = useCallback(
     (query: CatalogQuery, signal: AbortSignal): Promise<PaginatedResponse<CatalogItem>> => (
@@ -238,34 +125,60 @@ const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
   }, [resourceSearch, search, updateResourceQuery]);
 
   const save = async (values: CatalogFormValues) => {
-    const baseInput: MilkrunTripTypeInput = {
-      code: values.code.trim().toUpperCase(),
-      name: values.name.trim(),
-      description: values.description?.trim() || null,
-      is_active: editing?.is_system ? true : values.is_active,
-    };
-
-    const operation = resourceName === 'trip-types'
-      ? () => editing
-        ? updateMilkrunTripType(editing.id, baseInput)
-        : createMilkrunTripType(baseInput)
-      : () => {
-        const statusInput: MilkrunTripStatusInput = {
-          ...baseInput,
-          sort_order: Number(values.sort_order),
-        };
-        return editing
-          ? updateMilkrunTripStatus(editing.id, statusInput)
-          : createMilkrunTripStatus(statusInput);
+    setFormError(null);
+    try {
+      const baseInput: MilkrunTripTypeInput = {
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        description: values.description?.trim() || null,
+        is_active: editing?.is_system ? true : values.is_active,
       };
 
-    const ok = await resource.runMutation(
-      operation,
-      editing ? `Đã cập nhật ${definition.singular}.` : `Đã tạo ${definition.singular}.`,
-      editing ? `Không thể cập nhật ${definition.singular}.` : `Không thể tạo ${definition.singular}.`,
-    );
-    if (ok) setFormOpen(false);
+      const operation = resourceName === 'trip-types'
+        ? () => editing
+          ? updateMilkrunTripType(editing.id, baseInput)
+          : createMilkrunTripType(baseInput)
+        : () => {
+          const statusInput: MilkrunTripStatusInput = {
+            ...baseInput,
+            sort_order: Number(values.sort_order),
+          };
+          return editing
+            ? updateMilkrunTripStatus(editing.id, statusInput)
+            : createMilkrunTripStatus(statusInput);
+        };
+
+      const ok = await resource.runMutation(
+        operation,
+        editing ? `Đã cập nhật ${definition.singular}.` : `Đã tạo ${definition.singular}.`,
+        editing ? `Không thể cập nhật ${definition.singular}.` : `Không thể tạo ${definition.singular}.`,
+        { throwOnError: true },
+      );
+      if (ok) setFormOpen(false);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu. Vui lòng thử lại.');
+    }
   };
+
+  const confirmDeactivate = useCallback((
+    item: CatalogItem,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => openConfirm({
+    title: `Ngừng sử dụng ${definition.singular}?`,
+    description: `“${item.code}” sẽ không còn xuất hiện trong dropdown active. Dữ liệu lịch sử vẫn được giữ nguyên.`,
+    confirmLabel: 'Ngừng sử dụng',
+    cancelLabel: 'Quay lại',
+    variant: 'warning',
+    triggerElement: event.currentTarget,
+    onConfirm: () => resource.runMutation(
+      () => resourceName === 'trip-types'
+        ? deactivateMilkrunTripType(item.id)
+        : deactivateMilkrunTripStatus(item.id),
+      `Đã ngừng sử dụng ${definition.singular}.`,
+      `Không thể ngừng sử dụng ${definition.singular}.`,
+      { removeCurrentItem: resource.query.isActive === true, throwOnError: true },
+    ),
+  }), [definition.singular, openConfirm, resource, resourceName]);
 
   const columns = useMemo<Column<CatalogItem>[]>(() => {
     const result: Column<CatalogItem>[] = [
@@ -286,26 +199,26 @@ const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
       { header: 'Trạng thái', accessor: 'is_active', sortKey: 'is_active', render: (item) => <StatusBadge active={item.is_active} /> },
       { header: 'Cập nhật', accessor: 'updated_at', sortKey: 'updated_at', render: (item) => formatDate(item.updated_at) },
     );
-    if (canUpdate || canDeactivate) {
+    { // The page read guard also permits read-only detail.
       result.push({
         header: 'Thao tác',
         accessor: 'actions',
         render: (item) => (
           <RowActions
-            onEdit={canUpdate ? () => {
+            onView={() => openView(item)} onEdit={canUpdate ? () => {
               setEditing(item);
-              setFormOpen(true);
+              setViewing(false); setFormError(null); setFormOpen(true);
             } : undefined}
             onDelete={canDeactivate && item.is_active && !item.is_system
-              ? () => setDeactivateTarget(item)
+              ? (event) => confirmDeactivate(item, event)
               : undefined}
-            deleteLabel="Deactivate"
+            deleteLabel="Ngừng sử dụng"
           />
         ),
       });
     }
     return result;
-  }, [canDeactivate, canUpdate, resourceName]);
+  }, [canDeactivate, canUpdate, confirmDeactivate, openView, resourceName]);
 
   return (
     <section className="space-y-6">
@@ -315,7 +228,7 @@ const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
         createLabel={`Thêm ${definition.singular}`}
         onCreate={canCreate ? () => {
           setEditing(null);
-          setFormOpen(true);
+          setViewing(false); setFormError(null); setFormOpen(true);
         } : undefined}
       />
 
@@ -355,41 +268,30 @@ const TripCatalogPage = ({ resourceName }: { resourceName: ResourceName }) => {
         />
       )}
 
-      {formOpen && (editing ? canUpdate : canCreate) && (
-        <CrudModal
-          title={editing ? `Chỉnh sửa ${definition.singular}` : `Tạo ${definition.singular}`}
+      {formOpen && (viewing || (editing ? canUpdate : canCreate)) && (
+        <PrimaryCrudDrawer mode={viewing ? 'view' : editing ? 'edit' : 'create'} size="md" onEdit={viewing && canUpdate ? () => setViewing(false) : undefined} error={formError}
+          title={viewing ? `Chi tiết ${definition.singular}` : editing ? `Chỉnh sửa ${definition.singular}` : `Tạo ${definition.singular}`}
           busy={resource.mutating}
           onClose={() => setFormOpen(false)}
         >
-          <CatalogForm
+          {viewing && editing ? <CrudEntityView fields={[
+            { label: 'Mã', value: editing.code },
+            { label: 'Tên', value: editing.name },
+            { label: 'Mô tả', value: editing.description, fullWidth: true },
+            { label: 'Loại', value: editing.is_system ? 'Hệ thống' : 'Tùy chỉnh' },
+            ...('sort_order' in editing ? [{ label: 'Thứ tự', value: editing.sort_order }] : []),
+            { label: 'Trạng thái', value: <StatusBadge active={editing.is_active && !editing.is_deleted} /> },
+            { label: 'Ngày tạo', value: new Date(editing.created_at).toLocaleString('vi-VN') },
+            { label: 'Cập nhật', value: new Date(editing.updated_at).toLocaleString('vi-VN') },
+          ]} /> : (<CatalogForm
             resourceName={resourceName}
             item={editing}
             busy={resource.mutating}
-            onCancel={() => setFormOpen(false)}
             onSave={save}
-          />
-        </CrudModal>
+          />)}
+        </PrimaryCrudDrawer>
       )}
 
-      {deactivateTarget && canDeactivate && !deactivateTarget.is_system && (
-        <ConfirmDialog
-          title={`Deactivate ${definition.singular}?`}
-          message={`“${deactivateTarget.code}” sẽ không còn xuất hiện trong dropdown active. Dữ liệu lịch sử vẫn được giữ nguyên.`}
-          confirmLabel="Deactivate"
-          busy={resource.mutating}
-          onCancel={() => setDeactivateTarget(null)}
-          onConfirm={() => void resource.runMutation(
-            () => resourceName === 'trip-types'
-              ? deactivateMilkrunTripType(deactivateTarget.id)
-              : deactivateMilkrunTripStatus(deactivateTarget.id),
-            `Đã deactivate ${definition.singular}.`,
-            `Không thể deactivate ${definition.singular}.`,
-            { removeCurrentItem: resource.query.isActive === true },
-          ).then((ok) => {
-            if (ok) setDeactivateTarget(null);
-          })}
-        />
-      )}
     </section>
   );
 };
