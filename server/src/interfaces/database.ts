@@ -45,6 +45,20 @@ export interface UserRoleRecord {
   updated_at: string;
 }
 
+export interface AuthSessionRecord {
+  id: string;
+  user_id: string;
+  refresh_token_hash: string;
+  expires_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  user_agent: string | null;
+  ip_address: string | null;
+  rotation_counter: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AreaRecord {
   id: string;
   code: string;
@@ -408,6 +422,7 @@ export interface OrderRevisionRecord {
 }
 
 export interface DatabaseRecordMap {
+  auth_sessions: AuthSessionRecord;
   users: UserRecord;
   roles: RoleRecord;
   permissions: PermissionRecord;

@@ -13,6 +13,14 @@ interface UserAccessRow {
   is_deleted: boolean;
 }
 
+interface SessionAccessRow {
+  id: string;
+  user_id: string;
+  expires_at: string;
+  revoked_at: string | null;
+  user: UserAccessRow | UserAccessRow[] | null;
+}
+
 interface RoleAccessRow {
   id: string;
   code: string;
@@ -129,14 +137,39 @@ const databaseFailure = (message: string): never => {
 export const getEffectivePermissions = async (
   fastify: FastifyInstance,
   userId: string,
+  sessionId?: string,
 ): Promise<AuthorizationContext> => {
-  const { data: userData, error: userError } = await fastify.supabaseAdmin
-    .from('users')
-    .select('id, email, area_id, is_active, is_verified, is_deleted')
-    .eq('id', userId)
-    .maybeSingle();
+  let userData: UserAccessRow | null = null;
+  if (sessionId) {
+    const { data, error } = await fastify.supabaseAdmin
+      .from('auth_sessions')
+      .select(`
+        id, user_id, expires_at, revoked_at,
+        user:users!auth_sessions_user_id_fkey!inner(
+          id, email, area_id, is_active, is_verified, is_deleted
+        )
+      `)
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (error) databaseFailure('Không thể xác minh phiên đăng nhập');
+    const session = data as unknown as SessionAccessRow | null;
+    if (!session) {
+      throw new AuthorizationError(401, 'Phiên đăng nhập đã hết hạn hoặc bị thu hồi');
+    }
+    userData = firstRelation(session.user);
+  } else {
+    const { data, error } = await fastify.supabaseAdmin
+      .from('users')
+      .select('id, email, area_id, is_active, is_verified, is_deleted')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) databaseFailure('Không thể tải hồ sơ phân quyền người dùng');
+    userData = data as UserAccessRow | null;
+  }
 
-  if (userError) databaseFailure('Không thể tải hồ sơ phân quyền người dùng');
   if (!userData) {
     throw new AuthorizationError(403, 'Hồ sơ người dùng không tồn tại hoặc đã bị khóa');
   }
@@ -181,7 +214,7 @@ export const getEffectivePermissions = async (
   }
 
   return resolveEffectivePermissions(
-    userData as UserAccessRow,
+    userData,
     userRoles,
     rolePermissionRows,
   );

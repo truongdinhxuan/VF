@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import app from '../../dist/app.js';
+import { createSessionAuth } from './session-auth-helper.mjs';
 
 const ids = {
   areaAUser: '69500000-0000-4000-8000-000000000011',
@@ -10,21 +10,13 @@ const ids = {
   areaASheet: '69500000-0000-4000-8000-000000000031',
 };
 
-const signToken = (subject) => {
-  const secret = process.env.APP_JWT_SECRET;
-  assert.ok(secret);
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const header = encode({ alg: 'HS256', typ: 'JWT' });
-  const payload = encode({ sub: subject, exp: Math.floor(Date.now() / 1000) + 300 });
-  const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${signature}`;
-};
-
 const server = Fastify({ logger: false });
+let sessionAuth;
 try {
   await server.register(app);
   await server.ready();
-  const auth = (id) => ({ authorization: `Bearer ${signToken(id)}` });
+  sessionAuth = await createSessionAuth([ids.areaAUser, ids.areaBUser, ids.areaAPeer]);
+  const { auth } = sessionAuth;
 
   const currentA = await server.inject({
     method: 'GET',
@@ -86,5 +78,6 @@ try {
 
   console.log('shift-order-sheet-current-area-http: PASS');
 } finally {
+  await sessionAuth?.cleanup();
   await server.close();
 }

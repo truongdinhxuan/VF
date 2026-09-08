@@ -33,10 +33,25 @@ export const verifyToken = async (
     return reply.code(401).send({ error: 'Token đã hết hạn hoặc không hợp lệ' });
   }
 
+  if (typeof request.user.sub !== 'string'
+      || typeof request.user.sid !== 'string'
+      || typeof request.user.exp !== 'number'
+      || !Number.isFinite(request.user.exp)) {
+    return reply.code(401).send({ error: 'Token không chứa phiên đăng nhập hợp lệ' });
+  }
+
   try {
-    const access = await getEffectivePermissions(request.server, request.user.sub);
+    const tokenSessionId = request.user.sid;
+    const tokenExpiresAt = request.user.exp;
+    const access = await getEffectivePermissions(
+      request.server,
+      request.user.sub,
+      tokenSessionId,
+    );
     request.user = {
       sub: access.userId,
+      sid: tokenSessionId,
+      exp: tokenExpiresAt,
       id: access.userId,
       email: access.email,
       areaId: access.areaId,

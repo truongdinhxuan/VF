@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { listAreas } from '../../api/areas.service';
 import { listOrders } from '../../api/orders.service';
 import { InfoButton, TextButton } from '../../components/common/Button';
 import { Pagination } from '../../components/common/Pagination';
@@ -34,6 +36,18 @@ const OrdersListPage = () => {
   const resourceSearch = resource.query.search;
   const updateResourceQuery = resource.updateQuery;
 
+  // Operator-friendly Area filter: pick a readable Area, send its id to the
+  // unchanged `areaId` backend param. No raw UUID typing.
+  const areasQuery = useQuery({
+    queryKey: queryKeys.areas.lookup({ pageSize: 200, isActive: true }),
+    queryFn: ({ signal }) => listAreas(
+      { page: 1, pageSize: 200, isActive: true, sortBy: 'code', sortOrder: 'asc' },
+      signal,
+    ),
+    staleTime: 10 * 60 * 1000,
+  });
+  const areaOptions = useMemo(() => areasQuery.data?.data ?? [], [areasQuery.data]);
+
   useEffect(() => {
     const search = debouncedSearch.trim() || undefined;
     if (search !== resourceSearch) updateResourceQuery({ search });
@@ -46,10 +60,12 @@ const OrdersListPage = () => {
     </div>
 
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
-      <input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã order, area hoặc người tạo" className={controlClassName} />
-      <select value={resource.query.status ?? ''} onChange={(event) => resource.updateQuery({ status: (event.target.value || undefined) as OrderStatus | undefined })} className={controlClassName}><option value="">Tất cả trạng thái</option>{ORDER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-      <input type="text" value={resource.query.createdBy ?? ''} onChange={(event) => resource.updateQuery({ createdBy: event.target.value.trim() || undefined })} placeholder="Created by UUID" className={controlClassName} />
-      <input type="text" value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value.trim() || undefined })} placeholder="Area UUID" className={controlClassName} />
+      <input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Tìm mã order hoặc tên người tạo" className={`${controlClassName} md:col-span-2 xl:col-span-1`} aria-label="Tìm mã order hoặc tên người tạo" />
+      <select value={resource.query.status ?? ''} onChange={(event) => resource.updateQuery({ status: (event.target.value || undefined) as OrderStatus | undefined })} className={controlClassName} aria-label="Lọc trạng thái"><option value="">Tất cả trạng thái</option>{ORDER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+      <select value={resource.query.areaId ?? ''} onChange={(event) => resource.updateQuery({ areaId: event.target.value || undefined })} className={controlClassName} aria-label="Lọc theo khu vực" disabled={areasQuery.isPending || Boolean(areasQuery.error)}>
+        <option value="">{areasQuery.error ? 'Không tải được khu vực' : 'Tất cả khu vực'}</option>
+        {areaOptions.map((area) => <option key={area.id} value={area.id}>{area.code} — {area.name}</option>)}
+      </select>
       <input type="date" value={resource.query.dateFrom ?? ''} onChange={(event) => resource.updateQuery({ dateFrom: event.target.value || undefined })} className={controlClassName} aria-label="Từ ngày" />
       <input type="date" value={resource.query.dateTo ?? ''} onChange={(event) => resource.updateQuery({ dateTo: event.target.value || undefined })} className={controlClassName} aria-label="Đến ngày" />
       <select value={resource.query.sortBy ?? 'created_at'} onChange={(event) => resource.updateQuery({ sortBy: event.target.value })} className={controlClassName}><option value="created_at">Ngày tạo</option><option value="updated_at">Ngày cập nhật</option><option value="code">Mã order</option><option value="status">Trạng thái</option></select>

@@ -1,12 +1,15 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { listSupplies } from '../../api/supplies.service';
+import { APP_LAYER } from '../../constants/layers';
 import { useServerLookup } from '../../hooks/useServerLookup';
 import { queryKeys } from '../../lib/queryKeys';
 import type { SupplyOption } from '../../types/supplies';
@@ -15,10 +18,12 @@ interface SupplyComboboxProps {
   value: string;
   selectedSupply?: SupplyOption | null;
   onChange: (supply: SupplyOption | null) => void;
+  onSelected?: (supply: SupplyOption) => void;
   disabled?: boolean;
   ariaLabel: string;
   error?: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  autoFocusFlag?: boolean;
 }
 
 const supplyOptionLabel = (
@@ -30,18 +35,24 @@ const supplyOptionLabel = (
 
 const optionDomId = (listboxId: string, supplyId: string) => `${listboxId}-opt-${supplyId}`;
 
+const MAX_LIST_HEIGHT = 256;
+const MIN_LIST_HEIGHT = 120;
+
 export const SupplyCombobox = ({
   value,
   selectedSupply = null,
   onChange,
+  onSelected,
   disabled = false,
   ariaLabel,
   error,
   inputRef,
+  autoFocusFlag = false,
 }: SupplyComboboxProps) => {
   const listboxId = useId();
   const fallbackInputRef = useRef<HTMLInputElement>(null);
   const fieldInputRef = inputRef ?? fallbackInputRef;
+  const listRef = useRef<HTMLUListElement | null>(null);
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const openRef = useRef(open);
@@ -86,6 +97,35 @@ export const SupplyCombobox = ({
   );
   const selectedLabel = selectedSupply ? supplyOptionLabel(selectedSupply) : '';
 
+  // Anchor the portaled listbox to the live input rect (fixed positioning) so it
+  // is never clipped by the Offcanvas scroll body or hidden behind its sticky
+  // footer. Positioning is imperative — no geometry state, no cascading renders.
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const place = () => {
+      const input = fieldInputRef.current;
+      const list = listRef.current;
+      if (!input || !list) return;
+      const rect = input.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const openUp = spaceBelow < MIN_LIST_HEIGHT && spaceAbove > spaceBelow;
+      const room = Math.max(MIN_LIST_HEIGHT, Math.min(MAX_LIST_HEIGHT, openUp ? spaceAbove : spaceBelow));
+      list.style.left = `${Math.round(rect.left)}px`;
+      list.style.width = `${Math.round(rect.width)}px`;
+      list.style.top = openUp ? 'auto' : `${Math.round(rect.bottom + 4)}px`;
+      list.style.bottom = openUp ? `${Math.round(window.innerHeight - rect.top + 4)}px` : 'auto';
+      list.style.maxHeight = `${Math.round(room)}px`;
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, options.length, lookupError, loading, fieldInputRef]);
+
   // The surrounding Offcanvas closes on a document-capture Escape listener. While
   // the dropdown is open, intercept Escape first so it only dismisses the list.
   useEffect(() => {
@@ -117,6 +157,7 @@ export const SupplyCombobox = ({
     onChange(supply);
     stopEditing();
     fieldInputRef.current?.blur();
+    onSelected?.(supply);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -143,12 +184,72 @@ export const SupplyCombobox = ({
     // Escape is handled by the document-capture listener above.
   };
 
+  const listbox = open ? createPortal(
+    <ul
+      ref={listRef}
+      id={listboxId}
+      role="listbox"
+      aria-label={ariaLabel}
+      className="fixed overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+      style={{ zIndex: APP_LAYER.primaryDrawerPopover }}
+    >
+      {loading && options.length === 0 ? (
+        <li className="px-3 py-4 text-center text-sm font-normal normal-case text-slate-500">
+          Đang tải danh sách vật tư…
+        </li>
+      ) : lookupError ? (
+        <li className="px-3 py-4 text-center text-sm font-normal normal-case text-rose-600">
+          {lookupError}
+        </li>
+      ) : options.length === 0 ? (
+        <li className="px-3 py-4 text-center text-sm font-normal normal-case text-slate-500">
+          {search.trim() ? 'Không có vật tư phù hợp.' : 'Không có vật tư active.'}
+        </li>
+      ) : (
+        options.map((option, index) => {
+          const highlighted = index === safeHighlightedIndex;
+          const selected = option.id === value;
+          return (
+            <li key={option.id} role="none">
+              <button
+                id={optionDomId(listboxId, option.id)}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectSupply(option)}
+                className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-normal normal-case transition ${
+                  highlighted ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold">{option.code}</span>
+                  {(option.short_text || option.description) && (
+                    <span className="block truncate text-xs text-slate-500">
+                      {option.short_text?.trim() || option.description?.trim()}
+                    </span>
+                  )}
+                </span>
+                {option.category?.code && (
+                  <span className="shrink-0 text-xs text-slate-400">{option.category.code}</span>
+                )}
+              </button>
+            </li>
+          );
+        })
+      )}
+    </ul>,
+    document.body,
+  ) : null;
+
   return (
     <div className="relative space-y-1">
       <input
         ref={fieldInputRef}
         type="text"
         role="combobox"
+        data-autofocus={autoFocusFlag ? 'true' : undefined}
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-controls={listboxId}
@@ -185,61 +286,7 @@ export const SupplyCombobox = ({
         </button>
       )}
 
-      {open && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label={ariaLabel}
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
-        >
-          {loading && options.length === 0 ? (
-            <li className="px-3 py-4 text-center text-sm font-normal normal-case text-slate-500">
-              Đang tải danh sách vật tư…
-            </li>
-          ) : lookupError ? (
-            <li className="px-3 py-4 text-center text-sm font-normal normal-case text-rose-600">
-              {lookupError}
-            </li>
-          ) : options.length === 0 ? (
-            <li className="px-3 py-4 text-center text-sm font-normal normal-case text-slate-500">
-              {search.trim() ? 'Không có vật tư phù hợp.' : 'Không có vật tư active.'}
-            </li>
-          ) : (
-            options.map((option, index) => {
-              const highlighted = index === safeHighlightedIndex;
-              const selected = option.id === value;
-              return (
-                <li key={option.id} role="none">
-                  <button
-                    id={optionDomId(listboxId, option.id)}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onMouseEnter={() => setHighlightedIndex(index)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => selectSupply(option)}
-                    className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-normal normal-case transition ${
-                      highlighted ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">{option.code}</span>
-                      {(option.short_text || option.description) && (
-                        <span className="block truncate text-xs text-slate-500">
-                          {option.short_text?.trim() || option.description?.trim()}
-                        </span>
-                      )}
-                    </span>
-                    {option.category?.code && (
-                      <span className="shrink-0 text-xs text-slate-400">{option.category.code}</span>
-                    )}
-                  </button>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      )}
+      {listbox}
 
       {error && <span className="block normal-case text-rose-600">{error}</span>}
     </div>

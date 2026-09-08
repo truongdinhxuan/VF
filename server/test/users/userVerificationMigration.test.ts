@@ -59,11 +59,14 @@ describe('verified-account access enforcement', () => {
 
   it('does not return a login token for an unverified account', () => {
     const approvalCheck = usersService.indexOf('if (!profile.is_verified)');
-    const authenticate = loginController.indexOf('.authenticate(');
-    const tokenResponse = loginController.indexOf('reply.jwtSign');
+    const loginHandler = loginController.indexOf('export const loginUser');
+    const authenticate = loginController.indexOf('.authenticate(', loginHandler);
+    const createSession = loginController.indexOf('sessions.create(', authenticate);
+    const issueAuthPayload = loginController.indexOf('authPayload(', createSession);
     assert.ok(approvalCheck >= 0);
     assert.ok(authenticate >= 0);
-    assert.ok(tokenResponse > authenticate);
+    assert.ok(createSession > authenticate);
+    assert.ok(issueAuthPayload > createSession);
   });
 
   it('creates new managed users as unverified', () => {

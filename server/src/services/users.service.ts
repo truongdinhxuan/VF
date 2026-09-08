@@ -22,6 +22,7 @@ import {
   AuthorizationError,
   getEffectivePermissions,
 } from './authorization.service';
+import { AuthSessionsService } from './auth-sessions.service';
 
 interface SupabaseErrorLike {
   code?: string;
@@ -445,6 +446,12 @@ export class UsersService {
 
     if (error || !data) userDatabaseError(error, 'Không thể cập nhật người dùng');
 
+    if (payload.is_active === false
+        || payload.is_verified === false
+        || payload.is_deleted === true) {
+      await new AuthSessionsService(this.fastify).revokeAllForUser(id);
+    }
+
     return normalizeUserProfile(data as unknown as RawUserProfileRecord);
   }
 
@@ -481,6 +488,7 @@ export class UsersService {
       .eq('user_id', id);
 
     if (error) userFail(500, 'Không thể cập nhật mật khẩu');
+    await new AuthSessionsService(this.fastify).revokeAllForUser(id);
   }
 
   async setPassword(id: string, newPassword: string): Promise<void> {
@@ -511,6 +519,7 @@ export class UsersService {
       );
 
     if (error) userFail(500, 'Không thể đặt mật khẩu người dùng');
+    await new AuthSessionsService(this.fastify).revokeAllForUser(id);
   }
 
   async deactivate(id: string): Promise<UserProfileRecord> {
@@ -521,6 +530,7 @@ export class UsersService {
       .select(USER_EXPANDED_SELECT)
       .single();
     if (error || !data) userDatabaseError(error, 'Không tìm thấy người dùng');
+    await new AuthSessionsService(this.fastify).revokeAllForUser(id);
     return normalizeUserProfile(data as unknown as RawUserProfileRecord);
   }
 }

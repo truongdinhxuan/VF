@@ -35,10 +35,7 @@ export const LoginPage = () => {
     try {
       const response = await login({ vinfast_id, password });
       
-      if (response.token) {
-        // loginContext lưu token vào local storage
-        await loginContext(response.token); 
-      }
+      loginContext(response);
 
       // Phân luồng điều hướng dựa theo Role
       const userRole = resolveRoleCode(response.publicData?.role);

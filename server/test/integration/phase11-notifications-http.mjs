@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import Fastify from 'fastify';
 import app from '../../dist/app.js';
+import { createSessionAuth } from './session-auth-helper.mjs';
 
 const ids = {
   actor: '69400000-0000-4000-8000-000000000001',
@@ -14,15 +14,9 @@ const ids = {
   supply: '69400000-0000-4000-8000-000000000020',
 };
 
-const signToken = (subject, expiresInSeconds = 300) => {
-  const secret = process.env.APP_JWT_SECRET;
-  assert.ok(secret);
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const header = encode({ alg: 'HS256', typ: 'JWT' });
-  const payload = encode({ sub: subject, exp: Math.floor(Date.now() / 1000) + expiresInSeconds });
-  const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${signature}`;
-};
+let sessionAuth;
+const signToken = (subject, expiresInSeconds = 300) =>
+  sessionAuth.tokenFor(subject, expiresInSeconds);
 
 const startServer = async () => {
   const server = Fastify({ logger: false });
@@ -80,6 +74,14 @@ const database = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+sessionAuth = await createSessionAuth([
+  ids.actor,
+  ids.peer,
+  ids.manager,
+  ids.outsider,
+  ids.none,
+  ids.inactive,
+]);
 let runtime = await startServer();
 let streamController;
 let noneStreamController;
@@ -402,4 +404,5 @@ try {
   streamController?.abort();
   noneStreamController?.abort();
   await runtime.server.close();
+  await sessionAuth.cleanup();
 }

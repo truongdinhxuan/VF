@@ -12,6 +12,7 @@ import {
   PaginationValidationError,
   toPaginatedResponse,
 } from '../../utils/pagination';
+import { getAllowedClientOrigins } from '../../config/auth';
 
 const respond = async (
   request: FastifyRequest,
@@ -63,14 +64,12 @@ export const streamNotifications = (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
-  const allowedOrigin = process.env.ORIGIN_URL?.trim();
-  if (allowedOrigin) {
+  const requestOrigin = request.headers.origin;
+  const allowedOrigins = getAllowedClientOrigins();
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
     // `reply.hijack()` bypasses Fastify's normal response lifecycle, so the
     // CORS plugin cannot reliably add headers to this streamed response.
-    // Railway may also omit the forwarded Origin header on a long-lived GET.
-    // Returning the configured singleton origin is safe: browsers whose
-    // Origin differs from this value still reject access to the response.
-    reply.raw.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    reply.raw.setHeader('Access-Control-Allow-Origin', requestOrigin);
     reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
     reply.raw.setHeader('Vary', 'Origin');
   }
@@ -141,12 +140,16 @@ export const streamNotifications = (
   const heartbeatTimer = setInterval(() => {
     if (!closed) reply.raw.write(': keep-alive\n\n');
   }, 15000);
+  const accessTokenExpiryTimer = setTimeout(() => {
+    if (!closed) reply.raw.end();
+  }, Math.max(0, request.user.exp * 1000 - Date.now()));
 
   const cleanup = () => {
     if (closed) return;
     closed = true;
     clearInterval(pollTimer);
     clearInterval(heartbeatTimer);
+    clearTimeout(accessTokenExpiryTimer);
   };
   request.raw.once('close', cleanup);
   reply.raw.once('close', cleanup);

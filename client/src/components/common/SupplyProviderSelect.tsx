@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { getSupplyProviders } from '../../api/supplies.service';
 import { queryKeys } from '../../lib/queryKeys';
 import { SelectSkeleton } from './skeleton';
+
+interface SupplyProviderResolveInfo {
+  providerCount: number;
+  autoSelected: boolean;
+  hasError: boolean;
+}
 
 interface SupplyProviderSelectProps {
   supplyId: string;
@@ -13,12 +19,19 @@ interface SupplyProviderSelectProps {
   disabled?: boolean;
   className?: string;
   ariaLabel?: string;
+  selectRef?: Ref<HTMLSelectElement>;
   /**
    * When the Supply exposes exactly one active Provider, pick it automatically
    * so the operator skips a redundant selection. The field stays visible and
    * editable; the backend still validates the link on create/submit.
    */
   autoSelectSingle?: boolean;
+  /**
+   * Fired once per Supply when the provider list settles. Lets the parent
+   * advance keyboard focus: to Quantity/Stack when a single provider was
+   * auto-selected, or onto this control when the operator must still choose.
+   */
+  onResolve?: (info: SupplyProviderResolveInfo) => void;
 }
 
 export const SupplyProviderSelect = ({
@@ -29,7 +42,9 @@ export const SupplyProviderSelect = ({
   disabled = false,
   className = '',
   ariaLabel = 'Chọn Provider',
+  selectRef,
   autoSelectSingle = false,
+  onResolve,
 }: SupplyProviderSelectProps) => {
   const query = useQuery({
     queryKey: queryKeys.supplyProviders.list(supplyId),
@@ -44,14 +59,32 @@ export const SupplyProviderSelect = ({
     : null;
 
   const autoAppliedForRef = useRef<string | null>(null);
+  const resolvedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!autoSelectSingle || disabled || !supplyId) return;
-    if (query.isPending || query.isError) return;
-    if (providers.length !== 1) return;
-    if (value === providers[0].id) return;
-    if (autoAppliedForRef.current === supplyId) return;
-    autoAppliedForRef.current = supplyId;
-    onChange(providers[0].id);
+    if (!supplyId || disabled) return;
+    if (query.isPending) return;
+    const settled = query.isError || !query.isFetching;
+    if (!settled) return;
+
+    const willAutoSelect = autoSelectSingle
+      && !query.isError
+      && providers.length === 1
+      && value !== providers[0]?.id
+      && autoAppliedForRef.current !== supplyId;
+
+    if (willAutoSelect) {
+      autoAppliedForRef.current = supplyId;
+      onChange(providers[0].id);
+    }
+
+    if (resolvedForRef.current !== supplyId) {
+      resolvedForRef.current = supplyId;
+      onResolve?.({
+        providerCount: providers.length,
+        autoSelected: willAutoSelect || (autoSelectSingle && providers.length === 1),
+        hasError: query.isError,
+      });
+    }
   }, [
     autoSelectSingle,
     disabled,
@@ -60,7 +93,9 @@ export const SupplyProviderSelect = ({
     providers,
     query.isPending,
     query.isError,
+    query.isFetching,
     onChange,
+    onResolve,
   ]);
 
   if (supplyId && query.isPending) {
@@ -70,6 +105,7 @@ export const SupplyProviderSelect = ({
   return (
     <div className="space-y-1">
       <select
+        ref={selectRef}
         aria-label={ariaLabel}
         value={value}
         onBlur={onBlur}

@@ -1,8 +1,11 @@
 import {
+  createRef,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type RefObject,
 } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
@@ -85,6 +88,11 @@ const formatWorkDate = (value: string): string => {
     : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }).format(date);
 };
 
+const shiftLabel = (context: ShiftOrderSheetCreateContext): string => {
+  const label = context.work_shift?.name || context.work_shift?.code || 'Không xác định';
+  return label.replace(/^ca\s+/i, '').trim() || context.work_shift?.code || 'Không xác định';
+};
+
 export const CreateOrderForm = ({
   formId,
   mode = 'draft-only',
@@ -125,6 +133,7 @@ export const CreateOrderForm = ({
     register,
     handleSubmit,
     setValue,
+    setFocus,
     formState: { errors, isDirty },
   } = useForm<CreateOrderFormValues>({
     defaultValues: { note: '', order_list: [emptyItem()] },
@@ -133,6 +142,24 @@ export const CreateOrderForm = ({
   const { fields, append, remove } = useFieldArray({ control, name: 'order_list' });
   const orderItems = useWatch({ control, name: 'order_list' });
   const previousSourceAreaId = useRef('');
+
+  // Per-row DOM handles so focus can progress Supply -> Provider -> Quantity
+  // without the operator reaching for the mouse. Quantity uses RHF's setFocus.
+  const rowCount = fields.length;
+  const supplyInputRefs = useMemo(
+    () => Array.from({ length: rowCount }, () => createRef<HTMLInputElement>()),
+    [rowCount],
+  );
+  const providerSelectRefs = useMemo(
+    () => Array.from({ length: rowCount }, () => createRef<HTMLSelectElement>()),
+    [rowCount],
+  );
+  const stackSelectRefs = useMemo(
+    () => Array.from({ length: rowCount }, () => createRef<HTMLSelectElement>()),
+    [rowCount],
+  );
+  const pendingProviderFocusRef = useRef<number | null>(null);
+  const previousFieldCount = useRef(fields.length);
 
   const isBusy = stage === 'creating-draft' || stage === 'submitting';
   const formLocked = Boolean(draftOrder);
@@ -145,6 +172,15 @@ export const CreateOrderForm = ({
       isBusy,
     });
   }, [draftOrder, isBusy, isDirty, onStateChange, stage]);
+
+  // Focus the freshly appended material row's Supply search (P0: add-row flow).
+  useEffect(() => {
+    if (fields.length > previousFieldCount.current) {
+      const nextIndex = fields.length - 1;
+      window.requestAnimationFrame(() => supplyInputRefs[nextIndex]?.current?.focus());
+    }
+    previousFieldCount.current = fields.length;
+  }, [fields.length, supplyInputRefs]);
 
   const resetStackFields = useCallback((index: number) => {
     setValue(`order_list.${index}.set_per_qty`, undefined, { shouldValidate: false });
@@ -175,6 +211,45 @@ export const CreateOrderForm = ({
       { shouldValidate: false, shouldDirty: true },
     );
     resetStackFields(index);
+  };
+
+  const focusAfterProvider = (index: number, providerCount: number) => {
+    const supplyId = orderItems?.[index]?.supply_id;
+    const isStack = supplyId
+      ? resolvedSupplies[supplyId]?.category?.code === 'KIEN_SAT_TC'
+      : false;
+    window.requestAnimationFrame(() => {
+      if (isStack) {
+        const stackTarget = stackSelectRefs[index]?.current;
+        if (stackTarget) {
+          stackTarget.focus();
+          return;
+        }
+        // Stack options may still be loading; retry once, else land on Provider.
+        window.setTimeout(() => {
+          (stackSelectRefs[index]?.current ?? providerSelectRefs[index]?.current)?.focus();
+        }, 250);
+        return;
+      }
+      if (providerCount > 1 && providerSelectRefs[index]?.current) {
+        providerSelectRefs[index]!.current!.focus();
+        return;
+      }
+      setFocus(`order_list.${index}.quantity_requested`);
+    });
+  };
+
+  const handleSupplySelected = (index: number) => {
+    pendingProviderFocusRef.current = index;
+  };
+
+  const handleProviderResolve = (
+    index: number,
+    info: { providerCount: number; autoSelected: boolean },
+  ) => {
+    if (pendingProviderFocusRef.current !== index) return;
+    pendingProviderFocusRef.current = null;
+    focusAfterProvider(index, info.autoSelected ? 1 : info.providerCount);
   };
 
   const changeProvider = (index: number, providerId: string) => {
@@ -291,20 +366,65 @@ export const CreateOrderForm = ({
     || !receivingAreaId
     || Boolean(sheetContext && sheetContext.area_id !== receivingAreaId);
 
+  // P0: no plain-Enter global submit; Ctrl/Cmd+Enter sends the Order.
+  const handleFormKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Enter') return;
+    const target = event.target as HTMLElement;
+    const tag = target.tagName;
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      if (!isBusy && !formLocked && !referenceUnavailable) {
+        void handleSubmit(onSubmit)();
+      }
+      return;
+    }
+    if (tag === 'INPUT') event.preventDefault();
+  };
+
+  const hasActionableItem = (orderItems ?? []).some((item) => {
+    if (!item?.supply_id) return false;
+    const supply = resolvedSupplies[item.supply_id];
+    if (supply?.category?.code === 'KIEN_SAT_TC') {
+      return Boolean(item.set_per_qty) && Boolean(item.requested_stack_quantity);
+    }
+    return Number(item.quantity_requested) > 0;
+  });
+
+  const contextRow = sheetContext ? (
+    <>
+      <span className="font-semibold text-slate-900">Ca {shiftLabel(sheetContext)}</span>
+      <span aria-hidden="true">·</span>
+      <span>{formatWorkDate(sheetContext.work_date)}</span>
+      <span aria-hidden="true">·</span>
+      <span>{sheetContext.area?.code ?? receivingArea?.code ?? '—'}</span>
+    </>
+  ) : (
+    <>
+      <span>Gửi <span className="font-semibold text-slate-900">{sourceArea?.code ?? ORDER_SOURCE_AREA_CODE}</span></span>
+      <span aria-hidden="true">→</span>
+      <span>Nhận <span className="font-semibold text-slate-900">{receivingArea?.code ?? '—'}</span></span>
+    </>
+  );
+
   return (
-    <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-      {sheetContext && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <p className="font-bold">Phiếu Order Ca</p>
-          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div><dt className="text-xs font-semibold text-blue-700">Area</dt><dd>{sheetContext.area ? `${sheetContext.area.code} — ${sheetContext.area.name}` : 'Không xác định'}</dd></div>
-            <div><dt className="text-xs font-semibold text-blue-700">Ca</dt><dd>{sheetContext.work_shift ? `${sheetContext.work_shift.code} — ${sheetContext.work_shift.name}` : 'Không xác định'}</dd></div>
-            <div><dt className="text-xs font-semibold text-blue-700">Ngày làm việc</dt><dd>{formatWorkDate(sheetContext.work_date)}</dd></div>
-            <div><dt className="text-xs font-semibold text-blue-700">Tổ trưởng</dt><dd>{sheetContext.leader ? `${sheetContext.leader.first_name} ${sheetContext.leader.last_name}`.trim() : 'Không xác định'}</dd></div>
-          </dl>
-          <p className="mt-3 text-xs text-blue-700">Context của Phiếu được khóa; backend kiểm tra lại khi tạo và submit.</p>
-        </div>
-      )}
+    <form
+      id={formId}
+      onSubmit={handleSubmit(onSubmit)}
+      onKeyDown={handleFormKeyDown}
+      className="space-y-4"
+      noValidate
+    >
+      {/* Compact, non-focusable context. Area gửi / Area nhận / ca / ngày are
+          locked by the Sheet and re-checked server-side on create + submit. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        {contextRow}
+        <span className="w-full text-xs text-slate-400">
+          Area gửi/nhận khóa theo phiếu; backend kiểm tra lại khi tạo và gửi.
+        </span>
+        {areaResource.error && (
+          <span className="w-full text-xs text-rose-600">{areaResource.error}</span>
+        )}
+      </div>
 
       {draftOrder && stage === 'submit-failed' && (
         <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -314,78 +434,95 @@ export const CreateOrderForm = ({
         </div>
       )}
 
-      <fieldset disabled={formLocked || isBusy} className="space-y-5 disabled:opacity-75">
-        <div className={`grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${compact ? '' : 'md:grid-cols-2 md:p-5'}`}>
-          <label className="space-y-1.5 text-sm font-semibold text-slate-700">
-            Area gửi
-            <input value={sourceArea ? `${sourceArea.code} — ${sourceArea.name}` : areaResource.loading ? 'Đang tải Area gửi...' : `${ORDER_SOURCE_AREA_CODE} — Không tìm thấy`} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-normal text-slate-600" />
-          </label>
-          <label className="space-y-1.5 text-sm font-semibold text-slate-700">
-            Area nhận
-            <input value={receivingArea ? `${receivingArea.code} — ${receivingArea.name}` : receivingAreaId} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-normal text-slate-600" />
-            {areaResource.error && <span className="text-xs font-normal text-rose-600">{areaResource.error}</span>}
-          </label>
-          <label className={`space-y-1.5 text-sm font-semibold text-slate-700 ${compact ? '' : 'md:col-span-2'}`}>
-            Ghi chú
-            <textarea {...register('note')} rows={3} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          </label>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900">Vật tư yêu cầu</h2>
-              <p className="mt-1 text-xs text-slate-500">Mỗi dòng phải chọn Supply, Provider và có số lượng lớn hơn 0.</p>
-            </div>
-            <button type="button" onClick={() => append(emptyItem())} className={SecondaryButton}>Thêm dòng</button>
+      <fieldset disabled={formLocked || isBusy} className="space-y-4 disabled:opacity-75">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900">Vật tư yêu cầu</h2>
+            <p className="text-xs text-slate-500">Mỗi dòng cần Supply, Provider và số lượng &gt; 0.</p>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="@container mt-3 space-y-3">
             {fields.map((field, index) => {
               const current = orderItems[index] ?? emptyItem();
               const selectedSupply = current.supply_id
                 ? resolvedSupplies[current.supply_id] ?? null
                 : null;
               const isStack = selectedSupply?.category?.code === 'KIEN_SAT_TC';
+              const unitLabel = selectedSupply?.unit
+                ? selectedSupply.unit.symbol || selectedSupply.unit.code
+                : null;
+              const qtyRegister = register(`order_list.${index}.quantity_requested`, {
+                valueAsNumber: true,
+                required: 'Nhập số lượng.',
+                min: { value: 0.000001, message: 'Phải lớn hơn 0.' },
+              });
               return (
-                <div key={field.id} className={`grid gap-3 rounded-xl border border-slate-200 p-4 ${compact ? 'sm:grid-cols-2' : 'md:grid-cols-2 xl:grid-cols-6'}`}>
-                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Vật tư
-                    <SupplyCombobox
-                      value={current.supply_id}
-                      selectedSupply={selectedSupply}
-                      onChange={(supply) => changeSupply(index, supply)}
-                      ariaLabel={`Chọn vật tư cho dòng ${index + 1}`}
-                      inputRef={index === 0 ? initialFocusRef : undefined}
-                      error={errors.order_list?.[index]?.supply_id?.message}
-                    />
-                    <input type="hidden" {...register(`order_list.${index}.supply_id`, { required: 'Chọn vật tư.' })} />
-                  </label>
-                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Provider
-                    <SupplyProviderSelect
-                      supplyId={current.supply_id}
-                      value={current.provider_id}
-                      onChange={(providerId) => changeProvider(index, providerId)}
-                      autoSelectSingle
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      ariaLabel={`Chọn Provider cho dòng ${index + 1}`}
-                    />
-                    <input type="hidden" {...register(`order_list.${index}.provider_id`, { required: 'Chọn Provider.' })} />
-                    {errors.order_list?.[index]?.provider_id && <span className="block normal-case text-rose-600">{errors.order_list[index]?.provider_id?.message}</span>}
-                  </label>
-                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Unit
-                    <input value={selectedSupply?.unit ? `${selectedSupply.unit.code} — ${selectedSupply.unit.symbol}` : current.unit_id} readOnly className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal normal-case text-slate-600" />
+                <div key={field.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className={`grid gap-2 @lg:items-start ${isStack ? '@lg:grid-cols-2' : '@lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.4fr)_minmax(0,0.9fr)]'}`}>
+                    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Vật tư
+                      <SupplyCombobox
+                        value={current.supply_id}
+                        selectedSupply={selectedSupply}
+                        onChange={(supply) => changeSupply(index, supply)}
+                        onSelected={() => handleSupplySelected(index)}
+                        ariaLabel={`Chọn vật tư cho dòng ${index + 1}`}
+                        autoFocusFlag={index === 0}
+                        inputRef={index === 0 && initialFocusRef ? initialFocusRef : supplyInputRefs[index]}
+                        error={errors.order_list?.[index]?.supply_id?.message}
+                      />
+                      <input type="hidden" {...register(`order_list.${index}.supply_id`, { required: 'Chọn vật tư.' })} />
+                    </label>
+
+                    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Provider
+                      <SupplyProviderSelect
+                        supplyId={current.supply_id}
+                        value={current.provider_id}
+                        onChange={(providerId) => changeProvider(index, providerId)}
+                        onResolve={(info) => handleProviderResolve(index, info)}
+                        selectRef={providerSelectRefs[index]}
+                        autoSelectSingle
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        ariaLabel={`Chọn Provider cho dòng ${index + 1}`}
+                      />
+                      <input type="hidden" {...register(`order_list.${index}.provider_id`, { required: 'Chọn Provider.' })} />
+                      {errors.order_list?.[index]?.provider_id && <span className="block normal-case text-rose-600">{errors.order_list[index]?.provider_id?.message}</span>}
+                    </label>
+
                     <input type="hidden" {...register(`order_list.${index}.unit_id`, { required: 'Vật tư chưa có Unit.' })} />
-                    {errors.order_list?.[index]?.unit_id && <span className="block normal-case text-rose-600">{errors.order_list[index]?.unit_id?.message}</span>}
-                  </label>
-                  {isStack ? (
-                    <>
-                      <input type="hidden" {...register(`order_list.${index}.set_per_qty`, { required: 'Chọn SET/chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
-                      <input type="hidden" {...register(`order_list.${index}.requested_stack_quantity`, { required: 'Nhập số chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
-                      <input type="hidden" {...register(`order_list.${index}.requested_total_set_quantity`)} />
-                      <input type="hidden" {...register(`order_list.${index}.quantity_requested`, { required: 'Tổng SET chưa hợp lệ.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+
+                    {isStack ? (
+                      <>
+                        <input type="hidden" {...register(`order_list.${index}.set_per_qty`, { required: 'Chọn SET/chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                        <input type="hidden" {...register(`order_list.${index}.requested_stack_quantity`, { required: 'Nhập số chồng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                        <input type="hidden" {...register(`order_list.${index}.requested_total_set_quantity`)} />
+                        <input type="hidden" {...register(`order_list.${index}.quantity_requested`, { required: 'Tổng SET chưa hợp lệ.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} />
+                      </>
+                    ) : (
+                      <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <span>Số lượng{unitLabel ? <span className="ml-1 normal-case text-slate-400">({unitLabel})</span> : null}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.000001"
+                          {...qtyRegister}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800"
+                        />
+                        {errors.order_list?.[index]?.quantity_requested && <span className="block normal-case text-rose-600">{errors.order_list[index]?.quantity_requested?.message}</span>}
+                        <OrderItemAvailability
+                          supplyId={current.supply_id}
+                          providerId={current.provider_id}
+                          areaId={sourceArea?.id ?? ''}
+                          quantityRequested={current.quantity_requested}
+                          enabled={!isStack}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {isStack && (
+                    <div className="mt-2">
                       <OrderStackFields
                         compact={compact}
                         supplyId={current.supply_id}
@@ -397,44 +534,69 @@ export const CreateOrderForm = ({
                         onRequestedStackQuantityChange={(value) => changeRequestedStackQuantity(index, value)}
                         setPerQtyError={errors.order_list?.[index]?.set_per_qty?.message}
                         requestedStackQuantityError={errors.order_list?.[index]?.requested_stack_quantity?.message}
+                        setPerQtySelectRef={stackSelectRefs[index]}
                       />
-                    </>
-                  ) : (
-                    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Số lượng
-                      <input type="number" step="any" min="0.000001" {...register(`order_list.${index}.quantity_requested`, { valueAsNumber: true, required: 'Nhập số lượng.', min: { value: 0.000001, message: 'Phải lớn hơn 0.' } })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800" />
-                      {errors.order_list?.[index]?.quantity_requested && <span className="block normal-case text-rose-600">{errors.order_list[index]?.quantity_requested?.message}</span>}
-                      <OrderItemAvailability
-                        supplyId={current.supply_id}
-                        providerId={current.provider_id}
-                        areaId={sourceArea?.id ?? ''}
-                        quantityRequested={current.quantity_requested}
-                        enabled={!isStack}
-                      />
-                    </label>
+                    </div>
                   )}
-                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Ghi chú dòng
-                    <input {...register(`order_list.${index}.note`)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal normal-case text-slate-800" />
-                  </label>
-                  <button type="button" disabled={fields.length === 1} onClick={() => remove(index)} className={`${TextErrorButton} self-end`}>Xóa</button>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      {...register(`order_list.${index}.note`)}
+                      placeholder="Ghi chú dòng (không bắt buộc)"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-normal normal-case text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      disabled={fields.length === 1}
+                      onClick={() => remove(index)}
+                      className={TextErrorButton}
+                    >
+                      Xóa dòng
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={() => append(emptyItem())}
+            className={`${SecondaryButton} mt-3 w-full border-dashed`}
+          >
+            + Thêm mã vật tư
+          </button>
         </div>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-sm sm:p-4">
+          <summary className="cursor-pointer select-none font-semibold text-slate-700">
+            Ghi chú Order (không bắt buộc)
+          </summary>
+          <textarea
+            {...register('note')}
+            rows={3}
+            className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+        </details>
       </fieldset>
+
+      {!formLocked && !hasActionableItem && (
+        <p className="text-xs text-slate-500">Chọn mã vật tư và nhập số lượng để gửi Order.</p>
+      )}
 
       {submitError && !(draftOrder && stage === 'submit-failed') && (
         <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{submitError}</div>
       )}
 
       {showInlineActions && (
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
           {onCancel && <button type="button" onClick={onCancel} disabled={isBusy} className={`${SecondaryButton} w-full sm:w-auto`}>Hủy</button>}
-          <button type="submit" disabled={isBusy || referenceUnavailable} className={`${InfoButton} w-full sm:w-auto`}>
-            {isBusy ? 'Đang tạo...' : 'Lưu DRAFT'}
-          </button>
+          <div className="sm:text-right">
+            <button type="submit" disabled={isBusy || referenceUnavailable} className={`${InfoButton} w-full sm:w-auto`}>
+              {isBusy ? 'Đang tạo...' : 'Lưu DRAFT'}
+            </button>
+            <span className="mt-1 block text-xs text-slate-400">Ctrl + Enter</span>
+          </div>
         </div>
       )}
     </form>

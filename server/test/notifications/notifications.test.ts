@@ -69,9 +69,9 @@ describe('Phase 11 persistent Supply notifications', () => {
     assert.ok(corsHeaderIndex < hijackIndex);
     assert.match(
       controller,
-      /setHeader\('Access-Control-Allow-Origin', allowedOrigin\)/,
+      /setHeader\('Access-Control-Allow-Origin', requestOrigin\)/,
     );
-    assert.doesNotMatch(controller, /requestOrigin === allowedOrigin/);
+    assert.match(controller, /allowedOrigins\.includes\(requestOrigin\)/);
     assert.match(controller, /Access-Control-Allow-Credentials/);
     assert.match(controller, /setHeader\('Vary', 'Origin'\)/);
   });

@@ -1,3 +1,4 @@
+import { type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { getSupplyStackOptions } from '../../api/supplies.service';
@@ -15,6 +16,7 @@ interface OrderStackFieldsProps {
   onRequestedStackQuantityChange: (value: number | undefined) => void;
   setPerQtyError?: string;
   requestedStackQuantityError?: string;
+  setPerQtySelectRef?: Ref<HTMLSelectElement>;
 }
 
 export const OrderStackFields = ({
@@ -28,6 +30,7 @@ export const OrderStackFields = ({
   onRequestedStackQuantityChange,
   setPerQtyError,
   requestedStackQuantityError,
+  setPerQtySelectRef,
 }: OrderStackFieldsProps) => {
   const enabled = Boolean(supplyId && providerId && areaId);
   const optionsQuery = useQuery({
@@ -66,6 +69,7 @@ export const OrderStackFields = ({
           <SelectSkeleton label="Đang tải quy cách chồng" />
         ) : (
           <select
+            ref={setPerQtySelectRef}
             value={setPerQty ?? ''}
             onChange={(event) => onSetPerQtyChange(
               event.target.value ? Number(event.target.value) : undefined,
@@ -124,15 +128,15 @@ export const OrderStackFields = ({
         )}
       </label>
 
-      <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Tổng SET
-        <input
-          value={total ? `${setPerQty} × ${requestedStackQuantity} = ${total} SET` : ''}
-          readOnly
-          placeholder="Tự động tính"
+        <p
+          aria-live="polite"
           className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal normal-case text-slate-600"
-        />
-      </label>
+        >
+          {total ? `${setPerQty} × ${requestedStackQuantity} = ${total} SET` : 'Tự động tính'}
+        </p>
+      </div>
     </div>
   );
 };

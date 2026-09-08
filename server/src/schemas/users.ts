@@ -22,6 +22,8 @@ export const userListSchema = createListQuerySchema(USER_SORT_FIELDS, {
 });
 
 export const loginSchema: FastifySchema = {
+  tags: ['Auth'],
+  summary: 'Đăng nhập bằng VinFast ID và mật khẩu',
   body: {
     type: 'object',
     additionalProperties: false,
@@ -31,6 +33,18 @@ export const loginSchema: FastifySchema = {
       password: { type: 'string', minLength: 1, maxLength: 128 },
     },
   },
+};
+
+export const refreshSessionSchema: FastifySchema = {
+  tags: ['Auth'],
+  summary: 'Xoay refresh session cookie và cấp access token mới',
+  description: 'Không yêu cầu Bearer token. Refresh token chỉ được đọc từ HttpOnly cookie.',
+};
+
+export const logoutSchema: FastifySchema = {
+  tags: ['Auth'],
+  summary: 'Thu hồi refresh session hiện tại và xóa cookie',
+  description: 'Idempotent; chỉ thu hồi phiên của thiết bị hiện tại.',
 };
 
 const userProfileProperties = {

@@ -1,9 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getMyProfile } from "../api/users.service";
+import { logout } from "../api/auth.service";
+import { refreshAccessSession } from "../api/http";
+import {
+  notifyAuthenticationLost,
+  removeLegacyStoredAccessToken,
+  setAccessToken,
+  setAuthenticationLostHandler,
+  subscribeAccessToken,
+} from "../api/auth-token";
 import { resolveRoleCode, type RoleCode } from "../constants/roles";
 import { queryClient } from "../lib/queryClient";
-import type { IUser } from "../types/users";
+import type { AuthSessionResponse, IUser } from "../types/users";
 import {
   hasAllPermissionsInSet,
   hasAnyPermissionInSet,
@@ -20,54 +28,40 @@ interface AuthContextType {
   hasAnyPermission: (permissions: readonly PermissionInput[]) => boolean;
   hasAllPermissions: (permissions: readonly PermissionInput[]) => boolean;
   loading: boolean;
-  loginContext: (token: string) => Promise<void>;
-  logoutContext: () => void;
+  accessToken: string | null;
+  loginContext: (session: AuthSessionResponse) => void;
+  logoutContext: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<IUser | null>(null);
-  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem("access_token")));
+  const [accessTokenState, setAccessTokenState] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const fetchUser = async () => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const profile = await getMyProfile();
-      setUser(profile);
-    } catch (error) {
-      console.error("Token không hợp lệ hoặc đã hết hạn:", error);
-      localStorage.removeItem("access_token");
-      queryClient.clear();
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const clearClientSession = useCallback(() => {
+    setAccessToken(null);
+    queryClient.clear();
+    setUser(null);
+  }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      return;
-    }
-
+    removeLegacyStoredAccessToken();
     let isActive = true;
-    void getMyProfile()
-      .then((profile) => {
-        if (isActive) setUser(profile);
+    const unsubscribe = subscribeAccessToken((token) => {
+      if (isActive) setAccessTokenState(token);
+    });
+    setAuthenticationLostHandler(() => {
+      if (isActive) clearClientSession();
+    });
+
+    void refreshAccessSession()
+      .then((session) => {
+        if (isActive) setUser(session);
       })
-      .catch((error: unknown) => {
-        console.error("Token không hợp lệ hoặc đã hết hạn:", error);
-        localStorage.removeItem("access_token");
-        queryClient.clear();
-        if (isActive) setUser(null);
+      .catch(() => {
+        if (isActive) clearClientSession();
       })
       .finally(() => {
         if (isActive) setLoading(false);
@@ -75,20 +69,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       isActive = false;
+      unsubscribe();
+      setAuthenticationLostHandler(null);
     };
-  }, []);
+  }, [clearClientSession]);
 
-  const loginContext = async (token: string) => {
+  const loginContext = (session: AuthSessionResponse) => {
     queryClient.clear();
-    localStorage.setItem("access_token", token);
-    setLoading(true);
-    await fetchUser();
+    setAccessToken(session.accessToken);
+    setUser(session);
+    setLoading(false);
   };
 
-  const logoutContext = () => {
-    localStorage.removeItem("access_token");
-    queryClient.clear();
-    setUser(null);
+  const logoutContext = async () => {
+    try {
+      await logout();
+    } finally {
+      notifyAuthenticationLost();
+      removeLegacyStoredAccessToken();
+    }
   };
   const role = resolveRoleCode(user?.publicData.role);
   const permissions = useMemo(() => user?.permissions ?? [], [user?.permissions]);
@@ -110,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider value={{
       user, role, permissions, isSystemAdmin,
       hasPermission, hasAnyPermission, hasAllPermissions,
-      loading, loginContext, logoutContext,
+      loading, accessToken: accessTokenState, loginContext, logoutContext,
     }}>
       {children}
     </AuthContext.Provider>

@@ -36,7 +36,6 @@ export interface UserProfile extends UserRecord {
 }
 
 export interface IUser {
-  token?: string;
   id?: string;
   email?: string;
   publicData: UserProfile;
@@ -44,6 +43,14 @@ export interface IUser {
   permissions?: string[];
   isSystemAdmin?: boolean;
 }
+
+export interface AuthSessionResponse extends IUser {
+  accessToken: string;
+  message?: string;
+}
+
+export type LoginResponse = AuthSessionResponse;
+export type RefreshResponse = AuthSessionResponse;
 
 export interface UserListParams extends PaginatedListParams {
   roleId?: string;

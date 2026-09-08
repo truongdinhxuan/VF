@@ -24,7 +24,7 @@ import type {
   ShiftOrderSheetDetail,
   ShiftOrderSheetOrderItem,
 } from '../../types/shift-order-sheets';
-import { InfoButton, SecondaryButton, TextButton } from '../common/Button';
+import { InfoButton, SecondaryButton, TextButton, getButtonClassName } from '../common/Button';
 import { CrudFeedbackToast } from '../crud/CrudPrimitives';
 import { DrawerFormFooter } from '../offcanvas';
 import { CreateOrderForm, type CreateOrderFormState } from './CreateOrderForm';
@@ -101,6 +101,10 @@ export const ShiftOrderSheetWorkspace = ({
     id: sheetId ?? context.id,
     leader: sheet?.leader ?? context.leader ?? null,
   }), [context, sheet?.leader, sheetId]);
+
+  // One-line, non-focusable context reused by the drawer header and the sticky
+  // operation bar so Create Order does not repeat Area/Ca/Ngày as large blocks.
+  const compactContext = `Ca ${shiftLabel(context)} · ${formatDate(context.work_date)} · ${context.area?.code ?? '—'}`;
 
   const rows = useMemo<MaterialRow[]>(() => (sheet?.orders ?? [])
     .flatMap((order) => order.order_items.map((item) => ({ item, order })))
@@ -193,6 +197,7 @@ export const ShiftOrderSheetWorkspace = ({
         submitLabel={retrying ? 'Thử gửi lại' : 'Gửi Order'}
         submittingLabel={submittingLabel}
         isSubmitting={state.isBusy}
+        hint={retrying ? undefined : 'Ctrl + Enter để gửi Order'}
         formId={current.formId}
         onCancel={() => requestClosePrimary('cancel')}
         secondaryAction={draftLink ? (
@@ -208,7 +213,7 @@ export const ShiftOrderSheetWorkspace = ({
     if (!createDrawer) return;
     updatePrimary({
       title: 'Thêm Order',
-      description: 'Area, ca và ngày làm việc đã được khóa theo Phiếu Order Ca hiện tại.',
+      description: compactContext,
       content: renderCreateContent(createDrawer),
       footer: renderCreateFooter(createDrawer, createState),
       size: 'lg',
@@ -219,6 +224,7 @@ export const ShiftOrderSheetWorkspace = ({
       onBeforeClose: requestPersistedDraftClose,
     });
   }, [
+    compactContext,
     createDrawer,
     createState,
     renderCreateContent,
@@ -239,7 +245,7 @@ export const ShiftOrderSheetWorkspace = ({
     openCrud({
       mode: 'create',
       title: 'Thêm Order',
-      description: 'Area, ca và ngày làm việc đã được khóa theo Phiếu Order Ca hiện tại.',
+      description: compactContext,
       content: renderCreateContent(next),
       footer: renderCreateFooter(next, INITIAL_CREATE_STATE),
       size: 'lg',
@@ -306,6 +312,29 @@ export const ShiftOrderSheetWorkspace = ({
         </div>
       </header>
 
+      {/* P0-E: keep the current context + primary action reachable after the
+          operator scrolls through a long Sheet. Compact, single row, no toolbar. */}
+      <div className="sticky top-0 z-20 -mx-3 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/75 sm:-mx-5 sm:px-5">
+        <p className="min-w-0 truncate text-sm font-medium text-slate-600">{compactContext}</p>
+        <div className="flex shrink-0 items-center gap-2">
+          {allowCreate && (
+            <button type="button" onClick={openCreateOrder} className={getButtonClassName({ variant: 'info', size: 'sm' })}>
+              + Thêm Order
+            </button>
+          )}
+          {mode === 'current' && onShowHistory && (
+            <button type="button" onClick={onShowHistory} className={getButtonClassName({ variant: 'secondary', size: 'sm' })}>
+              Lịch sử
+            </button>
+          )}
+          {mode === 'history' && onBackCurrent && (
+            <button type="button" onClick={onBackCurrent} className={getButtonClassName({ variant: 'secondary', size: 'sm' })}>
+              ← Phiếu hiện tại
+            </button>
+          )}
+        </div>
+      </div>
+
       {exportMutation.isError && (
         <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {getApiErrorMessage(exportMutation.error, 'Không thể tạo file Excel. Vui lòng thử lại.')}
@@ -327,49 +356,84 @@ export const ShiftOrderSheetWorkspace = ({
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Mã vật tư</th>
-                  <th className="px-4 py-3">Mô tả</th>
-                  <th className="px-4 py-3">Provider</th>
-                  <th className="px-4 py-3">SL yêu cầu</th>
-                  <th className="px-4 py-3">Đơn vị</th>
-                  <th className="px-4 py-3">Stack</th>
-                  <th className="px-4 py-3">Order</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3">Người tạo</th>
-                  <th className="px-4 py-3">Thời gian</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map(({ item, order }) => {
-                  const requester = order.requester
-                    ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
-                    : 'Không xác định';
-                  const status = (order.status_lookup?.code ?? order.status) as OrderStatus;
-                  const stack = item.requested_stack_quantity && item.set_per_qty
-                    ? `${item.requested_stack_quantity} × ${item.set_per_qty}`
-                    : '—';
-                  return (
-                    <tr key={item.id} className="align-top hover:bg-slate-50/80">
-                      <td className="px-4 py-4 font-semibold text-slate-900">{item.supply?.code ?? '—'}</td>
-                      <td className="max-w-64 whitespace-normal px-4 py-4">{item.supply?.description ?? '—'}</td>
-                      <td className="px-4 py-4">{item.provider ? `${item.provider.code} — ${item.provider.name}` : '—'}</td>
-                      <td className="px-4 py-4 tabular-nums">{item.quantity_requested}</td>
-                      <td className="px-4 py-4">{item.unit?.symbol ?? item.unit?.code ?? '—'}</td>
-                      <td className="px-4 py-4 tabular-nums">{stack}</td>
-                      <td className="px-4 py-4"><Link to={`${ordersPath}/${order.id}`} className={TextButton}>{order.code}</Link></td>
-                      <td className="px-4 py-4"><OrderStatusBadge status={status} /></td>
-                      <td className="px-4 py-4">{requester}</td>
-                      <td className="px-4 py-4 whitespace-nowrap">{formatDateTime(order.submitted_at ?? order.created_at)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile: dense stacked rows (no 1100px table). Mã vật tư + SL +
+                trạng thái lead; Order code / time / stack as a secondary line. */}
+            <ul className="divide-y divide-slate-100 md:hidden">
+              {rows.map(({ item, order }) => {
+                const status = (order.status_lookup?.code ?? order.status) as OrderStatus;
+                const unit = item.unit?.symbol ?? item.unit?.code ?? '';
+                const stack = item.requested_stack_quantity && item.set_per_qty
+                  ? `${item.requested_stack_quantity} × ${item.set_per_qty}`
+                  : '—';
+                return (
+                  <li key={item.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">{item.supply?.code ?? '—'}</p>
+                      {item.supply?.description && (
+                        <p className="truncate text-xs text-slate-500">{item.supply.description}</p>
+                      )}
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        <Link to={`${ordersPath}/${order.id}`} className={TextButton}>{order.code}</Link>
+                        <span className="ml-2">{formatDateTime(order.submitted_at ?? order.created_at)}</span>
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="tabular-nums font-semibold text-slate-900">{item.quantity_requested} {unit}</p>
+                      <div className="mt-1"><OrderStatusBadge status={status} /></div>
+                      {stack !== '—' && <p className="mt-0.5 text-xs text-slate-400">Stack {stack}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Tablet+/desktop: operational density (~40px rows), sticky header,
+                Mã vật tư frozen, low-priority columns fold in below xl. */}
+            <div className="hidden max-h-[65vh] overflow-auto overscroll-contain md:block">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th scope="col" className="sticky left-0 z-20 bg-slate-50 px-3 py-2">Mã vật tư</th>
+                    <th scope="col" className="hidden px-3 py-2 lg:table-cell">Mô tả</th>
+                    <th scope="col" className="hidden px-3 py-2 xl:table-cell">Provider</th>
+                    <th scope="col" className="px-3 py-2">SL yêu cầu</th>
+                    <th scope="col" className="px-3 py-2">Đơn vị</th>
+                    <th scope="col" className="hidden px-3 py-2 lg:table-cell">Stack</th>
+                    <th scope="col" className="px-3 py-2">Order</th>
+                    <th scope="col" className="px-3 py-2">Trạng thái</th>
+                    <th scope="col" className="hidden px-3 py-2 xl:table-cell">Người tạo</th>
+                    <th scope="col" className="hidden px-3 py-2 lg:table-cell">Thời gian</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map(({ item, order }) => {
+                    const requester = order.requester
+                      ? `${order.requester.first_name} ${order.requester.last_name}`.trim()
+                      : 'Không xác định';
+                    const status = (order.status_lookup?.code ?? order.status) as OrderStatus;
+                    const stack = item.requested_stack_quantity && item.set_per_qty
+                      ? `${item.requested_stack_quantity} × ${item.set_per_qty}`
+                      : '—';
+                    return (
+                      <tr key={item.id} className="align-top hover:bg-slate-50/80">
+                        <td className="sticky left-0 z-[1] bg-white px-3 py-2.5 font-semibold text-slate-900">{item.supply?.code ?? '—'}</td>
+                        <td className="hidden max-w-64 whitespace-normal px-3 py-2.5 lg:table-cell">{item.supply?.description ?? '—'}</td>
+                        <td className="hidden px-3 py-2.5 xl:table-cell">{item.provider ? `${item.provider.code} — ${item.provider.name}` : '—'}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{item.quantity_requested}</td>
+                        <td className="px-3 py-2.5">{item.unit?.symbol ?? item.unit?.code ?? '—'}</td>
+                        <td className="hidden px-3 py-2.5 tabular-nums lg:table-cell">{stack}</td>
+                        <td className="px-3 py-2.5"><Link to={`${ordersPath}/${order.id}`} className={TextButton}>{order.code}</Link></td>
+                        <td className="px-3 py-2.5"><OrderStatusBadge status={status} /></td>
+                        <td className="hidden px-3 py-2.5 xl:table-cell">{requester}</td>
+                        <td className="hidden whitespace-nowrap px-3 py-2.5 lg:table-cell">{formatDateTime(order.submitted_at ?? order.created_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </section>

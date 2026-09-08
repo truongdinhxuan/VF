@@ -67,3 +67,5 @@ dist
 .env
 
 .codex-tmp
+
+.skills-lock.json

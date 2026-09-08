@@ -30,10 +30,44 @@ Required environment variables:
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 APP_JWT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
-APP_JWT_EXPIRES_IN=8h
+APP_JWT_ACCESS_TTL=30m
+APP_JWT_ISSUER=vf-api
+APP_JWT_AUDIENCE=vf-client
+APP_REFRESH_TOKEN_TTL_DAYS=30
+APP_REFRESH_COOKIE_NAME=vf_refresh_token
+ORIGIN_URL=http://localhost:5173
+# Additional exact origins, comma-separated:
+CLIENT_ORIGINS=
 ```
 
-Apply the credential migration:
+The access token is short-lived and kept only in browser memory. A rotating,
+opaque refresh token is stored in an HttpOnly cookie and its SHA-256 hash is
+stored in `public.auth_sessions`. In production, configure HTTPS and either
+leave cookie defaults enabled or explicitly set:
+
+```env
+APP_REFRESH_COOKIE_SECURE=true
+APP_REFRESH_COOKIE_SAME_SITE=none
+API_PUBLIC_URL=https://your-api.example.com
+```
+
+For local HTTP development, keep the frontend and API on the same hostname
+(for example `localhost`, not a `localhost`/`127.0.0.1` mix) and use the default
+`SameSite=Lax`, non-secure cookie.
+
+`POST /auth/refresh` and `POST /auth/logout` require an `Origin` that exactly
+matches `ORIGIN_URL` or one entry in `CLIENT_ORIGINS`. Do not use a wildcard
+origin with credentialed requests. After this cutover, the frontend deletes
+the legacy `access_token` localStorage entry; existing browser sessions must
+sign in again once if they do not yet have a refresh cookie.
+
+Expired and revoked rows are retained as session audit metadata. Schedule a
+bounded maintenance job to delete rows after the organization's retention
+period; do not scan/delete the full table during login or refresh. Session
+cleanup and a user-facing session-management screen are follow-up operational
+work, not part of the authentication request path.
+
+Apply migrations:
 
 ```bash
 npx supabase db push

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 import Fastify from 'fastify';
 import app from '../../dist/app.js';
+import { createSessionAuth } from './session-auth-helper.mjs';
 
 const ids = {
   manager: '69200000-0000-4000-8000-000000000001',
@@ -11,17 +11,8 @@ const ids = {
   sheet: '69320000-0000-4000-8000-000000000001',
 };
 
-const signToken = (subject) => {
-  const secret = process.env.APP_JWT_SECRET;
-  assert.ok(secret);
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const header = encode({ alg: 'HS256', typ: 'JWT' });
-  const payload = encode({ sub: subject, exp: Math.floor(Date.now() / 1000) + 300 });
-  const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${signature}`;
-};
-
 const server = Fastify({ logger: false });
+let sessionAuth;
 try {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -33,7 +24,8 @@ try {
 
   await server.register(app);
   await server.ready();
-  const auth = (id) => ({ authorization: `Bearer ${signToken(id)}` });
+  sessionAuth = await createSessionAuth([ids.manager, ids.outsider]);
+  const { auth } = sessionAuth;
 
   const beforeSheet = await database
     .from('supply_shift_order_sheets')
@@ -208,5 +200,6 @@ try {
   }));
   console.log('phase10-shift-export-http: PASS');
 } finally {
+  await sessionAuth?.cleanup();
   await server.close();
 }

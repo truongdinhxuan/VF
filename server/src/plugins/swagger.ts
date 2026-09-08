@@ -3,6 +3,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
 export default fp(async (fastify, opts) => {
+  const publicApiUrl = process.env.API_PUBLIC_URL?.trim();
   // 1. Đăng ký core Swagger để tạo cấu trúc OpenAPI
   await fastify.register(swagger, {
     openapi: {
@@ -11,9 +12,9 @@ export default fp(async (fastify, opts) => {
         description: 'API document system for Milkrun app',
         version: '1.0.0'
       },
-      servers: [
-        { url: 'http://localhost:3000', description: 'Local server' }
-      ],
+      ...(publicApiUrl ? {
+        servers: [{ url: publicApiUrl, description: 'Configured API server' }],
+      } : {}),
       components: {
         // Cấu hình nút "Authorize" để nhập Token (cho các API cần đăng nhập)
         securitySchemes: {
@@ -38,5 +39,5 @@ export default fp(async (fastify, opts) => {
     transformStaticCSP: (header) => header,
   });
   
-  fastify.log.info('Swagger is ready on http://localhost:3000/docs');
+  fastify.log.info('Swagger is ready on /docs');
 });

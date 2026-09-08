@@ -5,12 +5,11 @@ import { canAccessInternalData } from "../types/users";
 
 export const ProtectedRoute = () => {
   const { user, loading } = useAuth();
-  const token = localStorage.getItem("access_token");
 
   if (loading) {
     return <PageSkeleton />;
   }
-  if (!token || !user) {
+  if (!user) {
     return <Navigate to="/auth/login" replace />;
   }
   if (!canAccessInternalData(user.publicData)) {

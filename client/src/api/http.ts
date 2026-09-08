@@ -1,16 +1,58 @@
-import axios from 'axios';
+import axios, {
+  AxiosError,
+  type InternalAxiosRequestConfig,
+} from 'axios';
+import type { RefreshResponse } from '../types/users';
+import {
+  getAccessToken,
+  notifyAuthenticationLost,
+  setAccessToken,
+} from './auth-token';
+import { createSingleFlight } from './single-flight';
+
+const apiBaseUrl = import.meta.env.VITE_API_URL;
 
 // 1. Khởi tạo instance của Axios
 const instance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL, // Đường dẫn tới Backend Fastify của bạn
+  baseURL: apiBaseUrl,
   timeout: 10000,
+  withCredentials: true,
 });
+
+const sessionClient = axios.create({
+  baseURL: apiBaseUrl,
+  timeout: 10000,
+  withCredentials: true,
+});
+
+export const refreshAccessSession = createSingleFlight(
+  (): Promise<RefreshResponse> => sessionClient
+      .post<RefreshResponse>('auth/refresh')
+      .then((response) => {
+        setAccessToken(response.data.accessToken);
+        return response.data;
+      })
+      .catch((error: unknown) => {
+        notifyAuthenticationLost();
+        throw error;
+      })
+);
+
+interface RetriedRequestConfig extends InternalAxiosRequestConfig {
+  _authRetry?: boolean;
+}
+
+const isSessionEndpoint = (url: string | undefined): boolean => {
+  const normalized = url?.replace(/^\/+/, '') ?? '';
+  return ['auth/login', 'auth/refresh', 'auth/logout'].some(
+    (path) => normalized.startsWith(path),
+  );
+};
 
 // 2. TẠO REQUEST INTERCEPTOR (Đây là mấu chốt giải quyết lỗi 401)
 instance.interceptors.request.use(
   (config) => {
-    // Lấy token từ Local Storage
-    const token = localStorage.getItem('access_token');
+    const token = getAccessToken();
     
     // Nếu có token, tự động đính kèm vào Header Authorization theo chuẩn Bearer
     if (token) {
@@ -29,14 +71,20 @@ instance.interceptors.response.use(
   (response) => response.config.responseType === 'blob'
     ? response
     : response.data, // Binary download cần giữ headers; JSON giữ contract data hiện tại.
-  (error) => {
-    // Nếu Backend báo lỗi 401 (Hết hạn hoặc sai token)
-    if (error.response && error.response.status === 401) {
-      console.warn("Token hết hạn, đang đăng xuất...");
-      localStorage.removeItem('access_token');
-      
-      // Đá người dùng về trang login (Dùng window.location vì ở ngoài phạm vi của React Router)
-      // window.location.href = '/auth/login'; 
+  async (error: AxiosError) => {
+    const config = error.config as RetriedRequestConfig | undefined;
+    if (error.response?.status === 401
+        && config
+        && !config._authRetry
+        && !isSessionEndpoint(config.url)) {
+      config._authRetry = true;
+      try {
+        const refreshed = await refreshAccessSession();
+        config.headers.Authorization = `Bearer ${refreshed.accessToken}`;
+        return instance.request(config);
+      } catch {
+        // The shared refresh path already cleared in-memory authentication.
+      }
     }
     return Promise.reject(error);
   }

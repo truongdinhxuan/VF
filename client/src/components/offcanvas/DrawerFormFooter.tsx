@@ -12,6 +12,8 @@ interface DrawerFormFooterProps {
   onSubmit?: () => void;
   secondaryAction?: ReactNode;
   showSubmit?: boolean;
+  /** Small helper text shown next to the primary action (e.g. a submit shortcut). */
+  hint?: ReactNode;
 }
 
 export const DrawerFormFooter = ({
@@ -25,8 +27,12 @@ export const DrawerFormFooter = ({
   onSubmit,
   secondaryAction,
   showSubmit = true,
+  hint,
 }: DrawerFormFooterProps) => (
   <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+    {hint && (
+      <span className="text-center text-xs text-slate-400 sm:mr-auto sm:text-left">{hint}</span>
+    )}
     {secondaryAction}
     <button
       type="button"

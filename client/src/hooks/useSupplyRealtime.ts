@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getNotificationStreamUrl } from '../api/notifications.service';
+import { refreshAccessSession } from '../api/http';
 import { useAuth } from '../context/AuthContext';
 import { queryKeys } from '../lib/queryKeys';
 import {
@@ -44,7 +45,7 @@ const isStockLiveSignal = (value: unknown): value is StockLiveSignal => {
 };
 
 export const useSupplyRealtime = () => {
-  const { user } = useAuth();
+  const { accessToken, user } = useAuth();
   const queryClient = useQueryClient();
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [toast, setToast] = useState<NotificationLiveSignal | null>(null);
@@ -83,19 +84,23 @@ export const useSupplyRealtime = () => {
 
     const connect = async (): Promise<void> => {
       if (stopped) return;
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
+      if (!accessToken) return;
       controller = new AbortController();
       setConnectionState('connecting');
       try {
         const response = await fetch(getNotificationStreamUrl(), {
           headers: {
             Accept: 'text/event-stream',
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${accessToken}`,
           },
+          credentials: 'include',
           cache: 'no-store',
           signal: controller.signal,
         });
+        if (response.status === 401) {
+          await refreshAccessSession();
+          return;
+        }
         if (!response.ok || !response.body) {
           throw new Error(`Notification stream failed with HTTP ${response.status}`);
         }
@@ -156,7 +161,7 @@ export const useSupplyRealtime = () => {
       controller?.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [invalidateStockAvailability, invalidateSupplyViews, user]);
+  }, [accessToken, invalidateStockAvailability, invalidateSupplyViews, user]);
 
   return {
     connectionState: user ? connectionState : 'idle',

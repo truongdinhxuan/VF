@@ -86,9 +86,12 @@ const WORKSPACE_NAVIGATION: readonly WorkspaceNavigationCatalogDefinition[] = [
       {
         label: 'Quản lý giao dịch',
         items: [
-          { path: 'orders', label: 'Orders', icon: faClipboardList, anyPermissions: ORDER_READ_PERMISSIONS },
-          { path: 'shift-order-sheets', label: 'Phiếu order ca', icon: faClockRotateLeft, anyPermissions: ORDER_READ_PERMISSIONS },
-          { path: 'orders/create', label: 'Tạo order', icon: faPlus, permission: PERMISSION_CODE.SUPPLY_ORDER_CREATE },
+          // "Phiếu order ca" is the operational entry point for creating/reviewing
+          // orders against the current shift; "Orders" is the historical/search
+          // workspace. Direct "Tạo order" is demoted from the sidebar — the route
+          // stays registered and stays reachable from "+ Thêm Order" on the Sheet.
+          { path: 'shift-order-sheets', label: 'Phiếu order ca', icon: faClipboardList, anyPermissions: ORDER_READ_PERMISSIONS },
+          { path: 'orders', label: 'Orders (lịch sử)', icon: faClockRotateLeft, anyPermissions: ORDER_READ_PERMISSIONS },
           { path: 'stock-balances', label: 'Vật tư tồn kho', icon: faWarehouse, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
           { path: 'stock-transactions', label: 'Giao dịch vật tư', icon: faClockRotateLeft, permission: PERMISSION_CODE.SUPPLY_STOCK_READ },
           { path: 'stock-adjustments', label: 'Điều chỉnh giao dịch', icon: faSliders, permission: PERMISSION_CODE.SUPPLY_STOCK_ADJUST },

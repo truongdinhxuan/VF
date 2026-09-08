@@ -17,7 +17,8 @@ describe('Phase 11 Supply notification frontend', () => {
   it('uses one authenticated SSE connection with reconnect and logout cleanup', () => {
     const hook = read('src/hooks/useSupplyRealtime.ts');
     assert.match(hook, /Accept: 'text\/event-stream'/);
-    assert.match(hook, /Authorization: `Bearer \$\{token\}`/);
+    assert.match(hook, /Authorization: `Bearer \$\{accessToken\}`/);
+    assert.match(hook, /response\.status === 401[\s\S]*refreshAccessSession\(\)/);
     assert.match(hook, /controller\?\.abort\(\)/);
     assert.match(hook, /Math\.min\(retryDelay \* 2, 10_000\)/);
     assert.match(hook, /seenNotificationIds/);

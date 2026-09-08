@@ -43,9 +43,9 @@ const UserMenu = () => {
     };
   }, [isOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsOpen(false);
-    logoutContext();
+    await logoutContext();
     navigate("/auth/login", { replace: true });
   };
 
@@ -95,7 +95,7 @@ const UserMenu = () => {
           <button
             type="button"
             role="menuitem"
-            onClick={handleLogout}
+            onClick={() => void handleLogout()}
             className={getButtonClassName({
               variant: "textError",
               size: "sm",

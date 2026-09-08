@@ -1,28 +1,20 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import app from '../../dist/app.js';
+import { createSessionAuth } from './session-auth-helper.mjs';
 
 const managerId = '68000000-0000-4000-8000-000000000011';
 const readerId = '68000000-0000-4000-8000-000000000012';
 const targetId = '68000000-0000-4000-8000-000000000013';
 
-const signToken = (subject) => {
-  const secret = process.env.APP_JWT_SECRET;
-  assert.ok(secret);
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const header = encode({ alg: 'HS256', typ: 'JWT' });
-  const payload = encode({ sub: subject, exp: Math.floor(Date.now() / 1000) + 300 });
-  const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${signature}`;
-};
-
 const server = Fastify({ logger: false });
+let sessionAuth;
 try {
   await server.register(app);
   await server.ready();
-  const managerToken = signToken(managerId);
-  const readerToken = signToken(readerId);
+  sessionAuth = await createSessionAuth([managerId, readerId]);
+  const managerToken = sessionAuth.tokenFor(managerId);
+  const readerToken = sessionAuth.tokenFor(readerId);
   const authorization = (token) => ({ authorization: `Bearer ${token}` });
 
   const listResponse = await server.inject({
@@ -68,5 +60,6 @@ try {
 
   console.log('phase8-work-shifts-http: PASS');
 } finally {
+  await sessionAuth?.cleanup();
   await server.close();
 }
